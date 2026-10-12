@@ -23,10 +23,47 @@ jobs:
           use-dotnet: false
           include-templates: true
 
-      - name: Install Android SDK parts
+      - name: Install Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools build-tools;34.0.0 platforms;android-34"
+
+      - name: Write Android export preset
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platform-tools" "build-tools;34.0.0" "platforms;android-34" "cmdline-tools;latest"
+          cat > export_presets.cfg <<'EOT'
+          [preset.0]
+
+          name="Android"
+          platform="Android"
+          runnable=true
+          advanced_options=false
+          dedicated_server=false
+          custom_features=""
+          export_filter="all_resources"
+          include_filter=""
+          exclude_filter=""
+          export_path="build/android/CoDriverRally.apk"
+          encryption_include_filters=""
+          encryption_exclude_filters=""
+          encrypt_pck=false
+          encrypt_directory=false
+
+          [preset.0.options]
+
+          gradle_build/use_gradle_build=false
+          package/unique_name="com.codriver.rally"
+          package/name="Co-Driver Rally"
+          package/signed=true
+          architectures/armeabi-v7a=false
+          architectures/arm64-v8a=true
+          architectures/x86=false
+          architectures/x86_64=false
+          screen/immersive_mode=true
+          permissions/internet=true
+          permissions/access_network_state=true
+          permissions/access_wifi_state=true
+          permissions/change_wifi_multicast_state=true
+          EOT
 
       - name: Debug keystore + Godot editor settings
         run: |
