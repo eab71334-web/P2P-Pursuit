@@ -18,6 +18,41 @@ jobs:
           use-dotnet: false
           include-templates: true
 
+      - name: Write iOS export preset
+        run: |
+          cat > export_presets.cfg <<'EOT'
+          [preset.0]
+
+          name="iOS"
+          platform="iOS"
+          runnable=true
+          advanced_options=false
+          dedicated_server=false
+          custom_features=""
+          export_filter="all_resources"
+          include_filter=""
+          exclude_filter=""
+          export_path="build/ios/CoDriverRally.ipa"
+          encryption_include_filters=""
+          encryption_exclude_filters=""
+          encrypt_pck=false
+          encrypt_directory=false
+
+          [preset.0.options]
+
+          architectures/arm64=true
+          application/app_store_team_id="0000000000"
+          application/bundle_identifier="com.codriver.rally"
+          application/short_version="1.0"
+          application/version="1.0"
+          application/targeted_device_family=2
+          application/export_project_only=true
+          application/code_sign_identity_debug=""
+          application/code_sign_identity_release=""
+          application/provisioning_profile_uuid_debug=""
+          application/provisioning_profile_uuid_release=""
+          EOT
+
       - name: Import project
         run: godot --headless --import || true
 
