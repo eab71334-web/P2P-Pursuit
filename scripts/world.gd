@@ -1,9 +1,10 @@
 extends Node3D
-## The race: builds the stage, the car, the HUD and runs the race flow.
-## Server = authority (runs the car physics). Clients only send input and display the state.
-## Roles: "driver" steers (sees the road only) / "navigator" reads the map + pace notes aloud.
+## The race. Server = authority (runs every car's physics). Clients send input and show the state.
+## Each team = 1 car with 2 players: the DRIVER steers, the CO-DRIVER (map holder) reads the map,
+## points with the right hand, warns about closed roads and can drop a signal beacon.
+## Both can look around and punch each other.
 
-enum State { WAITING, COUNTDOWN, RUNNING, FINISHED }
+enum State { WAITING, COUNTDOWN, RUNNING, ENDED }
 
 # name, max time (seconds), colour
 const MEDALS := [
@@ -11,27 +12,64 @@ const MEDALS := [
 	["SILVER", 140.0, Color(0.82, 0.84, 0.9)],
 	["BRONZE", 180.0, Color(0.85, 0.52, 0.25)],
 ]
+const TEAM_COLORS := [Color(0.82, 0.1, 0.1), Color(0.15, 0.4, 0.95), Color(0.15, 0.7, 0.3), Color(0.95, 0.72, 0.1)]
+const PLACES := ["1st", "2nd", "3rd", "4th"]
+const GESTURE_TEXT := ["", "<  CO-DRIVER SAYS: LEFT", "^  CO-DRIVER SAYS: STRAIGHT", "CO-DRIVER SAYS: RIGHT  >", "!!  STOP / WARNING  !!"]
+
+
+class TeamState extends RefCounted:
+	var idx := 0
+	var color := Color.RED
+	var car: Car
+	var driver_id := 0
+	var nav_id := 0
+	var prog := 3
+	var finished := false
+	var dnf := false
+	var finish_time := 0.0
+	var flip := 0.0
+	var wrong := false
+	var input := Vector3.ZERO
+	var disturb := 0.0
+	var disturb_dir := 1.0
+	var beacon_ms := 0
+	var target := Transform3D.IDENTITY
+	var have_net := false
+	var speed := 0.0
+
 
 var track: Track
-var car: Car
-var cam: Camera3D
+var teams: Array[TeamState] = []
+var avatars := {}                  # peer id -> Avatar
+var local_avatar: Avatar
+var my_id := 1
+var my_role := "driver"
+var my_team := 0
+var solo := false
 var state := State.WAITING
 var race_time := 0.0
-var prog_idx := 3
-var my_role := "passenger"
-var ready_peers := {}
 var countdown_left := 3.5
-var local_input := Vector3.ZERO     # steer, throttle, brake
-var remote_input := Vector3.ZERO
-var flip_timer := 0.0
-var msg_timer := 0.0
+var ready_peers := {}
+var results: Array[int] = []       # team indices in finishing order
 var net_tick := 0
-var have_net_state := false
-var net_target := Transform3D.IDENTITY
-var net_speed := 0.0
+var last_punch := {}
+var look_yaw := 0.0
+var look_pitch := 0.0
+var look_idle := 0.0
+var look_touch := -1
+var look_send_ms := 0
+var shake := 0.0
+var flash := 0.0
+var my_gesture := 0
+var mate_gesture := 0
+var beacon_node: Node3D
+var beacon_timer := 0.0
 var touches := {}
+var zone_touch := {}
 var zones := {}
+var tap_zones := {}
 var show_touch := false
+var msg_timer := 0.0
 
 var hud: CanvasLayer
 var hud_root: Control
@@ -39,25 +77,37 @@ var timer_label: Label
 var medal_label: Label
 var speed_label: Label
 var role_label: Label
+var rank_label: Label
 var center_label: Label
 var msg_label: Label
+var gesture_label: Label
+var alert_label: Label
+var flash_rect: ColorRect
 var clipboard: Clipboard
 var result_panel: PanelContainer
+var result_standings: Label
 
 
 func _ready() -> void:
 	if Net.roles.is_empty():   # started directly from the editor (F6) for testing
 		Net.roles = {1: "driver"}
+		Net.team_of = {1: 0}
+		Net.team_count = 1
 		Net.players = {1: "Test"}
 		Net.required_players = 1
 		Net.track_seed = randi()
-	my_role = Net.roles.get(multiplayer.get_unique_id(), "passenger")
+	my_id = multiplayer.get_unique_id()
+	my_role = Net.roles.get(my_id, "driver")
+	my_team = Net.team_of.get(my_id, 0)
+	solo = Net.players.size() == 1
 	show_touch = DisplayServer.is_touchscreen_available() and my_role == "driver"
 	track = Track.generate(Net.track_seed)
 	_build_environment()
 	_build_track()
-	_spawn_car()
+	_build_obstacles()
+	_build_teams()
 	_build_hud()
+	Net.peer_left.connect(_on_peer_left)
 	get_viewport().size_changed.connect(_update_layout)
 	_update_layout()
 	if multiplayer.is_server():
@@ -68,13 +118,6 @@ func _ready() -> void:
 
 
 # ====================================================================== networking
-
-func _driver_id() -> int:
-	for id in Net.roles:
-		if Net.roles[id] == "driver":
-			return id
-	return 1
-
 
 func _send_ready() -> void:
 	while state == State.WAITING and is_inside_tree():
@@ -112,14 +155,36 @@ func race_started() -> void:
 
 
 @rpc("authority", "call_local", "reliable")
-func race_finished(t: float) -> void:
-	state = State.FINISHED
-	race_time = t
-	Net.race_over = true
-	_show_result()
+func team_finished(team: int, t: float, place: int) -> void:
+	var ts := teams[team]
+	ts.finished = true
+	ts.finish_time = t
+	if not results.has(team):
+		results.append(team)
+	if team == my_team:
+		Net.race_over = true
+		_show_result(place, t)
+	_refresh_result()
 
 
 @rpc("authority", "call_local", "reliable")
+func team_dnf(team: int) -> void:
+	teams[team].dnf = true
+	flash_message("Team %s is out" % char(65 + team))
+	_refresh_result()
+
+
+@rpc("authority", "call_local", "reliable")
+func all_done() -> void:
+	state = State.ENDED
+	Net.race_over = true
+
+
+@rpc("authority", "call_local", "reliable")
+func show_message(text: String) -> void:
+	flash_message(text)
+
+
 func flash_message(text: String) -> void:
 	msg_label.text = text
 	msg_timer = 2.0
@@ -127,103 +192,289 @@ func flash_message(text: String) -> void:
 
 @rpc("any_peer", "unreliable_ordered")
 func send_input(s: float, t: float, b: float) -> void:
-	if multiplayer.is_server() and multiplayer.get_remote_sender_id() == _driver_id():
-		remote_input = Vector3(s, t, b)
+	if not multiplayer.is_server():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if Net.roles.get(sender, "") == "driver":
+		teams[Net.team_of[sender]].input = Vector3(s, t, b)
 
 
 @rpc("any_peer", "reliable")
 func request_reset() -> void:
 	if multiplayer.is_server():
-		_do_reset()
+		_server_reset(multiplayer.get_remote_sender_id())
 
 
 @rpc("authority", "call_remote", "unreliable_ordered")
-func net_state(p: Vector3, q: Quaternion, spd: float, steer: float, prog: int, t: float) -> void:
-	net_target = Transform3D(Basis(q), p)
-	net_speed = spd
-	car.steer_visual = steer
-	prog_idx = prog
+func net_state(arr: PackedFloat32Array, t: float) -> void:
+	if arr.size() != teams.size() * 12:
+		return
+	for i in teams.size():
+		var b := i * 12
+		var ts := teams[i]
+		ts.target = Transform3D(Basis(Quaternion(arr[b + 3], arr[b + 4], arr[b + 5], arr[b + 6])), Vector3(arr[b], arr[b + 1], arr[b + 2]))
+		ts.speed = arr[b + 7]
+		ts.car.steer_visual = arr[b + 8]
+		ts.prog = int(arr[b + 9])
+		var flags := int(arr[b + 10])
+		ts.wrong = (flags & 1) != 0
+		if not ts.have_net:
+			ts.have_net = true
+			ts.car.global_transform = ts.target
 	if state == State.RUNNING:
 		race_time = t
-	if not have_net_state:
-		have_net_state = true
-		car.global_transform = net_target
 
 
-# ====================================================================== frame loop
+# --- look / gestures / punches / beacon (everything is relayed through the server)
 
-func _process(delta: float) -> void:
-	if state == State.COUNTDOWN:
-		countdown_left -= delta
-	if my_role == "driver":
-		_read_input()
-	if not multiplayer.is_server() and have_net_state:
-		car.global_transform = car.global_transform.interpolate_with(net_target, clampf(delta * 18.0, 0.0, 1.0))
-	if car:
-		cam.rotation.z = -car.steer_visual * 0.025
-	if msg_timer > 0.0:
-		msg_timer -= delta
-		if msg_timer <= 0.0:
-			msg_label.text = ""
-	_update_hud()
+@rpc("any_peer", "unreliable_ordered")
+func send_look(yaw: float, pitch: float) -> void:
+	if not multiplayer.is_server():
+		return
+	var s := multiplayer.get_remote_sender_id()
+	if avatars.has(s):
+		(avatars[s] as Avatar).set_look(yaw, pitch)
+	look_sync.rpc(s, yaw, pitch)
 
+
+@rpc("authority", "call_remote", "unreliable_ordered")
+func look_sync(peer: int, yaw: float, pitch: float) -> void:
+	if peer != my_id and avatars.has(peer):
+		(avatars[peer] as Avatar).set_look(yaw, pitch)
+
+
+@rpc("any_peer", "reliable")
+func request_gesture(g: int) -> void:
+	if multiplayer.is_server():
+		_server_gesture(multiplayer.get_remote_sender_id(), g)
+
+
+func _server_gesture(peer: int, g: int) -> void:
+	if Net.roles.get(peer, "") != "navigator" and not solo:
+		return
+	gesture_sync.rpc(peer, g)
+
+
+@rpc("authority", "call_local", "reliable")
+func gesture_sync(peer: int, g: int) -> void:
+	if not avatars.has(peer):
+		return
+	(avatars[peer] as Avatar).gesture = g
+	if peer == my_id:
+		my_gesture = g
+	if Net.team_of.get(peer, -1) == my_team and peer != my_id:
+		mate_gesture = g
+
+
+@rpc("any_peer", "reliable")
+func request_punch() -> void:
+	if multiplayer.is_server():
+		_server_punch(multiplayer.get_remote_sender_id())
+
+
+func _mate_of(peer: int) -> int:
+	var ts := teams[Net.team_of.get(peer, 0)]
+	var m := ts.nav_id if peer == ts.driver_id else ts.driver_id
+	return m if avatars.has(m) else -1
+
+
+func _server_punch(peer: int) -> void:
+	var now := Time.get_ticks_msec()
+	if now - int(last_punch.get(peer, 0)) < 600 or not avatars.has(peer):
+		return
+	last_punch[peer] = now
+	var mate := _mate_of(peer)
+	var hit := false
+	if mate != -1:
+		var a: Avatar = avatars[peer]
+		var to_mate: Vector3 = (avatars[mate] as Avatar).position - a.position
+		to_mate.y = 0.0
+		to_mate = to_mate.normalized()
+		var look_dir := Basis(Vector3.UP, a.look_yaw) * Vector3(0, 0, -1)
+		hit = look_dir.dot(to_mate) > 0.5
+	punch_fx.rpc(peer)
+	if hit:
+		var ts := teams[Net.team_of[mate]]
+		if mate == ts.driver_id:   # the driver gets knocked: the wheel jerks for a moment
+			ts.disturb = 0.5
+			ts.disturb_dir = 1.0 if randf() < 0.5 else -1.0
+		hit_fx.rpc(mate)
+
+
+@rpc("authority", "call_local", "reliable")
+func punch_fx(peer: int) -> void:
+	if avatars.has(peer):
+		(avatars[peer] as Avatar).punch()
+
+
+@rpc("authority", "call_local", "reliable")
+func hit_fx(victim: int) -> void:
+	if avatars.has(victim):
+		(avatars[victim] as Avatar).play_hit()
+	if victim == my_id:
+		shake = 1.0
+		flash = 0.55
+		Input.vibrate_handheld(250)
+		for d in Input.get_connected_joypads():
+			Input.start_joy_vibration(d, 0.8, 1.0, 0.3)
+
+
+@rpc("any_peer", "reliable")
+func request_beacon() -> void:
+	if multiplayer.is_server():
+		_server_beacon(multiplayer.get_remote_sender_id())
+
+
+func _server_beacon(peer: int) -> void:
+	if Net.roles.get(peer, "") != "navigator" and not solo:
+		return
+	var ts := teams[Net.team_of.get(peer, 0)]
+	var now := Time.get_ticks_msec()
+	if now - ts.beacon_ms < 4000 or ts.finished:
+		return
+	ts.beacon_ms = now
+	beacon_fx.rpc(ts.idx, mini(ts.prog + 10, track.points.size() - 1))
+
+
+@rpc("authority", "call_local", "reliable")
+func beacon_fx(team: int, idx: int) -> void:
+	if team == my_team:
+		_spawn_beacon(idx)
+
+
+func _on_peer_left(id: int) -> void:
+	if not multiplayer.is_server():
+		return
+	var team: int = Net.team_of.get(id, -1)
+	if team < 0:
+		return
+	var ts := teams[team]
+	if ts.finished:
+		return
+	if id == ts.driver_id:
+		ts.dnf = true
+		team_dnf.rpc(team)
+		_check_all_done()
+	else:
+		show_message.rpc("Team %s: the co-driver left" % char(65 + team))
+
+
+func _check_all_done() -> void:
+	if state == State.ENDED:
+		return
+	for ts in teams:
+		if not ts.finished and not ts.dnf:
+			return
+	all_done.rpc()
+
+
+# ====================================================================== server simulation
 
 func _physics_process(delta: float) -> void:
 	if not multiplayer.is_server():
 		return
-	var inp := Vector3.ZERO
-	car.hold = state != State.RUNNING
 	if state == State.COUNTDOWN and countdown_left <= 0.0:
 		race_started.rpc()
 	if state == State.RUNNING:
-		inp = local_input if _driver_id() == 1 else remote_input
 		race_time += delta
-		_update_progress()
-		if car.global_transform.basis.y.y < 0.25:
-			flip_timer += delta
-			if flip_timer > 2.0:
-				_do_reset()
-		else:
-			flip_timer = 0.0
-		if prog_idx >= track.points.size() - 4:
-			race_finished.rpc(race_time)
-	car.set_controls(inp.x, inp.y, inp.z)
+	for ts in teams:
+		var inp := Vector3.ZERO
+		var active := state == State.RUNNING and not ts.finished and not ts.dnf
+		ts.car.hold = not active
+		if active:
+			inp = ts.input
+			if ts.disturb > 0.0:
+				ts.disturb -= delta
+				inp.x = clampf(inp.x + ts.disturb_dir * 0.9, -1.0, 1.0)
+			_update_progress(ts)
+			if ts.car.global_transform.basis.y.y < 0.25:
+				ts.flip += delta
+				if ts.flip > 2.0:
+					_reset_team(ts)
+			else:
+				ts.flip = 0.0
+		ts.car.set_controls(inp.x, inp.y, inp.z)
+		ts.speed = ts.car.speed_kmh
 	net_tick += 1
 	if net_tick % 2 == 0:
-		net_state.rpc(car.global_position, Quaternion(car.global_basis.orthonormalized()), car.speed_kmh, car.steer_target, prog_idx, race_time)
+		var arr := PackedFloat32Array()
+		for ts in teams:
+			var q := Quaternion(ts.car.global_basis.orthonormalized())
+			var p := ts.car.global_position
+			var flags := (1 if ts.wrong else 0) | (2 if ts.finished else 0)
+			arr.append_array([p.x, p.y, p.z, q.x, q.y, q.z, q.w, ts.car.speed_kmh, ts.car.steer_target, float(ts.prog), float(flags), 0.0])
+		net_state.rpc(arr, race_time)
 
 
-func _update_progress() -> void:
-	var p := car.global_position
-	var best := prog_idx
+func _update_progress(ts: TeamState) -> void:
+	var p := ts.car.global_position
+	var best := ts.prog
 	var best_d := INF
-	for i in range(maxi(0, prog_idx - 6), mini(track.points.size(), prog_idx + 40)):
+	for i in range(maxi(0, ts.prog - 6), mini(track.points.size(), ts.prog + 40)):
 		var q := track.points[i]
 		var d := (p.x - q.x) * (p.x - q.x) + (p.z - q.z) * (p.z - q.z)
 		if d < best_d:
 			best_d = d
 			best = i
-	prog_idx = best
+	ts.prog = best
+	ts.wrong = best_d > 13.0 * 13.0     # far from the real road = on a closed side road
+	if best >= track.points.size() - 4 and not ts.finished:
+		ts.finished = true
+		ts.finish_time = race_time
+		results.append(ts.idx)
+		team_finished.rpc(ts.idx, race_time, results.size())
+		_check_all_done()
 
 
-func _do_reset() -> void:
-	var idx := maxi(3, prog_idx - 8)
+func _reset_team(ts: TeamState) -> void:
+	var idx := maxi(3, ts.prog - 8)
 	var t := Transform3D(Basis(Vector3.UP, track.headings[idx]), track.points[idx] + Vector3(0, 0.8, 0))
-	car.teleport(t)
-	flip_timer = 0.0
-	flash_message.rpc("Back on the road")
+	ts.car.teleport(t)
+	ts.flip = 0.0
+	ts.wrong = false
 
 
-func _request_reset() -> void:
+func _server_reset(peer: int) -> void:
 	if state != State.RUNNING:
 		return
-	if multiplayer.is_server():
-		_do_reset()
-	else:
-		request_reset.rpc_id(1)
+	var ts := teams[Net.team_of.get(peer, 0)]
+	if ts.finished or ts.dnf:
+		return
+	_reset_team(ts)
+	show_message.rpc("Team %s: back on the road" % char(65 + ts.idx))
 
 
-# ====================================================================== input
+# ====================================================================== local frame loop
+
+func _process(delta: float) -> void:
+	if state == State.COUNTDOWN:
+		countdown_left -= delta
+	if my_role == "driver":
+		_read_driving_input()
+	_update_look(delta)
+	# smooth the other cars on clients
+	if not multiplayer.is_server():
+		for ts in teams:
+			if ts.have_net:
+				ts.car.global_transform = ts.car.global_transform.interpolate_with(ts.target, clampf(delta * 18.0, 0.0, 1.0))
+	if beacon_node:
+		beacon_timer -= delta
+		if beacon_timer <= 0.0:
+			beacon_node.queue_free()
+			beacon_node = null
+	if msg_timer > 0.0:
+		msg_timer -= delta
+		if msg_timer <= 0.0:
+			msg_label.text = ""
+	# hit feedback
+	shake = move_toward(shake, 0.0, delta * 2.0)
+	flash = move_toward(flash, 0.0, delta * 1.2)
+	flash_rect.color.a = flash
+	if local_avatar and local_avatar.cam:
+		local_avatar.cam.h_offset = randf_range(-1.0, 1.0) * shake * 0.08
+		local_avatar.cam.v_offset = randf_range(-1.0, 1.0) * shake * 0.08
+	_update_hud()
+
 
 func _zone_pressed(zone_name: String) -> bool:
 	if not zones.has(zone_name):
@@ -235,7 +486,7 @@ func _zone_pressed(zone_name: String) -> bool:
 	return false
 
 
-func _read_input() -> void:
+func _read_driving_input() -> void:
 	var steer := Input.get_axis("steer_left", "steer_right")
 	var thr := Input.get_action_strength("accel")
 	var brk := Input.get_action_strength("brake")
@@ -248,26 +499,140 @@ func _read_input() -> void:
 			thr = 1.0
 		if _zone_pressed("brake"):
 			brk = 1.0
-	local_input = Vector3(clampf(steer, -1.0, 1.0), thr, brk)
-	if not multiplayer.is_server() and state == State.RUNNING:
-		send_input.rpc_id(1, local_input.x, local_input.y, local_input.z)
+	var v := Vector3(clampf(steer, -1.0, 1.0), thr, brk)
+	if multiplayer.is_server():
+		teams[my_team].input = v
+	elif state == State.RUNNING:
+		send_input.rpc_id(1, v.x, v.y, v.z)
+
+
+func _update_look(delta: float) -> void:
+	if local_avatar == null:
+		return
+	var dragging := look_touch != -1 or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+	if Input.is_action_pressed("look_mate") and local_avatar.seat_dx != 0.0:
+		var target_yaw := -signf(local_avatar.seat_dx) * 1.45
+		look_yaw = move_toward(look_yaw, target_yaw, delta * 7.0)
+		look_pitch = move_toward(look_pitch, 0.1, delta * 3.0)
+		look_idle = 0.0
+	elif dragging:
+		look_idle = 0.0
+	else:
+		look_idle += delta
+		if look_idle > 2.5:    # spring back to looking at the road
+			look_yaw = move_toward(look_yaw, 0.0, delta * 3.0)
+			look_pitch = move_toward(look_pitch, 0.0, delta * 3.0)
+	local_avatar.set_look(look_yaw, look_pitch)
+	var now := Time.get_ticks_msec()
+	if now - look_send_ms > 70:
+		look_send_ms = now
+		if multiplayer.is_server():
+			look_sync.rpc(my_id, look_yaw, look_pitch)
+		else:
+			send_look.rpc_id(1, look_yaw, look_pitch)
+
+
+func _look_delta(rel: Vector2) -> void:
+	look_yaw = clampf(look_yaw - rel.x * 0.006, -2.6, 2.6)
+	look_pitch = clampf(look_pitch - rel.y * 0.006, -0.95, 0.75)
+	look_idle = 0.0
+
+
+# ====================================================================== player actions
+
+func _request_reset() -> void:
+	if multiplayer.is_server():
+		_server_reset(my_id)
+	else:
+		request_reset.rpc_id(1)
+
+
+func _do_punch() -> void:
+	look_idle = 0.0
+	if multiplayer.is_server():
+		_server_punch(my_id)
+	else:
+		request_punch.rpc_id(1)
+
+
+func _set_gesture(g: int) -> void:
+	if my_role != "navigator" and not solo:
+		return
+	var ng := 0 if my_gesture == g else g    # tapping the same gesture again returns the hand to rest
+	if multiplayer.is_server():
+		_server_gesture(my_id, ng)
+	else:
+		request_gesture.rpc_id(1, ng)
+
+
+func _do_beacon() -> void:
+	if my_role != "navigator" and not solo:
+		return
+	if multiplayer.is_server():
+		_server_beacon(my_id)
+	else:
+		request_beacon.rpc_id(1)
+
+
+func _toggle_map() -> void:
+	if clipboard:
+		clipboard.visible = not clipboard.visible
 
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		if event.pressed:
-			touches[event.index] = event.position
-			if zones.has("reset") and zones["reset"].get_global_rect().has_point(event.position):
-				_request_reset()
+			_touch_press(event.index, event.position)
 		else:
 			touches.erase(event.index)
+			zone_touch.erase(event.index)
+			if event.index == look_touch:
+				look_touch = -1
 	elif event is InputEventScreenDrag:
 		touches[event.index] = event.position
+		if event.index == look_touch:
+			_look_delta(event.relative)
+	elif event is InputEventMouseMotion:
+		if event.button_mask & MOUSE_BUTTON_MASK_RIGHT:
+			_look_delta(event.relative)
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		if not DisplayServer.is_touchscreen_available() and zones.has("reset") and zones["reset"].get_global_rect().has_point(event.position):
-			_request_reset()
-	elif event.is_action_pressed("reset"):
+		if not DisplayServer.is_touchscreen_available():
+			_click_zone(event.position)
+	if event.is_action_pressed("reset"):
 		_request_reset()
+	elif event.is_action_pressed("punch"):
+		_do_punch()
+	elif event.is_action_pressed("g_left"):
+		_set_gesture(1)
+	elif event.is_action_pressed("g_fwd"):
+		_set_gesture(2)
+	elif event.is_action_pressed("g_right"):
+		_set_gesture(3)
+	elif event.is_action_pressed("g_stop"):
+		_set_gesture(4)
+	elif event.is_action_pressed("beacon"):
+		_do_beacon()
+	elif event.is_action_pressed("map_toggle"):
+		_toggle_map()
+
+
+func _touch_press(index: int, pos: Vector2) -> void:
+	touches[index] = pos
+	for zn in zones:
+		if (zones[zn] as Control).get_global_rect().has_point(pos):
+			zone_touch[index] = zn
+			if tap_zones.has(zn):
+				(tap_zones[zn] as Callable).call()
+			return
+	if look_touch == -1:
+		look_touch = index   # a touch outside every button = look around
+
+
+func _click_zone(pos: Vector2) -> void:
+	for zn in zones:
+		if (zones[zn] as Control).get_global_rect().has_point(pos) and tap_zones.has(zn):
+			(tap_zones[zn] as Callable).call()
+			return
 
 
 # ====================================================================== scene building
@@ -325,8 +690,41 @@ func _build_environment() -> void:
 	add_child(sun)
 
 
+func _add_road(pts: PackedVector3Array, avoid: PackedVector3Array, road: Array[Transform3D], dashes: Array[Transform3D], bank_vis: Array[Transform3D], banks: StaticBody3D) -> void:
+	var W := Track.ROAD_WIDTH
+	var avoid_d2 := pow(W * 0.5 + 2.6, 2.0)
+	for i in pts.size() - 1:
+		var a := pts[i]
+		var b := pts[i + 1]
+		var d := b - a
+		var yaw := atan2(-d.x, -d.z)
+		var basis := Basis(Vector3.UP, yaw)
+		var mid := (a + b) * 0.5
+		var left := basis * Vector3(-1, 0, 0)
+		road.append(Transform3D(basis * Basis.from_scale(Vector3(W, 0.2, Track.STEP * 1.12)), mid + Vector3(0, -0.07, 0)))
+		if i % 2 == 0:
+			dashes.append(Transform3D(basis * Basis.from_scale(Vector3(0.3, 0.02, 2.2)), mid + Vector3(0, 0.04, 0)))
+		for side in [-1.0, 1.0]:
+			var pos: Vector3 = mid + left * side * (W * 0.5 + 1.5) + Vector3(0, 0.7, 0)
+			var skip := false
+			for q in avoid:
+				var dx: float = q.x - pos.x
+				var dz: float = q.z - pos.z
+				if dx * dx + dz * dz < avoid_d2:
+					skip = true
+					break
+			if skip:
+				continue
+			bank_vis.append(Transform3D(basis * Basis.from_scale(Vector3(3.0, 1.4, Track.STEP * 1.2)), pos))
+			var cs := CollisionShape3D.new()
+			var bs := BoxShape3D.new()
+			bs.size = Vector3(3.0, 1.4, Track.STEP * 1.2)
+			cs.shape = bs
+			cs.transform = Transform3D(basis, pos)
+			banks.add_child(cs)
+
+
 func _build_track() -> void:
-	# ground
 	var ground := StaticBody3D.new()
 	var gs := CollisionShape3D.new()
 	var gb := BoxShape3D.new()
@@ -347,39 +745,64 @@ func _build_track() -> void:
 	var road: Array[Transform3D] = []
 	var dashes: Array[Transform3D] = []
 	var bank_vis: Array[Transform3D] = []
-	var W := Track.ROAD_WIDTH
-	var n := track.points.size()
-	for i in n - 1:
-		var a := track.points[i]
-		var b := track.points[i + 1]
-		var d := b - a
-		var yaw := atan2(-d.x, -d.z)
-		var basis := Basis(Vector3.UP, yaw)
-		var mid := (a + b) * 0.5
-		var left := basis * Vector3(-1, 0, 0)
-		road.append(Transform3D((basis * Basis.from_scale(Vector3(W, 0.2, Track.STEP * 1.12))), mid + Vector3(0, -0.07, 0)))
-		if i % 2 == 0:
-			dashes.append(Transform3D((basis * Basis.from_scale(Vector3(0.3, 0.02, 2.2))), mid + Vector3(0, 0.04, 0)))
-		for side in [-1.0, 1.0]:
-			var pos: Vector3 = mid + left * side * (W * 0.5 + 1.5) + Vector3(0, 0.7, 0)
-			bank_vis.append(Transform3D((basis * Basis.from_scale(Vector3(3.0, 1.4, Track.STEP * 1.2))), pos))
-			var cs := CollisionShape3D.new()
-			var bs := BoxShape3D.new()
-			bs.size = Vector3(3.0, 1.4, Track.STEP * 1.2)
-			cs.shape = bs
-			cs.transform = Transform3D(basis, pos)
-			banks.add_child(cs)
+	var avoid_main := PackedVector3Array()
+	for b in track.branches:
+		var bp: PackedVector3Array = b["points"]
+		for k in 14:
+			avoid_main.append(bp[k])
+	_add_road(track.points, avoid_main, road, dashes, bank_vis, banks)
+	for b in track.branches:
+		var f: int = b["fork"]
+		var avoid_branch := PackedVector3Array()
+		for j in range(maxi(0, f - 8), mini(track.points.size(), f + 16)):
+			avoid_branch.append(track.points[j])
+		_add_road(b["points"], avoid_branch, road, dashes, bank_vis, banks)
+		_build_dead_end(b)
 	_multimesh(_unit_box(), _mat(Color(0.2, 0.21, 0.25)), road)
 	_multimesh(_unit_box(), _mat(Color(0.95, 0.95, 0.95)), dashes)
 	_multimesh(_unit_box(), _mat(Color(0.97, 0.98, 1.0)), bank_vis)
 
-	_build_gate(3, Color(0.2, 0.8, 0.3))
-	_build_gate(n - 4, Color(0.95, 0.95, 0.95))
+	_build_gate(6, Color(0.2, 0.8, 0.3), "START")
+	_build_gate(track.points.size() - 4, Color(0.95, 0.95, 0.95), "FINISH")
 	_build_trees()
 	_build_mountains()
 
 
-func _build_gate(idx: int, c: Color) -> void:
+func _build_dead_end(b: Dictionary) -> void:
+	var pts: PackedVector3Array = b["points"]
+	var hs: PackedFloat32Array = b["headings"]
+	var e := pts[pts.size() - 1]
+	var h := hs[hs.size() - 1]
+	var basis := Basis(Vector3.UP, h)
+	var width := Track.ROAD_WIDTH + 4.0
+	var body := StaticBody3D.new()
+	body.transform = Transform3D(basis, e + Vector3(0, 0.8, 0))
+	var cs := CollisionShape3D.new()
+	var bs := BoxShape3D.new()
+	bs.size = Vector3(width, 1.6, 0.8)
+	cs.shape = bs
+	body.add_child(cs)
+	add_child(body)
+	var n := 6
+	for i in n:
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(width / n, 1.6, 0.8)
+		mi.mesh = bm
+		mi.material_override = _mat(Color(0.9, 0.15, 0.15) if i % 2 == 0 else Color(0.95, 0.95, 0.95))
+		mi.position = Vector3(-width * 0.5 + width / n * (i + 0.5), 0, 0)
+		body.add_child(mi)
+	var sign_label := Label3D.new()
+	sign_label.text = "ROAD CLOSED"
+	sign_label.font_size = 96
+	sign_label.pixel_size = 0.012
+	sign_label.modulate = Color(1, 0.25, 0.2)
+	sign_label.outline_modulate = Color.BLACK
+	sign_label.position = Vector3(0, 2.4, 0)
+	body.add_child(sign_label)
+
+
+func _build_gate(idx: int, c: Color, text: String) -> void:
 	var p := track.points[idx]
 	var h := track.headings[idx]
 	var basis := Basis(Vector3.UP, h)
@@ -400,6 +823,56 @@ func _build_gate(idx: int, c: Color) -> void:
 	beam.material_override = _mat(c)
 	beam.transform = Transform3D(basis, p + Vector3(0, 6.0, 0))
 	add_child(beam)
+	var lab := Label3D.new()
+	lab.text = text
+	lab.font_size = 90
+	lab.pixel_size = 0.01
+	lab.modulate = Color.BLACK
+	lab.position = Vector3(0, 0, 0.3)
+	beam.add_child(lab)
+
+
+func _obst_box(body: StaticBody3D, size: Vector3, xf: Transform3D, c: Color, solid := true) -> void:
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = size
+	mi.mesh = bm
+	mi.material_override = _mat(c)
+	mi.transform = xf
+	body.add_child(mi)
+	if solid:
+		var cs := CollisionShape3D.new()
+		var bs := BoxShape3D.new()
+		bs.size = size
+		cs.shape = bs
+		cs.transform = xf
+		body.add_child(cs)
+
+
+func _build_obstacles() -> void:
+	var body := StaticBody3D.new()
+	add_child(body)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = Net.track_seed + 7
+	for o in track.obstacles:
+		var i: int = o["index"]
+		var p := track.points[i]
+		var h := track.headings[i]
+		var left := Track.left_of(h)
+		var side: float = o["side"]
+		match o["kind"]:
+			"rock":
+				var lat := side * rng.randf_range(1.2, 3.2)
+				var basis := Basis(Vector3.UP, rng.randf() * TAU)
+				var pos := p + left * lat + Vector3(0, 0.75, 0)
+				_obst_box(body, Vector3(2.4, 1.5, 2.2), Transform3D(basis, pos), Color(0.45, 0.47, 0.52))
+				_obst_box(body, Vector3(1.3, 0.9, 1.3), Transform3D(basis, pos + Vector3(0.2, 1.1, 0.1)), Color(0.55, 0.57, 0.62), false)
+			"log":
+				var pos := p + left * side * 2.5 + Vector3(0, 0.45, 0)
+				_obst_box(body, Vector3(6.4, 0.9, 1.0), Transform3D(Basis(Vector3.UP, h), pos), Color(0.4, 0.26, 0.13))
+			"bump":
+				var basis := Basis(Vector3.UP, h) * Basis(Vector3.RIGHT, deg_to_rad(7.5))
+				_obst_box(body, Vector3(10.6, 0.6, 6.5), Transform3D(basis, p), Color(0.82, 0.86, 0.9))
 
 
 func _build_trees() -> void:
@@ -408,6 +881,9 @@ func _build_trees() -> void:
 	var trunks: Array[Transform3D] = []
 	var leaves1: Array[Transform3D] = []
 	var leaves2: Array[Transform3D] = []
+	var avoid := PackedVector3Array(track.points)
+	for b in track.branches:
+		avoid.append_array(b["points"])
 	var n := track.points.size()
 	var min_d2 := pow(Track.ROAD_WIDTH * 0.5 + 6.0, 2.0)
 	for i in range(4, n - 2, 2):
@@ -418,7 +894,7 @@ func _build_trees() -> void:
 			var off := Track.ROAD_WIDTH * 0.5 + 6.0 + rng.randf_range(0.0, 30.0)
 			var pos: Vector3 = track.points[i] + left * side * off + Vector3(rng.randf_range(-3, 3), 0, rng.randf_range(-3, 3))
 			var ok := true
-			for q in track.points:
+			for q in avoid:
 				var dx: float = q.x - pos.x
 				var dz: float = q.z - pos.z
 				if dx * dx + dz * dz < min_d2:
@@ -427,11 +903,10 @@ func _build_trees() -> void:
 			if not ok:
 				continue
 			var s := rng.randf_range(0.8, 1.7)
-			var yaw := rng.randf() * TAU
-			var b := Basis(Vector3.UP, yaw)
-			trunks.append(Transform3D((b * Basis.from_scale(Vector3(0.5, 2.0 * s, 0.5))), pos + Vector3(0, s, 0)))
-			leaves1.append(Transform3D((b * Basis.from_scale(Vector3(3.2 * s, 2.0 * s, 3.2 * s))), pos + Vector3(0, 2.8 * s, 0)))
-			leaves2.append(Transform3D((b * Basis.from_scale(Vector3(2.0 * s, 1.8 * s, 2.0 * s))), pos + Vector3(0, 4.5 * s, 0)))
+			var b := Basis(Vector3.UP, rng.randf() * TAU)
+			trunks.append(Transform3D(b * Basis.from_scale(Vector3(0.5, 2.0 * s, 0.5)), pos + Vector3(0, s, 0)))
+			leaves1.append(Transform3D(b * Basis.from_scale(Vector3(3.2 * s, 2.0 * s, 3.2 * s)), pos + Vector3(0, 2.8 * s, 0)))
+			leaves2.append(Transform3D(b * Basis.from_scale(Vector3(2.0 * s, 1.8 * s, 2.0 * s)), pos + Vector3(0, 4.5 * s, 0)))
 	_multimesh(_unit_box(), _mat(Color(0.35, 0.22, 0.12)), trunks)
 	_multimesh(_unit_box(), _mat(Color(0.14, 0.4, 0.2)), leaves1)
 	_multimesh(_unit_box(), _mat(Color(0.2, 0.5, 0.28)), leaves2)
@@ -448,29 +923,96 @@ func _build_mountains() -> void:
 		var h := rng.randf_range(120.0, 320.0)
 		var w := rng.randf_range(160.0, 320.0)
 		var b := Basis(Vector3.UP, rng.randf() * TAU)
-		xs.append(Transform3D((b * Basis.from_scale(Vector3(w, h, w))), mid + Vector3(cos(a) * dist, h * 0.4, sin(a) * dist)))
+		xs.append(Transform3D(b * Basis.from_scale(Vector3(w, h, w)), mid + Vector3(cos(a) * dist, h * 0.4, sin(a) * dist)))
 	_multimesh(_unit_box(), _mat(Color(0.8, 0.85, 0.93)), xs)
 
 
-func _spawn_car() -> void:
-	car = Car.new()
-	car.name = "Car"
-	car.setup(my_role, not multiplayer.is_server())
-	var start := 3
-	car.transform = Transform3D(Basis(Vector3.UP, track.headings[start]), track.points[start] + Vector3(0, 0.8, 0))
-	add_child(car)
-	cam = Camera3D.new()
-	cam.fov = 80.0
-	cam.near = 0.05
-	cam.far = 2500.0
-	car.add_child(cam)
-	cam.position = car.seat_camera_position(my_role)
-	cam.current = true
-	# show the OTHER players' blocky characters
-	for id in Net.roles:
-		var role: String = Net.roles[id]
-		if role != my_role and (role == "driver" or role == "navigator"):
-			car.show_character(role, true)
+func _spawn_beacon(idx: int) -> void:
+	if beacon_node:
+		beacon_node.queue_free()
+	var n := Node3D.new()
+	n.position = track.points[idx]
+	n.rotation.y = track.headings[idx]
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.2, 1.0, 0.5, 0.85)
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	var parts := [
+		[Vector3(0.5, 18.0, 0.5), Vector3(0, 9.0, 0), 0.0],            # light pillar
+		[Vector3(1.3, 0.12, 6.0), Vector3(0, 0.14, 0), 0.0],           # arrow stem
+		[Vector3(3.6, 0.12, 1.1), Vector3(-1.45, 0.14, -3.3), 38.0],   # arrow head
+		[Vector3(3.6, 0.12, 1.1), Vector3(1.45, 0.14, -3.3), -38.0],
+	]
+	for p in parts:
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = p[0]
+		mi.mesh = bm
+		mi.material_override = m
+		mi.position = p[1]
+		mi.rotation_degrees.y = p[2]
+		n.add_child(mi)
+	add_child(n)
+	beacon_node = n
+	beacon_timer = 7.0
+
+
+# ====================================================================== cars + players
+
+func _grid_transform(t: int) -> Transform3D:
+	var i := 3
+	var count := Net.team_count
+	var lat := (t - (count - 1) * 0.5) * 3.0
+	var back := float(t % 2) * 4.0
+	var left := Track.left_of(track.headings[i])
+	var fwd := Track.forward(track.headings[i])
+	var pos := track.points[i] + left * lat - fwd * back + Vector3(0, 0.8, 0)
+	return Transform3D(Basis(Vector3.UP, track.headings[i]), pos)
+
+
+func _build_teams() -> void:
+	for t in Net.team_count:
+		var ts := TeamState.new()
+		ts.idx = t
+		ts.color = TEAM_COLORS[t]
+		for id in Net.roles:
+			if Net.team_of.get(id, -1) == t:
+				if Net.roles[id] == "driver":
+					ts.driver_id = id
+				else:
+					ts.nav_id = id
+		var car := Car.new()
+		car.name = "Car%d" % t
+		car.setup(t, ts.color, not multiplayer.is_server())
+		car.transform = _grid_transform(t)
+		add_child(car)
+		ts.car = car
+		ts.target = car.transform
+		teams.append(ts)
+		for id in [ts.driver_id, ts.nav_id]:
+			if id != 0:
+				_make_avatar(ts, id)
+
+
+func _make_avatar(ts: TeamState, id: int) -> void:
+	var role: String = Net.roles[id]
+	var av := Avatar.new()
+	av.name = "Avatar%d" % id
+	av.peer_id = id
+	av.role = role
+	av.helmet_color = ts.color
+	av.shirt_color = ts.color.darkened(0.2)
+	av.is_local = (id == my_id)
+	av.position = ts.car.seat_origin(role)
+	var mate := ts.nav_id if role == "driver" else ts.driver_id
+	if mate != 0:
+		av.seat_dx = ts.car.seat_origin(Net.roles[mate]).x - av.position.x
+	ts.car.add_child(av)
+	avatars[id] = av
+	if role == "driver":
+		ts.car.driver_avatar = av
+	if av.is_local:
+		local_avatar = av
 
 
 # ====================================================================== HUD
@@ -482,9 +1024,11 @@ func _style_label(l: Label, fs: int) -> void:
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
-func _full_label(top: float, height: float, fs: int) -> Label:
+func _full_label(top: float, height: float, fs: int, anchor_y := 0.0) -> Label:
 	var l := Label.new()
 	l.anchor_right = 1.0
+	l.anchor_top = anchor_y
+	l.anchor_bottom = anchor_y
 	l.offset_top = top
 	l.offset_bottom = top + height
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -493,12 +1037,12 @@ func _full_label(top: float, height: float, fs: int) -> Label:
 	return l
 
 
-func _make_zone(zone_name: String, text: String, a_l: float, a_t: float, o_l: float, o_t: float, o_r: float, o_b: float) -> void:
+func _make_zone(zone_name: String, text: String, ax: float, ay: float, o_l: float, o_t: float, o_r: float, o_b: float, fs := 24, tap := Callable()) -> void:
 	var p := Panel.new()
-	p.anchor_left = a_l
-	p.anchor_right = a_l
-	p.anchor_top = a_t
-	p.anchor_bottom = a_t
+	p.anchor_left = ax
+	p.anchor_right = ax
+	p.anchor_top = ay
+	p.anchor_bottom = ay
 	p.offset_left = o_l
 	p.offset_top = o_t
 	p.offset_right = o_r
@@ -515,10 +1059,12 @@ func _make_zone(zone_name: String, text: String, a_l: float, a_t: float, o_l: fl
 	l.set_anchors_preset(Control.PRESET_FULL_RECT)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_style_label(l, 26)
+	_style_label(l, fs)
 	p.add_child(l)
 	hud_root.add_child(p)
 	zones[zone_name] = p
+	if tap.is_valid():
+		tap_zones[zone_name] = tap
 
 
 func _build_hud() -> void:
@@ -528,39 +1074,52 @@ func _build_hud() -> void:
 	hud_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(hud_root)
+	flash_rect = ColorRect.new()
+	flash_rect.color = Color(0.9, 0.1, 0.1, 0.0)
+	flash_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	flash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud_root.add_child(flash_rect)
+
 	timer_label = _full_label(8, 56, 46)
 	medal_label = _full_label(62, 34, 24)
-	center_label = _full_label(0, 160, 120)
-	center_label.anchor_top = 0.2
-	center_label.anchor_bottom = 0.2
-	center_label.offset_top = 0
-	center_label.offset_bottom = 160
-	msg_label = _full_label(0, 50, 30)
-	msg_label.anchor_top = 0.42
-	msg_label.anchor_bottom = 0.42
-	msg_label.offset_top = 0
-	msg_label.offset_bottom = 50
+	gesture_label = _full_label(100, 50, 34)
+	center_label = _full_label(0, 160, 120, 0.2)
+	msg_label = _full_label(0, 50, 28, 0.42)
+	alert_label = _full_label(0, 60, 32, 0.55)
+	alert_label.add_theme_color_override("font_color", Color(1.0, 0.35, 0.3))
 	role_label = Label.new()
 	role_label.position = Vector2(14, 8)
-	role_label.text = "DRIVER" if my_role == "driver" else ("CO-DRIVER" if my_role == "navigator" else "PASSENGER")
+	var tname := "TEAM %s  -  " % char(65 + my_team) if Net.team_count > 1 else ""
+	role_label.text = tname + ("DRIVER" if my_role == "driver" else "CO-DRIVER")
 	_style_label(role_label, 22)
 	hud_root.add_child(role_label)
 	speed_label = Label.new()
 	speed_label.position = Vector2(14, 36)
 	_style_label(speed_label, 22)
 	hud_root.add_child(speed_label)
+	rank_label = Label.new()
+	rank_label.position = Vector2(14, 66)
+	_style_label(rank_label, 20)
+	hud_root.add_child(rank_label)
 
-	_make_zone("reset", "RESET (R)", 1.0, 0.0, -150, 14, -14, 64)
+	_make_zone("reset", "RESET (R)", 1.0, 0.0, -150, 14, -14, 64, 22, _request_reset)
+	_make_zone("punch", "PUNCH\n(F)", 1.0, 0.5, -140, -45, -14, 45, 22, _do_punch)
 	if show_touch:
-		_make_zone("left", "<", 0.0, 1.0, 20, -170, 160, -40)
-		_make_zone("right", ">", 0.0, 1.0, 180, -170, 320, -40)
+		_make_zone("left", "<", 0.0, 1.0, 20, -170, 160, -40, 40)
+		_make_zone("right", ">", 0.0, 1.0, 180, -170, 320, -40, 40)
 		_make_zone("gas", "GAS", 1.0, 1.0, -170, -190, -20, -40)
 		_make_zone("brake", "BRAKE", 1.0, 1.0, -340, -170, -190, -40)
-
-	# only the co-driver (and solo practice) sees the map + pace notes
-	if my_role != "driver" or Net.required_players == 1:
+	if my_role == "navigator" or solo:
+		var by := -130.0 - (140.0 if show_touch else 0.0)
+		_make_zone("g_left", "< LEFT\n(1)", 0.0, 1.0, 20, by, 120, by + 90, 18, _set_gesture.bind(1))
+		_make_zone("g_fwd", "^ GO\n(2)", 0.0, 1.0, 130, by, 230, by + 90, 18, _set_gesture.bind(2))
+		_make_zone("g_right", "RIGHT >\n(3)", 0.0, 1.0, 240, by, 340, by + 90, 18, _set_gesture.bind(3))
+		_make_zone("g_stop", "STOP!\n(4)", 0.0, 1.0, 350, by, 450, by + 90, 18, _set_gesture.bind(4))
+		_make_zone("beacon", "SIGNAL\n(G)", 1.0, 1.0, -330, by, -180, by + 90, 20, _do_beacon)
+		_make_zone("map", "MAP\n(M)", 1.0, 1.0, -170, by, -20, by + 90, 20, _toggle_map)
 		clipboard = Clipboard.new()
 		clipboard.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		clipboard.my_color = teams[my_team].color
 		clipboard.set_track(track)
 		hud_root.add_child(clipboard)
 
@@ -571,12 +1130,11 @@ func _update_layout() -> void:
 	var vs := get_viewport().get_visible_rect().size
 	if vs.y > vs.x:
 		var w := vs.x * 0.9
-		var h := vs.y * (0.36 if show_touch else 0.46)
-		var y := 110.0 if show_touch else vs.y - h - 20.0
-		clipboard.position = Vector2((vs.x - w) * 0.5, y)
+		var h := vs.y * 0.4
+		clipboard.position = Vector2((vs.x - w) * 0.5, 150.0)
 		clipboard.size = Vector2(w, h)
 	else:
-		var h := vs.y * (0.5 if show_touch else 0.8)
+		var h := vs.y * (0.5 if show_touch else 0.62)
 		var w := minf(vs.x * 0.34, h * 0.8)
 		clipboard.position = Vector2(vs.x - w - 20.0, 76.0)
 		clipboard.size = Vector2(w, h)
@@ -587,13 +1145,25 @@ func _fmt(t: float) -> String:
 	return "%d:%04.1f" % [int(t / 60.0), fmod(t, 60.0)]
 
 
+func _ahead(a: TeamState, b: TeamState) -> bool:
+	if a.finished and b.finished:
+		return a.finish_time < b.finish_time
+	if a.finished != b.finished:
+		return a.finished
+	if a.dnf != b.dnf:
+		return b.dnf
+	return a.prog > b.prog
+
+
 func _update_hud() -> void:
-	timer_label.text = _fmt(maxf(race_time, 0.0))
-	var spd := car.speed_kmh if multiplayer.is_server() else net_speed
+	var my := teams[my_team]
+	var shown_time := my.finish_time if my.finished else maxf(race_time, 0.0)
+	timer_label.text = _fmt(shown_time)
+	var spd := my.car.speed_kmh if multiplayer.is_server() else my.speed
 	speed_label.text = "%d km/h" % int(spd)
 	var shown := false
 	for m in MEDALS:
-		if race_time <= m[1]:
+		if shown_time <= m[1]:
 			medal_label.text = "%s  %s" % [m[0], _fmt(m[1])]
 			medal_label.add_theme_color_override("font_color", m[2])
 			shown = true
@@ -610,16 +1180,66 @@ func _update_hud() -> void:
 			center_label.text = str(ceili(countdown_left)) if countdown_left > 0.0 else "GO!"
 		State.RUNNING:
 			center_label.text = "GO!" if race_time < 1.0 else ""
-		State.FINISHED:
+		State.ENDED:
 			center_label.text = ""
+	# standings
+	if teams.size() > 1:
+		var sorted := teams.duplicate()
+		sorted.sort_custom(_ahead)
+		var lines: Array[String] = []
+		for i in sorted.size():
+			var ts: TeamState = sorted[i]
+			var tag: String = PLACES[i] + "  Team " + char(65 + ts.idx)
+			if ts.dnf:
+				tag += "  (out)"
+			elif ts.finished:
+				tag += "  " + _fmt(ts.finish_time)
+			lines.append(("> " if ts.idx == my_team else "   ") + tag)
+		rank_label.text = "\n".join(lines)
+	# what the co-driver is signalling (the driver must notice it!)
+	var g := my_gesture if solo else mate_gesture
+	if (my_role == "driver" or solo) and g > 0:
+		gesture_label.text = GESTURE_TEXT[g]
+		var blink := g != 4 or int(Time.get_ticks_msec() / 200.0) % 2 == 0
+		gesture_label.add_theme_color_override("font_color", Color(1, 0.3, 0.25) if g == 4 else Color(1, 0.9, 0.3))
+		gesture_label.visible = blink
+	else:
+		gesture_label.visible = false
+	# alerts about the closed side roads
+	alert_label.text = ""
+	if state == State.RUNNING and my.wrong and not my.finished:
+		if my_role == "driver" and spd < 4.0:
+			alert_label.text = "DEAD END!  Reverse (S) or press RESET"
+		elif my_role == "navigator":
+			alert_label.text = "THE DRIVER IS ON A CLOSED ROAD!"
 	if clipboard:
-		clipboard.set_progress(prog_idx)
+		var others: Array = []
+		for ts in teams:
+			if ts.idx != my_team:
+				others.append({"idx": ts.prog, "color": ts.color})
+		clipboard.set_state(my.prog, my.wrong, others)
 
 
-func _show_result() -> void:
+func _standings_text() -> String:
+	var lines: Array[String] = []
+	for i in results.size():
+		var ts := teams[results[i]]
+		lines.append("%s   Team %s   %s" % [PLACES[i], char(65 + ts.idx), _fmt(ts.finish_time)])
+	for ts in teams:
+		if not ts.finished:
+			lines.append("-      Team %s   %s" % [char(65 + ts.idx), "out" if ts.dnf else "racing..."])
+	return "\n".join(lines)
+
+
+func _refresh_result() -> void:
+	if result_standings:
+		result_standings.text = _standings_text()
+
+
+func _show_result(place: int, t: float) -> void:
 	var medal := "No medal"
 	for m in MEDALS:
-		if race_time <= m[1]:
+		if t <= m[1]:
 			medal = m[0]
 			break
 	result_panel = PanelContainer.new()
@@ -630,15 +1250,21 @@ func _show_result() -> void:
 	vb.add_theme_constant_override("separation", 14)
 	result_panel.add_child(vb)
 	var title := Label.new()
-	title.text = "FINISH!"
-	title.add_theme_font_size_override("font_size", 56)
+	title.text = "FINISH!  %s" % (PLACES[place - 1] if Net.team_count > 1 else "")
+	title.add_theme_font_size_override("font_size", 52)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(title)
 	var res := Label.new()
-	res.text = "Time  %s\nMedal  %s" % [_fmt(race_time), medal]
-	res.add_theme_font_size_override("font_size", 34)
+	res.text = "Time  %s\nMedal  %s" % [_fmt(t), medal]
+	res.add_theme_font_size_override("font_size", 32)
 	res.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(res)
+	if Net.team_count > 1:
+		result_standings = Label.new()
+		result_standings.add_theme_font_size_override("font_size", 24)
+		result_standings.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		vb.add_child(result_standings)
+		_refresh_result()
 	var btn := Button.new()
 	btn.text = "Back to menu"
 	btn.custom_minimum_size = Vector2(320, 70)

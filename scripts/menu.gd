@@ -3,7 +3,7 @@ extends Control
 ## The race starts automatically when the lobby is full.
 
 var name_edit: LineEdit
-var count_opt: OptionButton
+var team_opt: OptionButton
 var ip_edit: LineEdit
 var status: Label
 var hosts_box: VBoxContainer
@@ -84,14 +84,16 @@ func _build_ui() -> void:
 	name_edit.custom_minimum_size = Vector2(0, 56)
 	name_edit.add_theme_font_size_override("font_size", 24)
 	main_panel.add_child(name_edit)
-	_label(main_panel, "Players needed to start", 20)
-	count_opt = OptionButton.new()
-	count_opt.custom_minimum_size = Vector2(0, 56)
-	count_opt.add_theme_font_size_override("font_size", 24)
-	for n in range(2, Net.MAX_PLAYERS + 1):
-		count_opt.add_item("%d players" % n, n)
-	main_panel.add_child(count_opt)
-	_button(main_panel, "HOST LAN GAME", _on_host)
+	_button(main_panel, "HOST CO-OP  (1 car, 2 players)", func(): _host(1))
+	main_panel.add_child(HSeparator.new())
+	_label(main_panel, "TEAM RACE: every team = 1 car, 2 players (driver + map holder)", 20, Color(1.0, 0.82, 0.25))
+	team_opt = OptionButton.new()
+	team_opt.custom_minimum_size = Vector2(0, 56)
+	team_opt.add_theme_font_size_override("font_size", 24)
+	for n in range(2, 5):
+		team_opt.add_item("%d teams  (%d players)" % [n, n * 2], n)
+	main_panel.add_child(team_opt)
+	_button(main_panel, "HOST TEAM RACE", func(): _host(team_opt.get_selected_id()))
 	_button(main_panel, "Solo practice", _on_solo)
 	main_panel.add_child(HSeparator.new())
 	_label(main_panel, "Games found on your Wi-Fi / LAN", 20)
@@ -127,8 +129,8 @@ func _my_name() -> String:
 	return n if n != "" else "Player"
 
 
-func _on_host() -> void:
-	var err := Net.host_game(_my_name(), count_opt.get_selected_id())
+func _host(teams: int) -> void:
+	var err := Net.host_game(_my_name(), teams)
 	if err != OK:
 		status.text = "Could not host (port %d busy?)" % Net.PORT
 		return
@@ -136,7 +138,7 @@ func _on_host() -> void:
 
 
 func _on_solo() -> void:
-	var err := Net.host_game(_my_name(), 1)
+	var err := Net.host_game(_my_name(), 0)
 	if err != OK:
 		status.text = "Could not start (port %d busy?)" % Net.PORT
 		return
@@ -188,10 +190,7 @@ func _refresh_lobby() -> void:
 		lobby_status.text = "Lobby full - starting..."
 	else:
 		lobby_status.text = "Waiting for players  %d / %d" % [count, Net.required_players]
-	var lines: Array[String] = []
-	for id in Net.players:
-		lines.append("- " + str(Net.players[id]) + ("  (host)" if id == 1 else ""))
-	lobby_list.text = "\n".join(lines)
+	lobby_list.text = "\n".join(Net.lobby_lines())
 	if Net.is_hosting:
 		lobby_ips.text = "Tell your friend to join:\n" + "\n".join(Net.local_ips())
 	else:

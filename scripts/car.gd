@@ -1,35 +1,36 @@
 class_name Car
 extends VehicleBody3D
-## Blocky red rally car with a first-person cockpit (steering wheel, dashboard, arms).
-## Physics only runs on the server; clients get a frozen copy that follows the network state.
+## Blocky rally car, one per team. Physics only runs on the server;
+## clients get a frozen copy that follows the network state.
 
 const ENGINE := 1150.0
 const BRAKE_FORCE := 40.0
 const TOP_SPEED_KMH := 165.0
 
-const RED := Color(0.78, 0.08, 0.08)
 const DARK := Color(0.12, 0.12, 0.16)
 const NAVY := Color(0.1, 0.12, 0.25)
-const SKIN := Color(0.93, 0.84, 0.7)
-const BLUE := Color(0.1, 0.25, 0.9)
-const SHIRT := Color(0.92, 0.28, 0.32)
 
+var team := 0
+var body_color := Color(0.78, 0.08, 0.08)
 var speed_kmh := 0.0
 var steer_target := 0.0
 var steer_visual := 0.0
-var local_role := ""
 var is_remote := false
 var hold := false      # handbrake (before the start / after the finish)
+var driver_avatar: Avatar
 
 var _wheel_pivot: Node3D
 var _wheel_mesh: Node3D
-var _arms: Array[MeshInstance3D] = []
-var _chars := {}
 
 
-func setup(role: String, remote: bool) -> void:
-	local_role = role
+func setup(p_team: int, color: Color, remote: bool) -> void:
+	team = p_team
+	body_color = color
 	is_remote = remote
+
+
+func seat_origin(role: String) -> Vector3:
+	return Vector3(-0.45, 1.0, 0.3) if role == "driver" else Vector3(0.45, 1.0, 0.3)
 
 
 func _ready() -> void:
@@ -107,20 +108,6 @@ func teleport(t: Transform3D) -> void:
 	steering = 0.0
 
 
-func seat_camera_position(role: String) -> Vector3:
-	match role:
-		"driver":
-			return Vector3(-0.45, 1.45, 0.35)
-		"navigator":
-			return Vector3(0.45, 1.45, 0.35)
-	return Vector3(0.0, 1.42, 1.0)
-
-
-func show_character(role: String, on: bool) -> void:
-	if _chars.has(role):
-		_chars[role].visible = on
-
-
 # ------------------------------------------------------------------ visuals
 
 func _mat(c: Color) -> StandardMaterial3D:
@@ -142,39 +129,53 @@ func _box(parent: Node, size: Vector3, pos: Vector3, c: Color) -> MeshInstance3D
 
 
 func _build_visuals() -> void:
-	# body shell
-	_box(self, Vector3(1.9, 0.5, 4.0), Vector3(0, 0.62, 0), RED)
-	_box(self, Vector3(1.8, 0.08, 3.8), Vector3(0, 0.88, 0.0), NAVY)          # floor
-	_box(self, Vector3(1.9, 0.12, 2.0), Vector3(0, 1.88, 0.35), RED)          # roof
-	_box(self, Vector3(0.1, 0.42, 2.0), Vector3(-0.95, 1.12, 0.35), RED)        # left door
-	_box(self, Vector3(0.1, 0.42, 2.0), Vector3(0.95, 1.12, 0.35), RED)         # right door
-	_box(self, Vector3(1.9, 0.42, 0.1), Vector3(0, 1.12, 1.35), RED)            # rear wall
-	_box(self, Vector3(0.14, 0.95, 0.14), Vector3(-0.9, 1.4, -0.65), RED)     # A pillars
-	_box(self, Vector3(0.14, 0.95, 0.14), Vector3(0.9, 1.4, -0.65), RED)
-	_box(self, Vector3(1.9, 0.14, 0.14), Vector3(0, 1.85, -0.65), RED)        # windshield top
+	var c := body_color
+	_box(self, Vector3(1.9, 0.5, 4.0), Vector3(0, 0.62, 0), c)                  # body
+	_box(self, Vector3(1.8, 0.08, 3.8), Vector3(0, 0.88, 0.0), NAVY)            # floor
+	_box(self, Vector3(1.9, 0.12, 2.0), Vector3(0, 1.95, 0.35), c)              # roof
+	_box(self, Vector3(0.1, 0.42, 2.0), Vector3(-0.95, 1.12, 0.35), c)          # doors
+	_box(self, Vector3(0.1, 0.42, 2.0), Vector3(0.95, 1.12, 0.35), c)
+	_box(self, Vector3(1.9, 0.42, 0.1), Vector3(0, 1.12, 1.35), c)              # rear wall
+	_box(self, Vector3(0.14, 1.0, 0.14), Vector3(-0.9, 1.42, -0.65), c)         # A pillars
+	_box(self, Vector3(0.14, 1.0, 0.14), Vector3(0.9, 1.42, -0.65), c)
+	_box(self, Vector3(1.9, 0.14, 0.14), Vector3(0, 1.9, -0.65), c)             # windshield top
 	_box(self, Vector3(1.9, 0.3, 0.9), Vector3(0, 1.0, -1.2), DARK.lightened(0.15))  # dashboard
-	_box(self, Vector3(0.35, 0.08, 0.06), Vector3(0, 1.7, -0.6), DARK)        # rear-view mirror
-	_box(self, Vector3(1.7, 0.5, 0.9), Vector3(0, 0.95, -1.6), RED)           # hood
-	_box(self, Vector3(1.9, 0.3, 0.2), Vector3(0, 0.5, -2.05), DARK)          # bumpers
+	_box(self, Vector3(0.35, 0.08, 0.06), Vector3(0, 1.78, -0.6), DARK)         # rear-view mirror
+	_box(self, Vector3(1.7, 0.5, 0.9), Vector3(0, 0.95, -1.6), c)               # hood
+	_box(self, Vector3(1.9, 0.3, 0.2), Vector3(0, 0.5, -2.05), DARK)            # bumpers
 	_box(self, Vector3(1.9, 0.3, 0.2), Vector3(0, 0.5, 2.05), DARK)
-	for x in [-0.45, 0.45]:                                                   # front seats
+	for x in [-0.45, 0.45]:                                                     # front seats
 		_box(self, Vector3(0.5, 0.12, 0.55), Vector3(x, 0.98, 0.3), DARK)
-		_box(self, Vector3(0.5, 0.75, 0.12), Vector3(x, 1.35, 0.62), DARK)
-	_box(self, Vector3(1.6, 0.12, 0.55), Vector3(0, 0.98, 1.0), DARK)         # back seat
-	# roll cage bar (the thin dark bars seen in the video)
-	_box(self, Vector3(1.8, 0.06, 0.06), Vector3(0, 1.75, 0.2), DARK)
+		_box(self, Vector3(0.5, 0.75, 0.12), Vector3(x, 1.3, 0.66), DARK)
+	_box(self, Vector3(1.6, 0.12, 0.55), Vector3(0, 0.98, 1.0), DARK)           # back seat
+	_box(self, Vector3(1.8, 0.06, 0.06), Vector3(0, 1.8, 0.2), DARK)            # roll-cage bar
+
+	# team letter on the roof and on the back
+	for spec in [[Vector3(0, 2.03, 0.35), Vector3(-90, 0, 0)], [Vector3(0, 1.3, 1.42), Vector3(0, 0, 0)]]:
+		var lab := Label3D.new()
+		lab.text = char(65 + team)
+		lab.font_size = 160
+		lab.pixel_size = 0.006
+		lab.modulate = Color.WHITE
+		lab.outline_modulate = Color.BLACK
+		lab.position = spec[0]
+		lab.rotation_degrees = spec[1]
+		add_child(lab)
+	# back label must face backwards (+Z)
+	var back := get_child(get_child_count() - 1) as Label3D
+	back.rotation_degrees = Vector3(0, 0, 0)
 
 	# steering wheel (driver side)
 	_wheel_pivot = Node3D.new()
-	_wheel_pivot.position = Vector3(-0.45, 1.12, -0.55)
-	_wheel_pivot.rotation.x = deg_to_rad(68.0)
+	_wheel_pivot.position = Vector3(-0.45, 1.3, -0.42)
+	_wheel_pivot.rotation.x = deg_to_rad(62.0)
 	add_child(_wheel_pivot)
 	_wheel_mesh = Node3D.new()
 	_wheel_pivot.add_child(_wheel_mesh)
 	var ring := MeshInstance3D.new()
 	var torus := TorusMesh.new()
 	torus.inner_radius = 0.12
-	torus.outer_radius = 0.19
+	torus.outer_radius = 0.18
 	torus.rings = 8
 	torus.ring_segments = 6
 	ring.mesh = torus
@@ -183,36 +184,6 @@ func _build_visuals() -> void:
 	_box(_wheel_mesh, Vector3(0.3, 0.04, 0.05), Vector3.ZERO, Color(0.03, 0.03, 0.04))
 	_box(_wheel_mesh, Vector3(0.05, 0.04, 0.3), Vector3.ZERO, Color(0.03, 0.03, 0.04))
 
-	# arms for the driver's own view (updated every frame to follow the wheel)
-	for i in 2:
-		var arm := _box(self, Vector3(0.13, 0.13, 1.0), Vector3.ZERO, SKIN)
-		arm.visible = (local_role == "driver")
-		_arms.append(arm)
-
-	# blocky characters, seen by the OTHER player
-	_make_character("driver", Vector3(-0.45, 0, 0.3))
-	_make_character("navigator", Vector3(0.45, 0, 0.3))
-	show_character("driver", false)
-	show_character("navigator", false)
-
-
-func _make_character(role: String, at: Vector3) -> void:
-	var root := Node3D.new()
-	root.position = at
-	add_child(root)
-	_box(root, Vector3(0.5, 0.6, 0.3), Vector3(0, 1.4, 0), SHIRT)           # torso
-	_box(root, Vector3(0.38, 0.38, 0.38), Vector3(0, 1.85, -0.02), BLUE)    # helmet
-	_box(root, Vector3(0.3, 0.14, 0.05), Vector3(0, 1.85, -0.23), Color.BLACK)  # visor
-	_box(root, Vector3(0.14, 0.14, 0.5), Vector3(-0.32, 1.35, -0.25), SKIN)  # arms
-	_box(root, Vector3(0.14, 0.14, 0.5), Vector3(0.32, 1.35, -0.25), SKIN)
-	_chars[role] = root
-
-
-func _place_limb(mi: MeshInstance3D, from: Vector3, to: Vector3) -> void:
-	var d := to - from
-	var b := Basis.looking_at(d, Vector3.UP)
-	mi.transform = Transform3D((b * Basis.from_scale(Vector3(1, 1, d.length()))), (from + to) * 0.5)
-
 
 func _process(delta: float) -> void:
 	if not is_remote:
@@ -220,9 +191,8 @@ func _process(delta: float) -> void:
 	var phi := -steer_visual * 1.6
 	if _wheel_mesh:
 		_wheel_mesh.rotation.y = phi
-	if local_role == "driver" and _arms.size() == 2 and _wheel_pivot:
-		var r := 0.155
-		var left_hand := _wheel_pivot.transform * Vector3(-cos(phi), 0.0, sin(phi)) * r
-		var right_hand := _wheel_pivot.transform * Vector3(cos(phi), 0.0, -sin(phi)) * r
-		_place_limb(_arms[0], Vector3(-0.7, 1.0, 0.75), left_hand)
-		_place_limb(_arms[1], Vector3(-0.2, 1.0, 0.75), right_hand)
+	if driver_avatar and _wheel_pivot:
+		var r := 0.15
+		var left_hand := _wheel_pivot.transform * (Vector3(-cos(phi), 0.0, sin(phi)) * r)
+		var right_hand := _wheel_pivot.transform * (Vector3(cos(phi), 0.0, -sin(phi)) * r)
+		driver_avatar.set_wheel_hands(left_hand, right_hand)

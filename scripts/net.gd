@@ -4,7 +4,7 @@ extends Node
 
 const PORT := 24565
 const DISCOVERY_PORT := 24566
-const MAX_PLAYERS := 4
+const MAX_PLAYERS := 8
 const MENU_SCENE := "res://scenes/main.tscn"
 const WORLD_SCENE := "res://scenes/world.tscn"
 
@@ -13,11 +13,14 @@ signal hosts_changed
 signal joined
 signal join_failed
 signal lobby_closed(reason: String)
+signal peer_left(id: int)
 
 var player_name := "Player"
 var required_players := 2
 var players := {}   # peer_id -> name
-var roles := {}     # peer_id -> "driver" | "navigator" | "passenger"
+var roles := {}     # peer_id -> "driver" | "navigator"
+var team_of := {}   # peer_id -> team index (0..3)
+var team_count := 1
 var track_seed := 0
 var in_game := false
 var race_over := false
@@ -47,6 +50,14 @@ func _setup_inputs() -> void:
 		"accel": [KEY_W, KEY_UP],
 		"brake": [KEY_S, KEY_DOWN],
 		"reset": [KEY_R],
+		"punch": [KEY_F, KEY_SPACE],
+		"g_left": [KEY_1],
+		"g_fwd": [KEY_2],
+		"g_right": [KEY_3],
+		"g_stop": [KEY_4],
+		"beacon": [KEY_G],
+		"map_toggle": [KEY_M],
+		"look_mate": [KEY_V],
 	}
 	for action in map:
 		if not InputMap.has_action(action):
@@ -59,10 +70,16 @@ func _setup_inputs() -> void:
 
 # ---------------------------------------------------------------- hosting / joining
 
-func host_game(p_name: String, req: int) -> int:
+## teams = 0 -> solo practice, 1 -> co-op (one car, 2 players), 2..4 -> team race (2 players per team)
+func host_game(p_name: String, teams: int) -> int:
 	leave()
 	player_name = p_name
-	required_players = clampi(req, 1, MAX_PLAYERS)
+	if teams <= 0:
+		team_count = 1
+		required_players = 1
+	else:
+		team_count = clampi(teams, 1, 4)
+		required_players = team_count * 2
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_server(PORT, MAX_PLAYERS)
 	if err != OK:
@@ -75,6 +92,17 @@ func host_game(p_name: String, req: int) -> int:
 	players_changed.emit()
 	_check_full()
 	return OK
+
+
+## Text lines for the lobby: teams are filled in join order (driver first, then the map holder).
+func lobby_lines() -> Array[String]:
+	var out: Array[String] = []
+	var ids: Array = players.keys()
+	for i in ids.size():
+		var team := (i >> 1) if required_players > 1 else 0
+		var role := "driver" if i % 2 == 0 else "map holder"
+		out.append("Team %s  -  %s  (%s)%s" % [char(65 + team), players[ids[i]], role, "  [host]" if ids[i] == 1 else ""])
+	return out
 
 
 func join_game(ip: String, p_name: String) -> int:
@@ -95,6 +123,7 @@ func leave() -> void:
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	players.clear()
 	roles.clear()
+	team_of.clear()
 	in_game = false
 	race_over = false
 	is_hosting = false
@@ -166,14 +195,15 @@ func register(p_name: String) -> void:
 
 
 func _broadcast_players() -> void:
-	sync_players.rpc(players, required_players)
+	sync_players.rpc(players, required_players, team_count)
 	players_changed.emit()
 
 
 @rpc("authority", "call_remote", "reliable")
-func sync_players(p: Dictionary, req: int) -> void:
+func sync_players(p: Dictionary, req: int, teams: int) -> void:
 	players = p
 	required_players = req
+	team_count = teams
 	players_changed.emit()
 
 
@@ -188,18 +218,21 @@ func _check_full() -> void:
 	if not is_hosting or players.size() < required_players:
 		_starting = false
 		return
-	var ids: Array = players.keys()
-	ids.sort()
+	var ids: Array = players.keys()   # join order: host first
 	var r := {}
+	var tm := {}
 	for i in ids.size():
-		r[ids[i]] = "driver" if i == 0 else ("navigator" if i == 1 else "passenger")
-	begin.rpc(randi(), r, players)
+		r[ids[i]] = "driver" if i % 2 == 0 else "navigator"
+		tm[ids[i]] = (i >> 1) if required_players > 1 else 0
+	begin.rpc(randi(), r, tm, players, team_count)
 
 
 @rpc("authority", "call_local", "reliable")
-func begin(seed_value: int, p_roles: Dictionary, p_players: Dictionary) -> void:
+func begin(seed_value: int, p_roles: Dictionary, p_teams: Dictionary, p_players: Dictionary, p_team_count: int) -> void:
 	track_seed = seed_value
 	roles = p_roles
+	team_of = p_teams
+	team_count = p_team_count
 	players = p_players
 	in_game = true
 	race_over = false
@@ -246,7 +279,6 @@ func _on_peer_disconnected(id: int) -> void:
 		return
 	players.erase(id)
 	if in_game:
-		if not race_over:
-			abort.rpc("A player left the game")
+		peer_left.emit(id)
 	else:
 		_broadcast_players()
