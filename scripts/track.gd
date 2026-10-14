@@ -23,18 +23,123 @@ var branches: Array[Dictionary] = []
 ## {index, kind: rock|log|bump, side}
 var obstacles: Array[Dictionary] = []
 
+## cliff sections without guard rails: {from, to}
+var edges: Array[Dictionary] = []
+## slippery sections: {from, to}
+var ices: Array[Dictionary] = []
+
+# stage parameters (filled by the stage director)
+var theme := "snow"
+var stage_name := "Test Stage"
+var fork_p := 0.25
+var fork_gap := 45
+var obst_p := 0.3
+var relief := 0.0      # mountain height variation in metres (0 = flat)
+var open_p := 0.0      # chance of cliff sections
+var rare_p := 0.0      # chance of rare hazards (ice, rockfall)
+var floor_y := 0.0     # valley floor height
+
 var _pos := Vector3.ZERO
 var _h := 0.0
 
 
+const THEMES := ["mountain", "mountain", "mountain", "snow", "autumn"]
+const ADJ := ["Misty", "Frozen", "Wild", "Hidden", "Black", "Silver", "Howling", "Broken", "Lonely", "Golden", "Thunder"]
+const NOUNS := {
+	"mountain": ["Pass", "Ridge", "Summit", "Gorge", "Col", "Peak"],
+	"snow": ["Valley", "Forest", "Lake", "Trail", "Hollow"],
+	"autumn": ["Woods", "Orchard", "Canyon", "Vineyard", "Hills"],
+}
+
+
+## Offline "stage director": invents several stage candidates, builds them and keeps the most
+## interesting one (many closed roads, tough corners, rare hazards, cliffs). Pure maths, no internet.
+static func design_stage(base_seed: int) -> Dictionary:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = base_seed
+	var best := {}
+	var best_score := -INF
+	for c in 6:
+		var st := {
+			"theme": THEMES[rng.randi() % THEMES.size()],
+			"difficulty": rng.randf_range(0.3, 1.0),
+			"fork_p": rng.randf_range(0.35, 0.6),
+			"obst_p": rng.randf_range(0.25, 0.45),
+			"seed": rng.randi(),
+		}
+		var mountain: bool = st["theme"] == "mountain"
+		st["relief"] = rng.randf_range(7.0, 13.0) if mountain else 0.0
+		st["open_p"] = rng.randf_range(0.35, 0.7) if mountain else 0.0
+		st["rare_p"] = rng.randf_range(0.5, 1.0)
+		var found := false
+		for attempt in 40:
+			var t := Track.from_stage(st, true, attempt * 7919)
+			if t != null:
+				st["seed"] = int(st["seed"]) + attempt * 7919
+				var sc := t._score(float(st["difficulty"])) + rng.randf()
+				if sc > best_score:
+					best_score = sc
+					best = st.duplicate()
+					best["name"] = "%s %s" % [ADJ[rng.randi() % ADJ.size()], (NOUNS[st["theme"]] as Array)[rng.randi() % 5]]
+				found = true
+				break
+		if not found and best.is_empty():
+			best = st.duplicate()
+			best["name"] = "Test Stage"
+	return best
+
+
+## Builds a stage. With validate it returns null when the road overlaps itself.
+static func from_stage(st: Dictionary, validate := false, seed_offset := 0) -> Track:
+	var t := Track.new()
+	t.theme = st.get("theme", "snow")
+	t.stage_name = st.get("name", "Stage")
+	t.fork_p = st.get("fork_p", 0.25)
+	t.fork_gap = 32 if t.theme == "mountain" else 45
+	t.obst_p = st.get("obst_p", 0.3)
+	t.relief = st.get("relief", 0.0)
+	t.open_p = st.get("open_p", 0.0)
+	t.rare_p = st.get("rare_p", 0.0)
+	var ok := t._build(int(st.get("seed", 1)) + seed_offset, validate)
+	if validate and not ok:
+		return null
+	return t
+
+
 static func generate(seed_value: int) -> Track:
-	for attempt in 120:
-		var t := Track.new()
-		if t._build(seed_value + attempt * 7919, true):
-			return t
-	var fallback := Track.new()
-	fallback._build(seed_value, false)
-	return fallback
+	return from_stage({"seed": seed_value})
+
+
+func _score(difficulty: float) -> float:
+	var forks := 0
+	var hard := 0
+	for n in notes:
+		if n["kind"] == "fork":
+			forks += 1
+		elif n["kind"] == "corner" and n["sev"] >= 4:
+			hard += 1
+	var hazards := ices.size() + obstacles.filter(func(o: Dictionary) -> bool: return o["kind"] == "rockfall").size()
+	var sc := minf(forks, 7.0) * 2.0 + minf(hazards, 3.0) * 2.0 + minf(edges.size(), 4.0) * 1.5
+	sc -= absf(hard - difficulty * 10.0) * 0.6
+	return sc
+
+
+func y_at(i: int) -> float:
+	return points[clampi(i, 0, points.size() - 1)].y
+
+
+func is_open(i: int) -> bool:
+	for e in edges:
+		if i >= e["from"] and i <= e["to"]:
+			return true
+	return false
+
+
+func ice_at(i: int) -> bool:
+	for e in ices:
+		if i >= e["from"] and i <= e["to"]:
+			return true
+	return false
 
 
 func length() -> float:
@@ -99,6 +204,8 @@ func _build(seed_value: int, validate: bool) -> bool:
 	notes.clear()
 	branches.clear()
 	obstacles.clear()
+	edges.clear()
+	ices.clear()
 	_push()
 	_straight(70.0)
 	var total_turn := 0.0
@@ -120,6 +227,9 @@ func _build(seed_value: int, validate: bool) -> bool:
 
 	_add_forks(rng)
 	_add_obstacles(rng)
+	_apply_relief(rng)
+	_add_edges(rng)
+	_add_rare(rng)
 	notes.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["index"] < b["index"])
 
 	if validate:
@@ -150,11 +260,11 @@ func _add_forks(rng: RandomNumberGenerator) -> void:
 	var last := 0
 	var n := points.size()
 	for idx in range(50, n - 60):
-		if idx - last < 45:
+		if idx - last < fork_gap:
 			continue
 		if not _is_straight(idx - 4, idx + 5):
 			continue
-		if rng.randf() > 0.25:
+		if rng.randf() > fork_p:
 			continue
 		last = idx
 		var side := 1 if rng.randf() < 0.5 else -1
@@ -190,7 +300,7 @@ func _add_obstacles(rng: RandomNumberGenerator) -> void:
 		for b in branches:
 			if absi(int(b["fork"]) - idx) < 14:
 				near_fork = true
-		if near_fork or rng.randf() > 0.3:
+		if near_fork or rng.randf() > obst_p:
 			continue
 		last = idx
 		var side := 1 if rng.randf() < 0.5 else -1
@@ -199,3 +309,90 @@ func _add_obstacles(rng: RandomNumberGenerator) -> void:
 		obstacles.append({"index": idx, "kind": kind, "side": side})
 		var text := "Rock" if kind == "rock" else ("Log" if kind == "log" else "Big bump")
 		notes.append({"index": idx, "text": text, "dir": 0 if kind == "bump" else side, "sev": 3, "len": 0, "kind": kind})
+
+
+
+func _apply_relief(rng: RandomNumberGenerator) -> void:
+	if relief <= 0.0:
+		floor_y = 0.0
+		return
+	var p1 := rng.randf() * TAU
+	var p2 := rng.randf() * TAU
+	var p3 := rng.randf() * TAU
+	var n := points.size()
+	var min_y := INF
+	for i in n:
+		var y := 0.55 * sin(i * 0.021 + p1) + 0.3 * sin(i * 0.053 + p2) + 0.15 * sin(i * 0.11 + p3) + 1.0
+		var ramp := smoothstep(0.0, 70.0, float(i)) * smoothstep(0.0, 30.0, float(n - 1 - i))
+		points[i].y = y * relief * ramp
+		min_y = minf(min_y, points[i].y)
+	for b in branches:
+		var bp: PackedVector3Array = b["points"]
+		var fy := points[b["fork"]].y
+		for k in bp.size():
+			bp[k].y = fy
+		b["points"] = bp
+	floor_y = -relief * 3.0 - 25.0
+	# crests: the road disappears over the top, the co-driver has to warn about it
+	var last := -100
+	for i in range(20, n - 20):
+		if i - last < 40:
+			continue
+		var y := points[i].y
+		if y > points[i - 7].y + 1.2 and y > points[i + 7].y + 1.2 and y >= points[i - 1].y and y >= points[i + 1].y:
+			last = i
+			notes.append({"index": i, "text": "Over crest", "dir": 0, "sev": 3, "len": 0, "kind": "crest"})
+
+
+func _near_special(idx: int, margin: int) -> bool:
+	for b in branches:
+		if absi(int(b["fork"]) - idx) < margin + 14:
+			return true
+	for o in obstacles:
+		if absi(int(o["index"]) - idx) < margin:
+			return true
+	for e in edges:
+		if idx > int(e["from"]) - margin and idx < int(e["to"]) + margin:
+			return true
+	for e in ices:
+		if idx > int(e["from"]) - margin and idx < int(e["to"]) + margin:
+			return true
+	return false
+
+
+func _add_edges(rng: RandomNumberGenerator) -> void:
+	if open_p <= 0.0:
+		return
+	var n := points.size()
+	var idx := 60
+	while idx < n - 70:
+		var len_pts := rng.randi_range(14, 30)
+		if rng.randf() < open_p and not _near_special(idx, 6) and not _near_special(idx + len_pts, 6):
+			edges.append({"from": idx, "to": idx + len_pts})
+			notes.append({"index": idx, "text": "Cliff edge", "dir": 0, "sev": 4, "len": len_pts * int(STEP), "kind": "cliff"})
+			idx += len_pts + 30
+		else:
+			idx += 20
+
+
+func _add_rare(rng: RandomNumberGenerator) -> void:
+	if rare_p <= 0.0:
+		return
+	var n := points.size()
+	var count := 0
+	var idx := 70
+	while idx < n - 60 and count < 5:
+		idx += rng.randi_range(25, 50)
+		if rng.randf() > rare_p:
+			continue
+		if idx >= n - 60 or not _is_straight(idx - 6, idx + 12) or _near_special(idx, 12):
+			continue
+		count += 1
+		if rng.randf() < 0.5:
+			var len_pts := rng.randi_range(8, 13)
+			ices.append({"from": idx, "to": idx + len_pts})
+			notes.append({"index": idx, "text": "Ice", "dir": 0, "sev": 4, "len": len_pts * int(STEP), "kind": "ice"})
+		else:
+			var side := 1 if rng.randf() < 0.5 else -1
+			obstacles.append({"index": idx, "kind": "rockfall", "side": side})
+			notes.append({"index": idx, "text": "Rockfall", "dir": side, "sev": 5, "len": 0, "kind": "rockfall"})

@@ -7,6 +7,7 @@ var progress := 0
 var wrong_way := false
 var others: Array = []      # [{idx:int, color:Color}] other teams' cars
 var my_color := Color(0.9, 0.1, 0.1)
+var tablet := false         # drawn on the 3D iPad instead of the HUD clipboard
 
 var _pts := PackedVector2Array()
 var _branch_pts: Array[PackedVector2Array] = []
@@ -28,6 +29,8 @@ func set_state(p: int, wrong: bool, other_cars: Array) -> void:
 
 
 func _paper_rect() -> Rect2:
+	if tablet:
+		return Rect2(8, 8, size.x - 16, size.y - 16)
 	return Rect2(14, 22, size.x - 28, size.y - 36)
 
 
@@ -63,8 +66,12 @@ func _note_label(n: Dictionary) -> String:
 			return "FORK: %s CLOSED" % ("LEFT" if n["dir"] > 0 else "RIGHT")
 		"flat":
 			return "%s  %dm" % [label, n["len"]]
-		"bump":
-			return label
+		"bump", "crest", "ice":
+			return label if n["len"] == 0 else "%s  %dm" % [label, n["len"]]
+		"cliff":
+			return "CLIFF EDGE  %dm" % n["len"]
+		"rockfall":
+			return "ROCKFALL  " + ("< LEFT" if n["dir"] > 0 else "RIGHT >")
 	if n["dir"] > 0:
 		return label + "  < LEFT"
 	if n["dir"] < 0:
@@ -74,9 +81,12 @@ func _note_label(n: Dictionary) -> String:
 
 func _draw() -> void:
 	var font := ThemeDB.fallback_font
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.66, 0.45, 0.2))
-	draw_rect(Rect2(Vector2.ZERO, size).grow(-5), Color(0.45, 0.3, 0.13), false, 4.0)
-	draw_rect(Rect2(size.x * 0.34, 0, size.x * 0.32, 24), Color(0.78, 0.78, 0.82))
+	if tablet:
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.1, 0.1, 0.12))
+	else:
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.66, 0.45, 0.2))
+		draw_rect(Rect2(Vector2.ZERO, size).grow(-5), Color(0.45, 0.3, 0.13), false, 4.0)
+		draw_rect(Rect2(size.x * 0.34, 0, size.x * 0.32, 24), Color(0.78, 0.78, 0.82))
 	var paper := _paper_rect()
 	draw_rect(paper, Color(0.06, 0.06, 0.09))
 	if track == null:
@@ -91,6 +101,20 @@ func _draw() -> void:
 		var e := arr[arr.size() - 1]
 		draw_line(e + Vector2(-6, -6), e + Vector2(6, 6), Color(1, 0.3, 0.3), 3.0)
 		draw_line(e + Vector2(-6, 6), e + Vector2(6, -6), Color(1, 0.3, 0.3), 3.0)
+	for e in track.edges:
+		var a: int = e["from"]
+		var b: int = mini(e["to"], _pts.size() - 1)
+		if b - a >= 1:
+			draw_polyline(_pts.slice(a, b + 1), Color(1.0, 0.55, 0.1), 7.0, true)
+	for e in track.ices:
+		var a: int = e["from"]
+		var b: int = mini(e["to"], _pts.size() - 1)
+		if b - a >= 1:
+			draw_polyline(_pts.slice(a, b + 1), Color(0.4, 0.9, 1.0), 7.0, true)
+	for o in track.obstacles:
+		if o["kind"] == "rockfall":
+			var c := _pts[clampi(int(o["index"]), 0, _pts.size() - 1)]
+			draw_colored_polygon(PackedVector2Array([c + Vector2(0, -8), c + Vector2(8, 7), c + Vector2(-8, 7)]), Color(1, 0.2, 0.2))
 	if idx > 1:
 		draw_polyline(_pts.slice(0, idx + 1), Color(0.45, 0.42, 0.28), 3.0, true)
 	if _pts.size() - idx >= 2:
@@ -102,6 +126,7 @@ func _draw() -> void:
 	draw_circle(_pts[idx], 8.0, Color.WHITE)
 	draw_circle(_pts[idx], 5.0, my_color)
 
+	draw_string(font, paper.position + Vector2(8, 16), track.stage_name.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, paper.size.x - 16, 14, Color(0.7, 0.75, 0.85))
 	# next pace notes
 	var fs := int(clampf(size.y * 0.052, 15.0, 28.0))
 	var y := paper.position.y + paper.size.y * 0.5 + fs + 4
@@ -115,6 +140,10 @@ func _draw() -> void:
 		var col := Color(0.4, 0.95, 0.5)
 		if n["kind"] == "fork":
 			col = Color(1.0, 0.35, 0.3)
+		elif n["kind"] in ["cliff", "rockfall", "crest"]:
+			col = Color(1.0, 0.6, 0.2)
+		elif n["kind"] == "ice":
+			col = Color(0.5, 0.95, 1.0)
 		elif n["kind"] in ["rock", "log", "bump"]:
 			col = Color(0.5, 0.8, 1.0)
 		elif n["sev"] >= 4:

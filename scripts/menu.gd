@@ -14,6 +14,9 @@ var lobby_status: Label
 var lobby_ips: Label
 
 
+var blind_check: CheckBox
+
+
 func _ready() -> void:
 	_build_ui()
 	Net.players_changed.connect(_refresh_lobby)
@@ -84,6 +87,11 @@ func _build_ui() -> void:
 	name_edit.custom_minimum_size = Vector2(0, 56)
 	name_edit.add_theme_font_size_override("font_size", 24)
 	main_panel.add_child(name_edit)
+	blind_check = CheckBox.new()
+	blind_check.text = "Blind driver mode (driver sees almost nothing - co-driver guides)"
+	blind_check.button_pressed = true
+	blind_check.add_theme_font_size_override("font_size", 20)
+	main_panel.add_child(blind_check)
 	_button(main_panel, "HOST CO-OP  (1 car, 2 players)", func(): _host(1))
 	main_panel.add_child(HSeparator.new())
 	_label(main_panel, "TEAM RACE: every team = 1 car, 2 players (driver + map holder)", 20, Color(1.0, 0.82, 0.25))
@@ -130,7 +138,7 @@ func _my_name() -> String:
 
 
 func _host(teams: int) -> void:
-	var err := Net.host_game(_my_name(), teams)
+	var err := Net.host_game(_my_name(), teams, blind_check.button_pressed)
 	if err != OK:
 		status.text = "Could not host (port %d busy?)" % Net.PORT
 		return
@@ -138,7 +146,7 @@ func _host(teams: int) -> void:
 
 
 func _on_solo() -> void:
-	var err := Net.host_game(_my_name(), 0)
+	var err := Net.host_game(_my_name(), 0, false)
 	if err != OK:
 		status.text = "Could not start (port %d busy?)" % Net.PORT
 		return

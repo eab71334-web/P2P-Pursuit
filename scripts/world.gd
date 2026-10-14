@@ -17,6 +17,19 @@ const PLACES := ["1st", "2nd", "3rd", "4th"]
 const GESTURE_TEXT := ["", "<  CO-DRIVER SAYS: LEFT", "^  CO-DRIVER SAYS: STRAIGHT", "CO-DRIVER SAYS: RIGHT  >", "!!  STOP / WARNING  !!"]
 
 
+const THEMES := {
+	"snow": {"top": Color(0.42, 0.58, 0.85), "hor": Color(0.8, 0.86, 0.93), "fog": 0.0035, "ground": Color(0.88, 0.92, 0.97),
+		"bank": Color(0.97, 0.98, 1.0), "road": Color(0.2, 0.21, 0.25), "trunk": Color(0.35, 0.22, 0.12),
+		"l1": Color(0.14, 0.4, 0.2), "l2": Color(0.2, 0.5, 0.28), "mount": Color(0.8, 0.85, 0.93)},
+	"autumn": {"top": Color(0.5, 0.62, 0.8), "hor": Color(0.95, 0.85, 0.7), "fog": 0.004, "ground": Color(0.5, 0.36, 0.18),
+		"bank": Color(0.55, 0.42, 0.25), "road": Color(0.3, 0.26, 0.22), "trunk": Color(0.3, 0.18, 0.1),
+		"l1": Color(0.85, 0.4, 0.1), "l2": Color(0.9, 0.62, 0.15), "mount": Color(0.6, 0.45, 0.35)},
+	"mountain": {"top": Color(0.3, 0.45, 0.75), "hor": Color(0.75, 0.82, 0.9), "fog": 0.0028, "ground": Color(0.22, 0.3, 0.25),
+		"bank": Color(0.6, 0.6, 0.64), "road": Color(0.22, 0.22, 0.25), "trunk": Color(0.3, 0.2, 0.12),
+		"l1": Color(0.1, 0.3, 0.18), "l2": Color(0.14, 0.38, 0.22), "mount": Color(0.55, 0.57, 0.62), "pillar": Color(0.42, 0.4, 0.4)},
+}
+
+
 class TeamState extends RefCounted:
 	var idx := 0
 	var color := Color.RED
@@ -36,9 +49,16 @@ class TeamState extends RefCounted:
 	var target := Transform3D.IDENTITY
 	var have_net := false
 	var speed := 0.0
+	var penalty := 0.0
 
 
 var track: Track
+var th: Dictionary
+var blind_mode := false
+var ipad_vp: SubViewport
+var map_mode := false
+var _pillars: Array[Transform3D] = []
+var _road_body: StaticBody3D
 var teams: Array[TeamState] = []
 var avatars := {}                  # peer id -> Avatar
 var local_avatar: Avatar
@@ -95,13 +115,21 @@ func _ready() -> void:
 		Net.team_count = 1
 		Net.players = {1: "Test"}
 		Net.required_players = 1
-		Net.track_seed = randi()
+		Net.stage = Track.design_stage(randi())
+		Net.track_seed = int(Net.stage["seed"])
+		Net.blind = false
 	my_id = multiplayer.get_unique_id()
 	my_role = Net.roles.get(my_id, "driver")
 	my_team = Net.team_of.get(my_id, 0)
 	solo = Net.players.size() == 1
 	show_touch = DisplayServer.is_touchscreen_available() and my_role == "driver"
-	track = Track.generate(Net.track_seed)
+	if Net.stage.is_empty():
+		Net.stage = {"seed": Net.track_seed}
+	track = Track.from_stage(Net.stage)
+	th = THEMES[track.theme]
+	blind_mode = Net.blind and my_role == "driver" and not solo
+	if my_role == "navigator" and not solo:
+		_build_ipad()
 	_build_environment()
 	_build_track()
 	_build_obstacles()
@@ -387,6 +415,11 @@ func _physics_process(delta: float) -> void:
 				ts.disturb -= delta
 				inp.x = clampf(inp.x + ts.disturb_dir * 0.9, -1.0, 1.0)
 			_update_progress(ts)
+			ts.car.set_grip(0.28 if (track.ice_at(ts.prog) and not ts.wrong) else 1.0)
+			if ts.car.global_position.y < track.y_at(ts.prog) - 7.0:
+				ts.penalty += 5.0
+				_reset_team(ts)
+				show_message.rpc("Team %s FELL!  +5s" % char(65 + ts.idx))
 			if ts.car.global_transform.basis.y.y < 0.25:
 				ts.flip += delta
 				if ts.flip > 2.0:
@@ -420,9 +453,9 @@ func _update_progress(ts: TeamState) -> void:
 	ts.wrong = best_d > 13.0 * 13.0     # far from the real road = on a closed side road
 	if best >= track.points.size() - 4 and not ts.finished:
 		ts.finished = true
-		ts.finish_time = race_time
+		ts.finish_time = race_time + ts.penalty
 		results.append(ts.idx)
-		team_finished.rpc(ts.idx, race_time, results.size())
+		team_finished.rpc(ts.idx, ts.finish_time, results.size())
 		_check_all_done()
 
 
@@ -510,7 +543,13 @@ func _update_look(delta: float) -> void:
 	if local_avatar == null:
 		return
 	var dragging := look_touch != -1 or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
-	if Input.is_action_pressed("look_mate") and local_avatar.seat_dx != 0.0:
+	if local_avatar.cam:
+		local_avatar.cam.fov = move_toward(local_avatar.cam.fov, 40.0 if map_mode else 82.0, delta * 160.0)
+	if map_mode and not dragging:
+		look_yaw = move_toward(look_yaw, 0.0, delta * 5.0)
+		look_pitch = move_toward(look_pitch, -1.03, delta * 4.0)
+		look_idle = 0.0
+	elif Input.is_action_pressed("look_mate") and local_avatar.seat_dx != 0.0:
 		var target_yaw := -signf(local_avatar.seat_dx) * 1.45
 		look_yaw = move_toward(look_yaw, target_yaw, delta * 7.0)
 		look_pitch = move_toward(look_pitch, 0.1, delta * 3.0)
@@ -534,8 +573,9 @@ func _update_look(delta: float) -> void:
 
 func _look_delta(rel: Vector2) -> void:
 	look_yaw = clampf(look_yaw - rel.x * 0.006, -2.6, 2.6)
-	look_pitch = clampf(look_pitch - rel.y * 0.006, -0.95, 0.75)
+	look_pitch = clampf(look_pitch - rel.y * 0.006, -1.2, 0.75)
 	look_idle = 0.0
+	map_mode = false
 
 
 # ====================================================================== player actions
@@ -575,7 +615,9 @@ func _do_beacon() -> void:
 
 
 func _toggle_map() -> void:
-	if clipboard:
+	if ipad_vp:
+		map_mode = not map_mode
+	elif clipboard:
 		clipboard.visible = not clipboard.visible
 
 
@@ -667,43 +709,72 @@ func _unit_box() -> BoxMesh:
 
 func _build_environment() -> void:
 	var env := Environment.new()
-	env.background_mode = Environment.BG_SKY
-	var sky := Sky.new()
-	var sm := ProceduralSkyMaterial.new()
-	sm.sky_top_color = Color(0.42, 0.58, 0.85)
-	sm.sky_horizon_color = Color(0.8, 0.86, 0.93)
-	sm.ground_horizon_color = Color(0.8, 0.86, 0.93)
-	sm.ground_bottom_color = Color(0.85, 0.9, 0.95)
-	sky.sky_material = sm
-	env.sky = sky
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.9
-	env.fog_enabled = true
-	env.fog_light_color = Color(0.8, 0.86, 0.93)
-	env.fog_density = 0.0035
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-50, 30, 0)
+	if blind_mode:
+		# nearly blind driver: black world, dim grey road, headlights only
+		env.background_mode = Environment.BG_COLOR
+		env.background_color = Color.BLACK
+		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		env.ambient_light_color = Color(0.5, 0.52, 0.6)
+		env.ambient_light_energy = 0.22
+		env.fog_enabled = true
+		env.fog_light_color = Color.BLACK
+		env.fog_density = 0.011
+		sun.light_energy = 0.12
+	else:
+		env.background_mode = Environment.BG_SKY
+		var sky := Sky.new()
+		var sm := ProceduralSkyMaterial.new()
+		sm.sky_top_color = th["top"]
+		sm.sky_horizon_color = th["hor"]
+		sm.ground_horizon_color = th["hor"]
+		sm.ground_bottom_color = th["hor"]
+		sky.sky_material = sm
+		env.sky = sky
+		env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+		env.ambient_light_energy = 0.9
+		env.fog_enabled = true
+		env.fog_light_color = th["hor"]
+		env.fog_density = th["fog"]
+		sun.light_energy = 1.0
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-50, 30, 0)
-	sun.light_energy = 1.0
 	add_child(sun)
 
 
-func _add_road(pts: PackedVector3Array, avoid: PackedVector3Array, road: Array[Transform3D], dashes: Array[Transform3D], bank_vis: Array[Transform3D], banks: StaticBody3D) -> void:
+func _add_road(pts: PackedVector3Array, avoid: PackedVector3Array, road: Array[Transform3D], dashes: Array[Transform3D], bank_vis: Array[Transform3D], banks: StaticBody3D, main := false) -> void:
 	var W := Track.ROAD_WIDTH
 	var avoid_d2 := pow(W * 0.5 + 2.6, 2.0)
+	var mountain := track.theme == "mountain"
 	for i in pts.size() - 1:
 		var a := pts[i]
 		var b := pts[i + 1]
 		var d := b - a
 		var yaw := atan2(-d.x, -d.z)
-		var basis := Basis(Vector3.UP, yaw)
+		var pitch := atan2(d.y, Vector2(d.x, d.z).length())
+		var flat := Basis(Vector3.UP, yaw)
+		var basis := flat * Basis(Vector3.RIGHT, pitch)
 		var mid := (a + b) * 0.5
-		var left := basis * Vector3(-1, 0, 0)
-		road.append(Transform3D(basis * Basis.from_scale(Vector3(W, 0.2, Track.STEP * 1.12)), mid + Vector3(0, -0.07, 0)))
+		var left := flat * Vector3(-1, 0, 0)
+		var seg := d.length()
+		var open := main and track.is_open(i)
+		road.append(Transform3D(basis * Basis.from_scale(Vector3(W, 0.2, seg * 1.12)), mid + Vector3(0, -0.07, 0)))
 		if i % 2 == 0:
-			dashes.append(Transform3D(basis * Basis.from_scale(Vector3(0.3, 0.02, 2.2)), mid + Vector3(0, 0.04, 0)))
+			dashes.append(Transform3D(basis * Basis.from_scale(Vector3(0.3, 0.02, 2.2)), mid + basis.y * 0.04))
+		if mountain:
+			var rc := CollisionShape3D.new()
+			var rs := BoxShape3D.new()
+			rs.size = Vector3(W + 1.0, 1.0, seg * 1.3)
+			rc.shape = rs
+			rc.transform = Transform3D(basis, mid + basis.y * (0.03 - 0.5))
+			_road_body.add_child(rc)
+			var ph := mid.y - track.floor_y - 0.4
+			var pw := W if open else W + 12.0
+			_pillars.append(Transform3D(flat * Basis.from_scale(Vector3(pw, ph, seg * 1.06)), Vector3(mid.x, track.floor_y + ph * 0.5, mid.z)))
+		if open:
+			continue
 		for side in [-1.0, 1.0]:
 			var pos: Vector3 = mid + left * side * (W * 0.5 + 1.5) + Vector3(0, 0.7, 0)
 			var skip := false
@@ -715,12 +786,12 @@ func _add_road(pts: PackedVector3Array, avoid: PackedVector3Array, road: Array[T
 					break
 			if skip:
 				continue
-			bank_vis.append(Transform3D(basis * Basis.from_scale(Vector3(3.0, 1.4, Track.STEP * 1.2)), pos))
+			bank_vis.append(Transform3D(flat * Basis.from_scale(Vector3(3.0, 1.4, Track.STEP * 1.2)), pos))
 			var cs := CollisionShape3D.new()
 			var bs := BoxShape3D.new()
 			bs.size = Vector3(3.0, 1.4, Track.STEP * 1.2)
 			cs.shape = bs
-			cs.transform = Transform3D(basis, pos)
+			cs.transform = Transform3D(flat, pos)
 			banks.add_child(cs)
 
 
@@ -730,18 +801,21 @@ func _build_track() -> void:
 	var gb := BoxShape3D.new()
 	gb.size = Vector3(8000, 2, 8000)
 	gs.shape = gb
-	gs.position = Vector3(0, -1, 0)
+	gs.position = Vector3(0, track.floor_y - 1.0, 0)
 	ground.add_child(gs)
 	var gm := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(8000, 8000)
 	gm.mesh = pm
-	gm.material_override = _mat(Color(0.88, 0.92, 0.97))
+	gm.material_override = _mat(th["ground"])
+	gm.position.y = track.floor_y
 	ground.add_child(gm)
 	add_child(ground)
 
 	var banks := StaticBody3D.new()
 	add_child(banks)
+	_road_body = StaticBody3D.new()
+	add_child(_road_body)
 	var road: Array[Transform3D] = []
 	var dashes: Array[Transform3D] = []
 	var bank_vis: Array[Transform3D] = []
@@ -750,7 +824,7 @@ func _build_track() -> void:
 		var bp: PackedVector3Array = b["points"]
 		for k in 14:
 			avoid_main.append(bp[k])
-	_add_road(track.points, avoid_main, road, dashes, bank_vis, banks)
+	_add_road(track.points, avoid_main, road, dashes, bank_vis, banks, true)
 	for b in track.branches:
 		var f: int = b["fork"]
 		var avoid_branch := PackedVector3Array()
@@ -758,9 +832,21 @@ func _build_track() -> void:
 			avoid_branch.append(track.points[j])
 		_add_road(b["points"], avoid_branch, road, dashes, bank_vis, banks)
 		_build_dead_end(b)
-	_multimesh(_unit_box(), _mat(Color(0.2, 0.21, 0.25)), road)
+	_multimesh(_unit_box(), _mat(th["road"]), road)
 	_multimesh(_unit_box(), _mat(Color(0.95, 0.95, 0.95)), dashes)
-	_multimesh(_unit_box(), _mat(Color(0.97, 0.98, 1.0)), bank_vis)
+	_multimesh(_unit_box(), _mat(th["bank"]), bank_vis)
+	_multimesh(_unit_box(), _mat(th.get("pillar", Color(0.4, 0.4, 0.4))), _pillars)
+	var ice_x: Array[Transform3D] = []
+	for e in track.ices:
+		for i in range(int(e["from"]), int(e["to"])):
+			var d := track.points[i + 1] - track.points[i]
+			var yaw := atan2(-d.x, -d.z)
+			var pitch := atan2(d.y, Vector2(d.x, d.z).length())
+			var bs := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, pitch)
+			ice_x.append(Transform3D(bs * Basis.from_scale(Vector3(Track.ROAD_WIDTH, 0.05, Track.STEP * 1.05)), (track.points[i] + track.points[i + 1]) * 0.5 + bs.y * 0.06))
+	var ice_mat := _mat(Color(0.7, 0.88, 1.0))
+	ice_mat.roughness = 0.1
+	_multimesh(_unit_box(), ice_mat, ice_x)
 
 	_build_gate(6, Color(0.2, 0.8, 0.3), "START")
 	_build_gate(track.points.size() - 4, Color(0.95, 0.95, 0.95), "FINISH")
@@ -870,6 +956,13 @@ func _build_obstacles() -> void:
 			"log":
 				var pos := p + left * side * 2.5 + Vector3(0, 0.45, 0)
 				_obst_box(body, Vector3(6.4, 0.9, 1.0), Transform3D(Basis(Vector3.UP, h), pos), Color(0.4, 0.26, 0.13))
+			"rockfall":
+				for k in 7:
+					var lat := side * rng.randf_range(-1.0, 4.6)
+					var sz := rng.randf_range(1.6, 3.0)
+					var basis := Basis(Vector3.UP, rng.randf() * TAU)
+					var pos := p + left * lat + Track.forward(h) * rng.randf_range(-4.0, 4.0) + Vector3(0, sz * 0.45, 0)
+					_obst_box(body, Vector3(sz, sz * 0.9, sz * 0.9), Transform3D(basis, pos), Color(0.36, 0.36, 0.4))
 			"bump":
 				var basis := Basis(Vector3.UP, h) * Basis(Vector3.RIGHT, deg_to_rad(7.5))
 				_obst_box(body, Vector3(10.6, 0.6, 6.5), Transform3D(basis, p), Color(0.82, 0.86, 0.9))
@@ -885,13 +978,18 @@ func _build_trees() -> void:
 	for b in track.branches:
 		avoid.append_array(b["points"])
 	var n := track.points.size()
-	var min_d2 := pow(Track.ROAD_WIDTH * 0.5 + 6.0, 2.0)
+	var mountain := track.theme == "mountain"
+	var min_d2 := pow(Track.ROAD_WIDTH * 0.5 + (3.4 if mountain else 6.0), 2.0)
 	for i in range(4, n - 2, 2):
+		if mountain and track.is_open(i):
+			continue
 		for side in [-1.0, 1.0]:
-			if rng.randf() > 0.8:
+			if rng.randf() > (0.55 if mountain else 0.8):
 				continue
 			var left := Track.left_of(track.headings[i])
 			var off := Track.ROAD_WIDTH * 0.5 + 6.0 + rng.randf_range(0.0, 30.0)
+			if mountain:
+				off = Track.ROAD_WIDTH * 0.5 + 3.9 + rng.randf_range(0.0, 1.3)
 			var pos: Vector3 = track.points[i] + left * side * off + Vector3(rng.randf_range(-3, 3), 0, rng.randf_range(-3, 3))
 			var ok := true
 			for q in avoid:
@@ -903,13 +1001,14 @@ func _build_trees() -> void:
 			if not ok:
 				continue
 			var s := rng.randf_range(0.8, 1.7)
+			pos.y = track.points[i].y
 			var b := Basis(Vector3.UP, rng.randf() * TAU)
 			trunks.append(Transform3D(b * Basis.from_scale(Vector3(0.5, 2.0 * s, 0.5)), pos + Vector3(0, s, 0)))
 			leaves1.append(Transform3D(b * Basis.from_scale(Vector3(3.2 * s, 2.0 * s, 3.2 * s)), pos + Vector3(0, 2.8 * s, 0)))
 			leaves2.append(Transform3D(b * Basis.from_scale(Vector3(2.0 * s, 1.8 * s, 2.0 * s)), pos + Vector3(0, 4.5 * s, 0)))
-	_multimesh(_unit_box(), _mat(Color(0.35, 0.22, 0.12)), trunks)
-	_multimesh(_unit_box(), _mat(Color(0.14, 0.4, 0.2)), leaves1)
-	_multimesh(_unit_box(), _mat(Color(0.2, 0.5, 0.28)), leaves2)
+	_multimesh(_unit_box(), _mat(th["trunk"]), trunks)
+	_multimesh(_unit_box(), _mat(th["l1"]), leaves1)
+	_multimesh(_unit_box(), _mat(th["l2"]), leaves2)
 
 
 func _build_mountains() -> void:
@@ -923,8 +1022,8 @@ func _build_mountains() -> void:
 		var h := rng.randf_range(120.0, 320.0)
 		var w := rng.randf_range(160.0, 320.0)
 		var b := Basis(Vector3.UP, rng.randf() * TAU)
-		xs.append(Transform3D(b * Basis.from_scale(Vector3(w, h, w)), mid + Vector3(cos(a) * dist, h * 0.4, sin(a) * dist)))
-	_multimesh(_unit_box(), _mat(Color(0.8, 0.85, 0.93)), xs)
+		xs.append(Transform3D(b * Basis.from_scale(Vector3(w, h, w)), Vector3(mid.x + cos(a) * dist, track.floor_y + h * 0.4, mid.z + sin(a) * dist)))
+	_multimesh(_unit_box(), _mat(th["mount"]), xs)
 
 
 func _spawn_beacon(idx: int) -> void:
@@ -986,6 +1085,8 @@ func _build_teams() -> void:
 		car.setup(t, ts.color, not multiplayer.is_server())
 		car.transform = _grid_transform(t)
 		add_child(car)
+		if Net.blind and not solo:
+			car.add_lights()
 		ts.car = car
 		ts.target = car.transform
 		teams.append(ts)
@@ -1003,6 +1104,8 @@ func _make_avatar(ts: TeamState, id: int) -> void:
 	av.helmet_color = ts.color
 	av.shirt_color = ts.color.darkened(0.2)
 	av.is_local = (id == my_id)
+	if av.is_local and ipad_vp:
+		av.ipad_tex = ipad_vp.get_texture()
 	av.position = ts.car.seat_origin(role)
 	var mate := ts.nav_id if role == "driver" else ts.driver_id
 	if mate != 0:
@@ -1117,15 +1220,16 @@ func _build_hud() -> void:
 		_make_zone("g_stop", "STOP!\n(4)", 0.0, 1.0, 350, by, 450, by + 90, 18, _set_gesture.bind(4))
 		_make_zone("beacon", "SIGNAL\n(G)", 1.0, 1.0, -330, by, -180, by + 90, 20, _do_beacon)
 		_make_zone("map", "MAP\n(M)", 1.0, 1.0, -170, by, -20, by + 90, 20, _toggle_map)
-		clipboard = Clipboard.new()
-		clipboard.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		clipboard.my_color = teams[my_team].color
-		clipboard.set_track(track)
-		hud_root.add_child(clipboard)
+		if ipad_vp == null:
+			clipboard = Clipboard.new()
+			clipboard.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			clipboard.my_color = teams[my_team].color
+			clipboard.set_track(track)
+			hud_root.add_child(clipboard)
 
 
 func _update_layout() -> void:
-	if clipboard == null:
+	if clipboard == null or ipad_vp != null:
 		return
 	var vs := get_viewport().get_visible_rect().size
 	if vs.y > vs.x:
@@ -1139,6 +1243,22 @@ func _update_layout() -> void:
 		clipboard.position = Vector2(vs.x - w - 20.0, 76.0)
 		clipboard.size = Vector2(w, h)
 	clipboard.queue_redraw()
+
+
+## The co-driver's map lives on an iPad in the lap: only visible by looking down at it.
+func _build_ipad() -> void:
+	ipad_vp = SubViewport.new()
+	ipad_vp.size = Vector2i(640, 440)
+	ipad_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	ipad_vp.gui_disable_input = true
+	add_child(ipad_vp)
+	clipboard = Clipboard.new()
+	clipboard.tablet = true
+	clipboard.my_color = TEAM_COLORS[my_team]
+	clipboard.position = Vector2.ZERO
+	clipboard.size = Vector2(640, 440)
+	ipad_vp.add_child(clipboard)
+	clipboard.set_track(track)
 
 
 func _fmt(t: float) -> String:
@@ -1178,6 +1298,8 @@ func _update_hud() -> void:
 			msg_timer = 0.1
 		State.COUNTDOWN:
 			center_label.text = str(ceili(countdown_left)) if countdown_left > 0.0 else "GO!"
+			msg_label.text = "STAGE: %s  (%s)" % [track.stage_name.to_upper(), track.theme.to_upper()]
+			msg_timer = 0.1
 		State.RUNNING:
 			center_label.text = "GO!" if race_time < 1.0 else ""
 		State.ENDED:
@@ -1198,7 +1320,7 @@ func _update_hud() -> void:
 		rank_label.text = "\n".join(lines)
 	# what the co-driver is signalling (the driver must notice it!)
 	var g := my_gesture if solo else mate_gesture
-	if (my_role == "driver" or solo) and g > 0:
+	if (my_role == "driver" or solo) and g > 0 and not blind_mode:
 		gesture_label.text = GESTURE_TEXT[g]
 		var blink := g != 4 or int(Time.get_ticks_msec() / 200.0) % 2 == 0
 		gesture_label.add_theme_color_override("font_color", Color(1, 0.3, 0.25) if g == 4 else Color(1, 0.9, 0.3))
@@ -1208,7 +1330,7 @@ func _update_hud() -> void:
 	# alerts about the closed side roads
 	alert_label.text = ""
 	if state == State.RUNNING and my.wrong and not my.finished:
-		if my_role == "driver" and spd < 4.0:
+		if my_role == "driver" and spd < 4.0 and not blind_mode:
 			alert_label.text = "DEAD END!  Reverse (S) or press RESET"
 		elif my_role == "navigator":
 			alert_label.text = "THE DRIVER IS ON A CLOSED ROAD!"

@@ -22,6 +22,8 @@ var roles := {}     # peer_id -> "driver" | "navigator"
 var team_of := {}   # peer_id -> team index (0..3)
 var team_count := 1
 var track_seed := 0
+var stage := {}        # stage description made by the offline stage director
+var blind := true      # driver can hardly see (co-driver must guide)
 var in_game := false
 var race_over := false
 var is_hosting := false
@@ -71,9 +73,10 @@ func _setup_inputs() -> void:
 # ---------------------------------------------------------------- hosting / joining
 
 ## teams = 0 -> solo practice, 1 -> co-op (one car, 2 players), 2..4 -> team race (2 players per team)
-func host_game(p_name: String, teams: int) -> int:
+func host_game(p_name: String, teams: int, p_blind := true) -> int:
 	leave()
 	player_name = p_name
+	blind = p_blind and teams > 0
 	if teams <= 0:
 		team_count = 1
 		required_players = 1
@@ -224,12 +227,14 @@ func _check_full() -> void:
 	for i in ids.size():
 		r[ids[i]] = "driver" if i % 2 == 0 else "navigator"
 		tm[ids[i]] = (i >> 1) if required_players > 1 else 0
-	begin.rpc(randi(), r, tm, players, team_count)
+	begin.rpc(Track.design_stage(randi()), r, tm, players, team_count, blind)
 
 
 @rpc("authority", "call_local", "reliable")
-func begin(seed_value: int, p_roles: Dictionary, p_teams: Dictionary, p_players: Dictionary, p_team_count: int) -> void:
-	track_seed = seed_value
+func begin(p_stage: Dictionary, p_roles: Dictionary, p_teams: Dictionary, p_players: Dictionary, p_team_count: int, p_blind: bool) -> void:
+	stage = p_stage
+	track_seed = int(p_stage.get("seed", 1))
+	blind = p_blind
 	roles = p_roles
 	team_of = p_teams
 	team_count = p_team_count

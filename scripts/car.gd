@@ -19,6 +19,8 @@ var is_remote := false
 var hold := false      # handbrake (before the start / after the finish)
 var driver_avatar: Avatar
 
+var wheel_list: Array[VehicleWheel3D] = []
+var _grip := 1.0
 var _wheel_pivot: Node3D
 var _wheel_mesh: Node3D
 
@@ -98,6 +100,33 @@ func set_controls(steer: float, throttle: float, brk: float) -> void:
 	else:
 		engine_force = -throttle * ENGINE if speed_kmh < TOP_SPEED_KMH else 0.0
 		brake = brk * BRAKE_FORCE
+
+
+## 1 = normal, ~0.25 = ice
+func set_grip(f: float) -> void:
+	if absf(f - _grip) < 0.01:
+		return
+	_grip = f
+	for w in wheel_list:
+		w.wheel_friction_slip = 3.2 * f
+
+
+## dark-mode lights: headlights + a dim cabin light so the blind driver can see the co-driver
+func add_lights() -> void:
+	for x in [-0.6, 0.6]:
+		var sp := SpotLight3D.new()
+		sp.position = Vector3(x, 0.9, -2.0)
+		sp.spot_range = 55.0
+		sp.spot_angle = 32.0
+		sp.light_energy = 1.6
+		sp.light_color = Color(1.0, 0.95, 0.8)
+		add_child(sp)
+	var cab := OmniLight3D.new()
+	cab.position = Vector3(0, 1.7, 0.2)
+	cab.omni_range = 3.2
+	cab.light_energy = 0.7
+	cab.light_color = Color(1.0, 0.85, 0.6)
+	add_child(cab)
 
 
 func teleport(t: Transform3D) -> void:
