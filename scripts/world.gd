@@ -12,9 +12,7 @@ const MEDALS := [
 	["SILVER", 140.0, Color(0.82, 0.84, 0.9)],
 	["BRONZE", 180.0, Color(0.85, 0.52, 0.25)],
 ]
-const TEAM_COLORS := [Color(0.82, 0.1, 0.1), Color(0.15, 0.4, 0.95), Color(0.15, 0.7, 0.3), Color(0.95, 0.72, 0.1)]
-const PLACES := ["1st", "2nd", "3rd", "4th"]
-const GESTURE_TEXT := ["", "<  CO-DRIVER SAYS: LEFT", "^  CO-DRIVER SAYS: STRAIGHT", "CO-DRIVER SAYS: RIGHT  >", "!!  STOP / WARNING  !!"]
+const TEAM_COLORS := [Color(0.82, 0.1, 0.1), Color(0.15, 0.4, 0.95), Color(0.15, 0.7, 0.3), Color(0.95, 0.72, 0.1), Color(0.65, 0.25, 0.85), Color(0.1, 0.75, 0.8)]
 
 
 const THEMES := {
@@ -55,6 +53,7 @@ class TeamState extends RefCounted:
 var track: Track
 var th: Dictionary
 var blind_mode := false
+var tutorial_done := false
 var ipad_vp: SubViewport
 var map_mode := false
 var _pillars: Array[Transform3D] = []
@@ -121,7 +120,7 @@ func _ready() -> void:
 	my_id = multiplayer.get_unique_id()
 	my_role = Net.roles.get(my_id, "driver")
 	my_team = Net.team_of.get(my_id, 0)
-	solo = Net.players.size() == 1
+	solo = Net.players.size() == 1 or Net.ffa
 	show_touch = DisplayServer.is_touchscreen_available() and my_role == "driver"
 	if Net.stage.is_empty():
 		Net.stage = {"seed": Net.track_seed}
@@ -138,11 +137,35 @@ func _ready() -> void:
 	Net.peer_left.connect(_on_peer_left)
 	get_viewport().size_changed.connect(_update_layout)
 	_update_layout()
+	if L.tutorial_off:
+		_im_ready()
+	else:
+		var tut := Tutorial.new()
+		tut.pages = Tutorial.pages_for(my_role, solo, Net.ffa)
+		tut.finished.connect(_im_ready)
+		hud_root.add_child(tut)
+		tut.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		tut.z_index = 100
+
+
+func _im_ready() -> void:
+	tutorial_done = true
 	if multiplayer.is_server():
 		ready_peers[1] = true
 		_check_all_ready()
 	else:
 		_send_ready()
+
+
+func _tname(idx: int) -> String:
+	if Net.ffa:
+		var ts := teams[idx]
+		return str(Net.players.get(ts.driver_id, "?"))
+	return "%s %s" % [L.t("team"), char(65 + idx)]
+
+
+func _place(i: int) -> String:
+	return L.t("place%d" % (i + 1))
 
 
 # ====================================================================== networking
@@ -198,7 +221,7 @@ func team_finished(team: int, t: float, place: int) -> void:
 @rpc("authority", "call_local", "reliable")
 func team_dnf(team: int) -> void:
 	teams[team].dnf = true
-	flash_message("Team %s is out" % char(65 + team))
+	flash_message(L.t("is_out") % _tname(team))
 	_refresh_result()
 
 
@@ -209,8 +232,8 @@ func all_done() -> void:
 
 
 @rpc("authority", "call_local", "reliable")
-func show_message(text: String) -> void:
-	flash_message(text)
+func show_message(key: String, idx: int) -> void:
+	flash_message(L.t(key) % _tname(idx))
 
 
 func flash_message(text: String) -> void:
@@ -384,7 +407,7 @@ func _on_peer_left(id: int) -> void:
 		team_dnf.rpc(team)
 		_check_all_done()
 	else:
-		show_message.rpc("Team %s: the co-driver left" % char(65 + team))
+		show_message.rpc("codriver_left", team)
 
 
 func _check_all_done() -> void:
@@ -419,7 +442,7 @@ func _physics_process(delta: float) -> void:
 			if ts.car.global_position.y < track.y_at(ts.prog) - 7.0:
 				ts.penalty += 5.0
 				_reset_team(ts)
-				show_message.rpc("Team %s FELL!  +5s" % char(65 + ts.idx))
+				show_message.rpc("fell", ts.idx)
 			if ts.car.global_transform.basis.y.y < 0.25:
 				ts.flip += delta
 				if ts.flip > 2.0:
@@ -474,7 +497,7 @@ func _server_reset(peer: int) -> void:
 	if ts.finished or ts.dnf:
 		return
 	_reset_team(ts)
-	show_message.rpc("Team %s: back on the road" % char(65 + ts.idx))
+	show_message.rpc("back_road", ts.idx)
 
 
 # ====================================================================== local frame loop
@@ -596,7 +619,7 @@ func _do_punch() -> void:
 
 
 func _set_gesture(g: int) -> void:
-	if my_role != "navigator" and not solo:
+	if my_role != "navigator":
 		return
 	var ng := 0 if my_gesture == g else g    # tapping the same gesture again returns the hand to rest
 	if multiplayer.is_server():
@@ -606,7 +629,7 @@ func _set_gesture(g: int) -> void:
 
 
 func _do_beacon() -> void:
-	if my_role != "navigator" and not solo:
+	if my_role != "navigator" and (not solo or Net.ffa):
 		return
 	if multiplayer.is_server():
 		_server_beacon(my_id)
@@ -1063,6 +1086,9 @@ func _grid_transform(t: int) -> Transform3D:
 	var count := Net.team_count
 	var lat := (t - (count - 1) * 0.5) * 3.0
 	var back := float(t % 2) * 4.0
+	if count > 4:
+		lat = ((t % 3) - 1) * 3.2
+		back = float(t / 3) * 5.5
 	var left := Track.left_of(track.headings[i])
 	var fwd := Track.forward(track.headings[i])
 	var pos := track.points[i] + left * lat - fwd * back + Vector3(0, 0.8, 0)
@@ -1192,8 +1218,10 @@ func _build_hud() -> void:
 	alert_label.add_theme_color_override("font_color", Color(1.0, 0.35, 0.3))
 	role_label = Label.new()
 	role_label.position = Vector2(14, 8)
-	var tname := "TEAM %s  -  " % char(65 + my_team) if Net.team_count > 1 else ""
-	role_label.text = tname + ("DRIVER" if my_role == "driver" else "CO-DRIVER")
+	var tname := (L.t("TEAMX") % char(65 + my_team)) + "  -  " if Net.team_count > 1 else ""
+	role_label.text = tname + L.t("DRIVER" if my_role == "driver" else "CODRIVER")
+	if Net.ffa:
+		role_label.text = _tname(my_team)
 	_style_label(role_label, 22)
 	hud_root.add_child(role_label)
 	speed_label = Label.new()
@@ -1205,8 +1233,9 @@ func _build_hud() -> void:
 	_style_label(rank_label, 20)
 	hud_root.add_child(rank_label)
 
-	_make_zone("reset", "RESET (R)", 1.0, 0.0, -150, 14, -14, 64, 22, _request_reset)
-	_make_zone("punch", "PUNCH\n(F)", 1.0, 0.5, -140, -45, -14, 45, 22, _do_punch)
+	_make_zone("reset", L.t("z_reset"), 1.0, 0.0, -150, 14, -14, 64, 22, _request_reset)
+	if not solo:
+		_make_zone("punch", L.t("z_punch"), 1.0, 0.5, -140, -45, -14, 45, 22, _do_punch)
 	if show_touch:
 		_make_zone("left", "<", 0.0, 1.0, 20, -170, 160, -40, 40)
 		_make_zone("right", ">", 0.0, 1.0, 180, -170, 320, -40, 40)
@@ -1214,12 +1243,14 @@ func _build_hud() -> void:
 		_make_zone("brake", "BRAKE", 1.0, 1.0, -340, -170, -190, -40)
 	if my_role == "navigator" or solo:
 		var by := -130.0 - (140.0 if show_touch else 0.0)
-		_make_zone("g_left", "< LEFT\n(1)", 0.0, 1.0, 20, by, 120, by + 90, 18, _set_gesture.bind(1))
-		_make_zone("g_fwd", "^ GO\n(2)", 0.0, 1.0, 130, by, 230, by + 90, 18, _set_gesture.bind(2))
-		_make_zone("g_right", "RIGHT >\n(3)", 0.0, 1.0, 240, by, 340, by + 90, 18, _set_gesture.bind(3))
-		_make_zone("g_stop", "STOP!\n(4)", 0.0, 1.0, 350, by, 450, by + 90, 18, _set_gesture.bind(4))
-		_make_zone("beacon", "SIGNAL\n(G)", 1.0, 1.0, -330, by, -180, by + 90, 20, _do_beacon)
-		_make_zone("map", "MAP\n(M)", 1.0, 1.0, -170, by, -20, by + 90, 20, _toggle_map)
+		if my_role == "navigator":
+			_make_zone("g_left", L.t("z_left"), 0.0, 1.0, 20, by, 120, by + 90, 18, _set_gesture.bind(1))
+			_make_zone("g_fwd", L.t("z_fwd"), 0.0, 1.0, 130, by, 230, by + 90, 18, _set_gesture.bind(2))
+			_make_zone("g_right", L.t("z_right"), 0.0, 1.0, 240, by, 340, by + 90, 18, _set_gesture.bind(3))
+			_make_zone("g_stop", L.t("z_stop"), 0.0, 1.0, 350, by, 450, by + 90, 18, _set_gesture.bind(4))
+		if not Net.ffa:
+			_make_zone("beacon", L.t("z_signal"), 1.0, 1.0, -330, by, -180, by + 90, 20, _do_beacon)
+		_make_zone("map", L.t("z_map"), 1.0, 1.0, -170, by, -20, by + 90, 20, _toggle_map)
 		if ipad_vp == null:
 			clipboard = Clipboard.new()
 			clipboard.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1284,24 +1315,24 @@ func _update_hud() -> void:
 	var shown := false
 	for m in MEDALS:
 		if shown_time <= m[1]:
-			medal_label.text = "%s  %s" % [m[0], _fmt(m[1])]
+			medal_label.text = "%s  %s" % [L.t(m[0]), _fmt(m[1])]
 			medal_label.add_theme_color_override("font_color", m[2])
 			shown = true
 			break
 	if not shown:
-		medal_label.text = "NO MEDAL"
+		medal_label.text = L.t("NOMEDAL")
 		medal_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
 	match state:
 		State.WAITING:
 			center_label.text = ""
-			msg_label.text = "Waiting for all players to load..."
+			msg_label.text = L.t("loading") + ".".repeat(int(Time.get_ticks_msec() / 400.0) % 4)
 			msg_timer = 0.1
 		State.COUNTDOWN:
-			center_label.text = str(ceili(countdown_left)) if countdown_left > 0.0 else "GO!"
-			msg_label.text = "STAGE: %s  (%s)" % [track.stage_name.to_upper(), track.theme.to_upper()]
+			center_label.text = str(ceili(countdown_left)) if countdown_left > 0.0 else L.t("go")
+			msg_label.text = L.t("stage") % [track.stage_name.to_upper(), L.t("th_" + track.theme)]
 			msg_timer = 0.1
 		State.RUNNING:
-			center_label.text = "GO!" if race_time < 1.0 else ""
+			center_label.text = L.t("go") if race_time < 1.0 else ""
 		State.ENDED:
 			center_label.text = ""
 	# standings
@@ -1311,9 +1342,9 @@ func _update_hud() -> void:
 		var lines: Array[String] = []
 		for i in sorted.size():
 			var ts: TeamState = sorted[i]
-			var tag: String = PLACES[i] + "  Team " + char(65 + ts.idx)
+			var tag: String = _place(i) + "  " + _tname(ts.idx)
 			if ts.dnf:
-				tag += "  (out)"
+				tag += "  (%s)" % L.t("out")
 			elif ts.finished:
 				tag += "  " + _fmt(ts.finish_time)
 			lines.append(("> " if ts.idx == my_team else "   ") + tag)
@@ -1321,7 +1352,7 @@ func _update_hud() -> void:
 	# what the co-driver is signalling (the driver must notice it!)
 	var g := my_gesture if solo else mate_gesture
 	if (my_role == "driver" or solo) and g > 0 and not blind_mode:
-		gesture_label.text = GESTURE_TEXT[g]
+		gesture_label.text = L.t("g%d" % g)
 		var blink := g != 4 or int(Time.get_ticks_msec() / 200.0) % 2 == 0
 		gesture_label.add_theme_color_override("font_color", Color(1, 0.3, 0.25) if g == 4 else Color(1, 0.9, 0.3))
 		gesture_label.visible = blink
@@ -1331,9 +1362,9 @@ func _update_hud() -> void:
 	alert_label.text = ""
 	if state == State.RUNNING and my.wrong and not my.finished:
 		if my_role == "driver" and spd < 4.0 and not blind_mode:
-			alert_label.text = "DEAD END!  Reverse (S) or press RESET"
+			alert_label.text = L.t("dead_end")
 		elif my_role == "navigator":
-			alert_label.text = "THE DRIVER IS ON A CLOSED ROAD!"
+			alert_label.text = L.t("driver_closed")
 	if clipboard:
 		var others: Array = []
 		for ts in teams:
@@ -1346,10 +1377,10 @@ func _standings_text() -> String:
 	var lines: Array[String] = []
 	for i in results.size():
 		var ts := teams[results[i]]
-		lines.append("%s   Team %s   %s" % [PLACES[i], char(65 + ts.idx), _fmt(ts.finish_time)])
+		lines.append("%s   %s   %s" % [_place(i), _tname(ts.idx), _fmt(ts.finish_time)])
 	for ts in teams:
 		if not ts.finished:
-			lines.append("-      Team %s   %s" % [char(65 + ts.idx), "out" if ts.dnf else "racing..."])
+			lines.append("-      %s   %s" % [_tname(ts.idx), L.t("out") if ts.dnf else L.t("racing")])
 	return "\n".join(lines)
 
 
@@ -1359,10 +1390,10 @@ func _refresh_result() -> void:
 
 
 func _show_result(place: int, t: float) -> void:
-	var medal := "No medal"
+	var medal := L.t("no_medal")
 	for m in MEDALS:
 		if t <= m[1]:
-			medal = m[0]
+			medal = L.t(m[0])
 			break
 	result_panel = PanelContainer.new()
 	result_panel.set_anchors_preset(Control.PRESET_CENTER)
@@ -1372,12 +1403,12 @@ func _show_result(place: int, t: float) -> void:
 	vb.add_theme_constant_override("separation", 14)
 	result_panel.add_child(vb)
 	var title := Label.new()
-	title.text = "FINISH!  %s" % (PLACES[place - 1] if Net.team_count > 1 else "")
+	title.text = "%s  %s" % [L.t("finish"), _place(place - 1) if Net.team_count > 1 else ""]
 	title.add_theme_font_size_override("font_size", 52)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(title)
 	var res := Label.new()
-	res.text = "Time  %s\nMedal  %s" % [_fmt(t), medal]
+	res.text = "%s  %s\n%s  %s" % [L.t("time"), _fmt(t), L.t("medal"), medal]
 	res.add_theme_font_size_override("font_size", 32)
 	res.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(res)
@@ -1388,7 +1419,7 @@ func _show_result(place: int, t: float) -> void:
 		vb.add_child(result_standings)
 		_refresh_result()
 	var btn := Button.new()
-	btn.text = "Back to menu"
+	btn.text = L.t("to_menu")
 	btn.custom_minimum_size = Vector2(320, 70)
 	btn.add_theme_font_size_override("font_size", 28)
 	btn.pressed.connect(Net.return_to_menu)

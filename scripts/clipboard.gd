@@ -60,23 +60,26 @@ func _rebuild_map(area: Rect2) -> void:
 
 
 func _note_label(n: Dictionary) -> String:
-	var label: String = str(n["text"]).to_upper()
+	var side := ""
+	if n["dir"] > 0:
+		side = "  < " + L.t("n_left")
+	elif n["dir"] < 0:
+		side = "  " + L.t("n_right") + " >"
 	match n["kind"]:
 		"fork":
-			return "FORK: %s CLOSED" % ("LEFT" if n["dir"] > 0 else "RIGHT")
+			return L.t("n_fork") % L.t("n_left" if n["dir"] > 0 else "n_right")
 		"flat":
-			return "%s  %dm" % [label, n["len"]]
-		"bump", "crest", "ice":
-			return label if n["len"] == 0 else "%s  %dm" % [label, n["len"]]
+			return "%s  %dm" % [L.t("n_flat"), n["len"]]
 		"cliff":
-			return "CLIFF EDGE  %dm" % n["len"]
+			return L.t("n_cliff") % n["len"]
 		"rockfall":
-			return "ROCKFALL  " + ("< LEFT" if n["dir"] > 0 else "RIGHT >")
-	if n["dir"] > 0:
-		return label + "  < LEFT"
-	if n["dir"] < 0:
-		return label + "  RIGHT >"
-	return label
+			return L.t("n_rockfall") + L.t("n_left" if n["dir"] > 0 else "n_right")
+		"bump", "crest", "ice", "rock", "log":
+			var lab := L.t("n_" + n["kind"])
+			if n["len"] > 0:
+				lab += "  %dm" % n["len"]
+			return lab + (side if n["kind"] in ["rock", "log"] else "")
+	return L.t("n_" + str(n["text"])) + side
 
 
 func _draw() -> void:
@@ -159,10 +162,10 @@ func _draw() -> void:
 			break
 	if shown == 0:
 		var left_m := maxi(0, (track.points.size() - 1 - idx) * int(Track.STEP))
-		draw_string(font, Vector2(x0, y), "FINISH IN %dm" % left_m, HORIZONTAL_ALIGNMENT_LEFT, w, fs + 5, Color(1, 1, 1))
+		draw_string(font, Vector2(x0, y), L.t("n_finish") % left_m, HORIZONTAL_ALIGNMENT_LEFT, w, fs + 5, Color(1, 1, 1))
 	if wrong_way and int(Time.get_ticks_msec() / 250.0) % 2 == 0:
 		draw_rect(Rect2(paper.position + Vector2(6, 6), Vector2(paper.size.x - 12, fs + 14)), Color(0.8, 0.1, 0.1))
-		draw_string(font, paper.position + Vector2(12, fs + 8), "WRONG ROAD! WARN THE DRIVER", HORIZONTAL_ALIGNMENT_LEFT, paper.size.x - 24, fs, Color.WHITE)
+		draw_string(font, paper.position + Vector2(12, fs + 8), L.t("n_wrong"), HORIZONTAL_ALIGNMENT_LEFT, paper.size.x - 24, fs, Color.WHITE)
 
 
 func _process(_d: float) -> void:
