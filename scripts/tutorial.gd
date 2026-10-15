@@ -24,6 +24,7 @@ static func pages_for(role: String, solo_race: bool, ffa: bool) -> Array:
 			{"icon": "map", "title": "tut_n1_t", "body": "tut_n1"},
 			{"icon": "hand", "title": "tut_n2_t", "body": "tut_n2"},
 			{"icon": "danger", "title": "tut_n3_t", "body": "tut_n3"},
+			{"icon": "fire", "title": "tut_f_t", "body": "tut_f"},
 		]
 	if solo_race:
 		var p := [
@@ -33,11 +34,13 @@ static func pages_for(role: String, solo_race: bool, ffa: bool) -> Array:
 		]
 		if ffa:
 			p.append({"icon": "race", "title": "tut_s4_t", "body": "tut_s4"})
+		p.append({"icon": "fire", "title": "tut_f_t", "body": "tut_f"})
 		return p
 	return [
 		{"icon": "wheel", "title": "tut_d1_t", "body": "tut_d1"},
 		{"icon": "hand", "title": "tut_d2_t", "body": "tut_d2"},
 		{"icon": "controls", "title": "tut_d3_t", "body": "tut_d3"},
+		{"icon": "fire", "title": "tut_f_t", "body": "tut_f"},
 	]
 
 
@@ -215,6 +218,8 @@ func _draw_art() -> void:
 			_art_race(c)
 		"trophy":
 			_art_trophy(c)
+		"fire":
+			_art_fire(c)
 
 
 func _art_wheel(c: Vector2) -> void:
@@ -320,3 +325,25 @@ func _art_trophy(c: Vector2) -> void:
 		_art.draw_circle(p, 34, col)
 		_art.draw_circle(p, 24, col.darkened(0.15))
 		_art.draw_string(ThemeDB.fallback_font, p + Vector2(-8, 11), str(i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 30, Color.WHITE)
+
+
+func _art_fire(c: Vector2) -> void:
+	# car front with open hood, flames and an extinguisher spray
+	_art.draw_rect(Rect2(c.x - 70, c.y + 20, 140, 46), Color(0.82, 0.1, 0.1))
+	_art.draw_rect(Rect2(c.x - 55, c.y + 10, 110, 14), Color(0.2, 0.22, 0.28))
+	var open := 0.5 + 0.5 * sin(_t * 1.6)
+	var hood_y := c.y + 12.0 - open * 40.0
+	_art.draw_line(Vector2(c.x - 60, c.y + 12), Vector2(c.x - 60, hood_y), Color(0.82, 0.1, 0.1), 8.0)
+	_art.draw_line(Vector2(c.x + 60, c.y + 12), Vector2(c.x + 60, hood_y), Color(0.82, 0.1, 0.1), 8.0)
+	for i in 6:
+		var ph := _t * 4.0 + i * 1.3
+		var fh := 26.0 + 12.0 * sin(ph)
+		var x := c.x - 40.0 + i * 16.0
+		_art.draw_colored_polygon(PackedVector2Array([Vector2(x - 8, c.y + 12), Vector2(x + 8, c.y + 12), Vector2(x + sin(ph * 1.7) * 5.0, c.y + 12 - fh)]), Color(1.0, 0.5 + 0.3 * sin(ph), 0.1, 0.9))
+	for i in 4:
+		var sm := fposmod(_t * 0.8 + i * 0.25, 1.0)
+		_art.draw_circle(Vector2(c.x - 20 + i * 14 + sin(_t + i) * 8.0, c.y - 20 - sm * 80.0), 8.0 + sm * 14.0, Color(0.5, 0.5, 0.55, 0.5 * (1.0 - sm)))
+	_art.draw_rect(Rect2(c.x - 120, c.y - 10, 18, 44), Color(0.85, 0.08, 0.08))
+	for i in 5:
+		var k := fposmod(_t * 2.0 + i * 0.2, 1.0)
+		_art.draw_circle(Vector2(c.x - 100 + k * 60.0, c.y - 4 + k * 8.0), 4.0 + k * 5.0, Color(1, 1, 1, 0.8 * (1.0 - k)))

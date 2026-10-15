@@ -48,12 +48,31 @@ class TeamState extends RefCounted:
 	var have_net := false
 	var speed := 0.0
 	var penalty := 0.0
+	var damage := 0.0
+	var fire := 0.0
+	var inner := 0.0
+	var phase := 0          # 0 driving, 1 hood released, 2 repairer outside, 3 hood up
+	var cover := false
+	var repairer := 0
+	var spraying := false
+	var aimed := false
+	var burn_t := 0.0
+	var last_imp := 0
+	var spray_sent := false
+	var warned := 0
 
 
 var track: Track
 var th: Dictionary
 var blind_mode := false
 var tutorial_done := false
+var repair_label: Label
+var lift_swipe := 0.0
+var spray_ms := 0
+var spray_last := false
+var spray_aim_last := false
+var last_count := 99
+const OUT_POS := Vector3(-0.2, 1.0, -2.85)
 var ipad_vp: SubViewport
 var map_mode := false
 var _pillars: Array[Transform3D] = []
@@ -258,16 +277,21 @@ func request_reset() -> void:
 
 @rpc("authority", "call_remote", "unreliable_ordered")
 func net_state(arr: PackedFloat32Array, t: float) -> void:
-	if arr.size() != teams.size() * 12:
+	if arr.size() != teams.size() * 15:
 		return
 	for i in teams.size():
-		var b := i * 12
+		var b := i * 15
 		var ts := teams[i]
 		ts.target = Transform3D(Basis(Quaternion(arr[b + 3], arr[b + 4], arr[b + 5], arr[b + 6])), Vector3(arr[b], arr[b + 1], arr[b + 2]))
 		ts.speed = arr[b + 7]
 		ts.car.steer_visual = arr[b + 8]
 		ts.prog = int(arr[b + 9])
 		var flags := int(arr[b + 10])
+		ts.car.speed_kmh = ts.speed
+		ts.damage = arr[b + 12]
+		ts.fire = arr[b + 13]
+		ts.inner = arr[b + 14]
+		ts.car.apply_state(ts.damage, ts.fire, ts.inner, flags, arr[b + 11])
 		ts.wrong = (flags & 1) != 0
 		if not ts.have_net:
 			ts.have_net = true
@@ -431,8 +455,10 @@ func _physics_process(delta: float) -> void:
 	for ts in teams:
 		var inp := Vector3.ZERO
 		var active := state == State.RUNNING and not ts.finished and not ts.dnf
-		ts.car.hold = not active
+		ts.car.hold = not active or ts.phase >= 1
 		if active:
+			_update_damage(ts, delta)
+		if active and ts.phase == 0:
 			inp = ts.input
 			if ts.disturb > 0.0:
 				ts.disturb -= delta
@@ -443,12 +469,13 @@ func _physics_process(delta: float) -> void:
 				ts.penalty += 5.0
 				_reset_team(ts)
 				show_message.rpc("fell", ts.idx)
-			if ts.car.global_transform.basis.y.y < 0.25:
+			if ts.car.global_transform.basis.y.y < 0.25 and ts.phase == 0:
 				ts.flip += delta
 				if ts.flip > 2.0:
 					_reset_team(ts)
 			else:
 				ts.flip = 0.0
+		ts.car.apply_state(ts.damage, ts.fire, ts.inner, _flags(ts), inp.y)
 		ts.car.set_controls(inp.x, inp.y, inp.z)
 		ts.speed = ts.car.speed_kmh
 	net_tick += 1
@@ -457,9 +484,182 @@ func _physics_process(delta: float) -> void:
 		for ts in teams:
 			var q := Quaternion(ts.car.global_basis.orthonormalized())
 			var p := ts.car.global_position
-			var flags := (1 if ts.wrong else 0) | (2 if ts.finished else 0)
-			arr.append_array([p.x, p.y, p.z, q.x, q.y, q.z, q.w, ts.car.speed_kmh, ts.car.steer_target, float(ts.prog), float(flags), 0.0])
+			arr.append_array([p.x, p.y, p.z, q.x, q.y, q.z, q.w, ts.car.speed_kmh, ts.car.steer_target, float(ts.prog), float(_flags(ts)), ts.car.throttle_in, ts.damage, ts.fire, ts.inner])
 		net_state.rpc(arr, race_time)
+
+
+func _flags(ts: TeamState) -> int:
+	return (1 if ts.wrong else 0) | (2 if ts.finished else 0) | (4 if ts.phase >= 3 else 0) | (8 if ts.cover else 0) \
+		| (32 if ts.spraying else 0) | (64 if ts.phase >= 1 else 0)
+
+
+## server: crashes and speed hurt the engine -> smoke -> fire; the fix is the repair mini game
+func _update_damage(ts: TeamState, delta: float) -> void:
+	var now := Time.get_ticks_msec()
+	var dv := ts.car.take_impact()
+	if dv > 3.5 and now - ts.last_imp > 350:
+		ts.last_imp = now
+		ts.damage = minf(100.0, ts.damage + minf(45.0, (dv - 3.0) * 4.0))
+		crash_fx.rpc(ts.idx, dv)
+	if ts.car.speed_kmh > 145.0 and ts.phase == 0:
+		ts.damage = minf(100.0, ts.damage + (ts.car.speed_kmh - 145.0) * 0.12 * delta)
+	elif ts.phase == 0 and ts.fire < 0.03 and ts.inner < 0.03:
+		ts.damage = maxf(0.0, ts.damage - 0.35 * delta)
+	# ignition
+	if ts.damage >= 80.0 and ts.fire < 0.03 and ts.inner < 0.03 and ts.burn_t == 0.0:
+		ts.fire = 0.45
+		ts.inner = 0.9
+		ts.burn_t = 0.001
+	if ts.burn_t > 0.0:
+		ts.burn_t += delta
+		var feeding := ts.inner > 0.05
+		if feeding:
+			ts.fire = minf(1.0, ts.fire + (0.03 if ts.phase < 3 else 0.12) * delta)
+			ts.damage = maxf(ts.damage, 80.0)
+		if ts.burn_t > 45.0:
+			_wreck(ts)
+			return
+	# extinguisher
+	if ts.spraying and ts.aimed and ts.phase >= 3:
+		ts.fire = maxf(0.0, ts.fire - 0.45 * delta)
+		if ts.cover:
+			ts.inner = maxf(0.0, ts.inner - 0.4 * delta)
+		if ts.burn_t > 0.0 and ts.fire < 0.03 and ts.inner < 0.03:
+			ts.fire = 0.0
+			ts.inner = 0.0
+			ts.burn_t = 0.0
+			ts.damage = minf(ts.damage, 70.0)
+			repair_fx.rpc(ts.idx, "out")
+	# cooling while the hood is up
+	if ts.phase >= 3 and ts.burn_t == 0.0:
+		ts.damage = maxf(0.0, ts.damage - 12.0 * delta)
+
+
+func _wreck(ts: TeamState) -> void:
+	ts.penalty += 25.0
+	ts.fire = 0.0
+	ts.inner = 0.0
+	ts.burn_t = 0.0
+	ts.damage = 30.0
+	ts.spraying = false
+	_set_phase(ts, 0, 0, false)
+	_reset_team(ts)
+	repair_fx.rpc(ts.idx, "boom")
+	show_message.rpc("wreck", ts.idx)
+
+
+func _set_phase(ts: TeamState, ph: int, who: int, cov: bool) -> void:
+	ts.phase = ph
+	ts.repairer = who
+	ts.cover = cov
+	repair_state.rpc(ts.idx, ph, who, cov)
+
+
+@rpc("authority", "call_local", "reliable")
+func repair_state(team: int, ph: int, who: int, cov: bool) -> void:
+	var ts := teams[team]
+	ts.phase = ph
+	ts.repairer = who
+	ts.cover = cov
+	for id in [ts.driver_id, ts.nav_id]:
+		if id == 0 or not avatars.has(id):
+			continue
+		var av: Avatar = avatars[id]
+		if id == who and ph >= 2:
+			av.go_outside(OUT_POS)
+			av.work = 1
+			if id == my_id:
+				look_yaw = 0.0
+				look_pitch = -0.35
+				map_mode = false
+		else:
+			av.go_inside()
+	if who == 0 and ts.car:
+		ts.spraying = false
+
+
+@rpc("authority", "call_local", "reliable")
+func repair_fx(team: int, kind: String) -> void:
+	var car := teams[team].car
+	match kind:
+		"lever":
+			Sfx.play3d("click", car, 2.0)
+		"exit":
+			Sfx.play3d("thud", car, 0.0, 1.3)
+		"lift":
+			Sfx.play3d("clang", car, 0.0, 0.8)
+			Sfx.play3d("thud", car, -3.0)
+		"cover":
+			Sfx.play3d("clang", car, 0.0, 1.2)
+		"enter":
+			Sfx.play3d("thud", car, 0.0)
+		"out":
+			Sfx.play3d("success", car, 2.0)
+		"boom":
+			Sfx.play3d("boom", car, 6.0)
+
+
+@rpc("authority", "call_local", "reliable")
+func crash_fx(team: int, dv: float) -> void:
+	var car := teams[team].car
+	Sfx.play3d("crash_hard" if dv > 9.0 else "crash_soft", car, clampf(dv * 0.6 - 6.0, -6.0, 6.0), randf_range(0.9, 1.1))
+	if team == my_team:
+		shake = maxf(shake, clampf(dv / 14.0, 0.2, 0.9))
+
+
+# --- repair requests (any teammate may do the work; only one goes outside)
+
+@rpc("any_peer", "reliable")
+func request_repair(action: String) -> void:
+	if multiplayer.is_server():
+		_server_repair(multiplayer.get_remote_sender_id(), action)
+
+
+@rpc("any_peer", "unreliable_ordered")
+func request_spray(on: bool, aim: bool) -> void:
+	if multiplayer.is_server():
+		_server_spray(multiplayer.get_remote_sender_id(), on, aim)
+
+
+func _server_spray(peer: int, on: bool, aim: bool) -> void:
+	var ts := teams[Net.team_of.get(peer, 0)]
+	if ts.repairer != peer or ts.phase < 3:
+		ts.spraying = false
+		return
+	ts.spraying = on
+	ts.aimed = aim
+
+
+func _server_repair(peer: int, action: String) -> void:
+	if state != State.RUNNING or not Net.team_of.has(peer):
+		return
+	var ts := teams[Net.team_of[peer]]
+	if ts.finished or ts.dnf:
+		return
+	var spd := ts.car.speed_kmh
+	match action:
+		"lever":
+			if ts.phase == 0 and ts.damage >= 40.0 and spd < 12.0:
+				_set_phase(ts, 1, 0, false)
+				repair_fx.rpc(ts.idx, "lever")
+		"exit":
+			if ts.phase == 1 and spd < 8.0:
+				_set_phase(ts, 2, peer, false)
+				repair_fx.rpc(ts.idx, "exit")
+		"lift":
+			if ts.phase == 2 and ts.repairer == peer:
+				_set_phase(ts, 3, peer, false)
+				repair_fx.rpc(ts.idx, "lift")
+		"cover":
+			if ts.phase == 3 and ts.repairer == peer and not ts.cover:
+				_set_phase(ts, 3, peer, true)
+				repair_fx.rpc(ts.idx, "cover")
+		"enter":
+			if ts.phase >= 3 and ts.repairer == peer and ts.fire < 0.03 and ts.inner < 0.03 and ts.damage < 25.0:
+				ts.spraying = false
+				_set_phase(ts, 0, 0, false)
+				repair_fx.rpc(ts.idx, "enter")
+				show_message.rpc("back_road", ts.idx)
 
 
 func _update_progress(ts: TeamState) -> void:
@@ -494,7 +694,7 @@ func _server_reset(peer: int) -> void:
 	if state != State.RUNNING:
 		return
 	var ts := teams[Net.team_of.get(peer, 0)]
-	if ts.finished or ts.dnf:
+	if ts.finished or ts.dnf or ts.phase >= 1:
 		return
 	_reset_team(ts)
 	show_message.rpc("back_road", ts.idx)
@@ -508,6 +708,7 @@ func _process(delta: float) -> void:
 	if my_role == "driver":
 		_read_driving_input()
 	_update_look(delta)
+	_update_repair_ui(delta)
 	# smooth the other cars on clients
 	if not multiplayer.is_server():
 		for ts in teams:
@@ -533,7 +734,7 @@ func _process(delta: float) -> void:
 
 
 func _zone_pressed(zone_name: String) -> bool:
-	if not zones.has(zone_name):
+	if not zones.has(zone_name) or not (zones[zone_name] as Control).visible:
 		return false
 	var r: Rect2 = zones[zone_name].get_global_rect()
 	for pos in touches.values():
@@ -581,9 +782,9 @@ func _update_look(delta: float) -> void:
 		look_idle = 0.0
 	else:
 		look_idle += delta
-		if look_idle > 2.5:    # spring back to looking at the road
+		if look_idle > 2.5:    # spring back to looking at the road (or at the engine while repairing)
 			look_yaw = move_toward(look_yaw, 0.0, delta * 3.0)
-			look_pitch = move_toward(look_pitch, 0.0, delta * 3.0)
+			look_pitch = move_toward(look_pitch, -0.35 if _am_repairer() else 0.0, delta * 3.0)
 	local_avatar.set_look(look_yaw, look_pitch)
 	var now := Time.get_ticks_msec()
 	if now - look_send_ms > 70:
@@ -612,6 +813,8 @@ func _request_reset() -> void:
 
 func _do_punch() -> void:
 	look_idle = 0.0
+	if teams[my_team].phase >= 1:
+		return
 	if multiplayer.is_server():
 		_server_punch(my_id)
 	else:
@@ -655,6 +858,12 @@ func _input(event: InputEvent) -> void:
 				look_touch = -1
 	elif event is InputEventScreenDrag:
 		touches[event.index] = event.position
+		var mt := teams[my_team]
+		if mt.phase == 2 and mt.repairer == my_id:
+			lift_swipe += -event.relative.y
+			if lift_swipe > 260.0:
+				lift_swipe = 0.0
+				_repair_action()
 		if event.index == look_touch:
 			_look_delta(event.relative)
 	elif event is InputEventMouseMotion:
@@ -677,6 +886,8 @@ func _input(event: InputEvent) -> void:
 		_set_gesture(4)
 	elif event.is_action_pressed("beacon"):
 		_do_beacon()
+	elif event.is_action_pressed("interact"):
+		_repair_action()
 	elif event.is_action_pressed("map_toggle"):
 		_toggle_map()
 
@@ -684,7 +895,7 @@ func _input(event: InputEvent) -> void:
 func _touch_press(index: int, pos: Vector2) -> void:
 	touches[index] = pos
 	for zn in zones:
-		if (zones[zn] as Control).get_global_rect().has_point(pos):
+		if (zones[zn] as Control).visible and (zones[zn] as Control).get_global_rect().has_point(pos):
 			zone_touch[index] = zn
 			if tap_zones.has(zn):
 				(tap_zones[zn] as Callable).call()
@@ -695,7 +906,7 @@ func _touch_press(index: int, pos: Vector2) -> void:
 
 func _click_zone(pos: Vector2) -> void:
 	for zn in zones:
-		if (zones[zn] as Control).get_global_rect().has_point(pos) and tap_zones.has(zn):
+		if (zones[zn] as Control).visible and (zones[zn] as Control).get_global_rect().has_point(pos) and tap_zones.has(zn):
 			(tap_zones[zn] as Callable).call()
 			return
 
@@ -1233,6 +1444,12 @@ func _build_hud() -> void:
 	_style_label(rank_label, 20)
 	hud_root.add_child(rank_label)
 
+	repair_label = _full_label(0, 70, 26, 0.74)
+	repair_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
+	_make_zone("act", "", 0.0, 0.5, 20, -110, 210, -20, 22, _repair_action)
+	_make_zone("spray", L.t("z_spray"), 0.0, 0.5, 20, 0, 210, 90, 22)
+	zones["act"].visible = false
+	zones["spray"].visible = false
 	_make_zone("reset", L.t("z_reset"), 1.0, 0.0, -150, 14, -14, 64, 22, _request_reset)
 	if not solo:
 		_make_zone("punch", L.t("z_punch"), 1.0, 0.5, -140, -45, -14, 45, 22, _do_punch)
@@ -1304,6 +1521,126 @@ func _ahead(a: TeamState, b: TeamState) -> bool:
 	if a.dnf != b.dnf:
 		return b.dnf
 	return a.prog > b.prog
+
+
+func _am_repairer() -> bool:
+	var ts := teams[my_team]
+	return ts.phase >= 2 and ts.repairer == my_id
+
+
+func _aimed_at_engine() -> bool:
+	if local_avatar == null or local_avatar.cam == null:
+		return false
+	var car := teams[my_team].car
+	var eng := car.global_transform * Vector3(0, 1.25, -1.7)
+	var to := (eng - local_avatar.cam.global_position).normalized()
+	return to.dot(-local_avatar.cam.global_basis.z) > 0.9
+
+
+func _repair_action() -> void:
+	var ts := teams[my_team]
+	if state != State.RUNNING or ts.finished:
+		return
+	var act := ""
+	match ts.phase:
+		0:
+			act = "lever"
+		1:
+			act = "exit"
+		2:
+			act = "lift" if ts.repairer == my_id else ""
+		3:
+			if ts.repairer == my_id:
+				act = "cover" if (not ts.cover and ts.inner > 0.03) else "enter"
+	if act == "":
+		return
+	if multiplayer.is_server():
+		_server_repair(my_id, act)
+	else:
+		request_repair.rpc_id(1, act)
+
+
+## smoke / fire warnings, context buttons for the fire repair and the spray input
+func _update_repair_ui(delta: float) -> void:
+	# countdown beeps
+	if state == State.COUNTDOWN:
+		var c := ceili(countdown_left)
+		if c != last_count and c >= 1 and c <= 3:
+			Sfx.play("beep")
+		if countdown_left <= 0.0 and last_count != 0:
+			Sfx.play("go")
+			last_count = 0
+		elif c != 0:
+			last_count = c
+	var my := teams[my_team]
+	# animate the repairers' arms with the hood
+	for ts in teams:
+		if ts.phase >= 2 and ts.repairer != 0 and avatars.has(ts.repairer):
+			var av: Avatar = avatars[ts.repairer]
+			var ang := ts.car._hood_ang
+			av.reach_t = clampf(ang / 62.0, 0.0, 1.0)
+			av.work = 2 if ang > 55.0 else 1
+			av.cover_hand = ts.cover
+	# warnings
+	if my.damage >= 80.0 and my.warned < 2:
+		my.warned = 2
+		Sfx.play("warn", 4.0)
+	elif my.damage >= 40.0 and my.warned < 1:
+		my.warned = 1
+		Sfx.play("warn")
+	elif my.damage < 30.0:
+		my.warned = 0
+	# prompts + buttons
+	var text := ""
+	var act_key := ""
+	var rep := _am_repairer()
+	var burning := my.fire > 0.03 or my.inner > 0.03
+	match my.phase:
+		0:
+			if my.damage >= 40.0 and not my.finished and state == State.RUNNING:
+				text = L.t("rp_fire") if my.damage >= 80.0 else L.t("rp_smoke")
+				act_key = "z_lever"
+		1:
+			text = L.t("rp_latched")
+			act_key = "z_exit"
+		2:
+			text = L.t("rp_lift") if rep else L.t("rp_wait")
+			act_key = "z_lift" if rep else ""
+		3:
+			if not rep:
+				text = L.t("rp_wait")
+			elif not my.cover and my.inner > 0.03:
+				text = L.t("rp_spray") if my.fire > 0.03 else L.t("rp_cover")
+				act_key = "z_cover"
+			elif burning:
+				text = L.t("rp_spray")
+			elif my.damage >= 25.0:
+				text = L.t("rp_cool")
+			else:
+				text = L.t("rp_enter")
+				act_key = "z_enter"
+	repair_label.text = text
+	repair_label.visible = text != "" and (my.phase > 0 or int(Time.get_ticks_msec() / 400.0) % 2 == 0)
+	var act_zone: Control = zones["act"]
+	act_zone.visible = act_key != ""
+	if act_key != "":
+		((act_zone.get_child(0)) as Label).text = L.t(act_key)
+	zones["spray"].visible = rep and my.phase >= 3
+	# spray input (only the repairer)
+	if rep and my.phase >= 3:
+		var want := Input.is_action_pressed("spray") or _zone_pressed("spray")
+		var aim := _aimed_at_engine()
+		var now := Time.get_ticks_msec()
+		if want != spray_last or aim != spray_aim_last or (want and now - spray_ms > 250):
+			spray_last = want
+			spray_aim_last = aim
+			spray_ms = now
+			if multiplayer.is_server():
+				_server_spray(my_id, want, aim)
+			else:
+				request_spray.rpc_id(1, want, aim)
+	elif spray_last:
+		spray_last = false
 
 
 func _update_hud() -> void:

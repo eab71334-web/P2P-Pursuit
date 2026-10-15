@@ -427,8 +427,10 @@ func _open_setup(mode: String) -> void:
 	setup_blind_row.visible = mode != "ffa"
 	if mode == "coop":
 		setup_count = 1
-		var l := _label(count_row, L.t("coop_d"), 24, Color(0.7, 0.95, 0.8))
+		var l := _label(count_row, L.t("coop_d"), 26, Color(0.7, 0.95, 0.8))
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.custom_minimum_size = Vector2(640, 96)
+		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	else:
 		var lo := 2
 		var hi := 4 if mode == "teams" else 6

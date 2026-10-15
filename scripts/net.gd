@@ -60,6 +60,8 @@ func _setup_inputs() -> void:
 		"g_right": [KEY_3],
 		"g_stop": [KEY_4],
 		"beacon": [KEY_G],
+		"interact": [KEY_E],
+		"spray": [KEY_Q],
 		"map_toggle": [KEY_M],
 		"look_mate": [KEY_V],
 	}
