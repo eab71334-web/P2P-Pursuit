@@ -60,6 +60,8 @@ class TeamState extends RefCounted:
 	var last_imp := 0
 	var spray_sent := false
 	var warned := 0
+	var boom_t := 0.0
+	var alarm_i := -1
 
 
 var track: Track
@@ -72,6 +74,9 @@ var spray_ms := 0
 var spray_last := false
 var spray_aim_last := false
 var last_count := 99
+var fast_done := false
+var rematch_btn: Button
+var room_btn: Button
 const OUT_POS := Vector3(-0.2, 1.0, -2.85)
 var ipad_vp: SubViewport
 var map_mode := false
@@ -248,6 +253,9 @@ func team_dnf(team: int) -> void:
 func all_done() -> void:
 	state = State.ENDED
 	Net.race_over = true
+	if rematch_btn:
+		rematch_btn.text = UI.tx("Rematch", "إعادة المباراة") if Net.required_players > 1 else UI.tx("Race again", "سباق جديد")
+	_update_result_buttons()
 
 
 @rpc("authority", "call_local", "reliable")
@@ -454,6 +462,10 @@ func _physics_process(delta: float) -> void:
 		race_time += delta
 	for ts in teams:
 		var inp := Vector3.ZERO
+		if ts.phase == 4:
+			ts.boom_t += delta
+			if ts.boom_t > 4.5:
+				_wreck(ts)
 		var active := state == State.RUNNING and not ts.finished and not ts.dnf
 		ts.car.hold = not active or ts.phase >= 1
 		if active:
@@ -495,14 +507,16 @@ func _flags(ts: TeamState) -> int:
 
 ## server: crashes and speed hurt the engine -> smoke -> fire; the fix is the repair mini game
 func _update_damage(ts: TeamState, delta: float) -> void:
+	if ts.phase == 4:
+		return
 	var now := Time.get_ticks_msec()
 	var dv := ts.car.take_impact()
 	if dv > 3.5 and now - ts.last_imp > 350:
 		ts.last_imp = now
-		ts.damage = minf(100.0, ts.damage + minf(45.0, (dv - 3.0) * 4.0))
+		ts.damage = minf(100.0, ts.damage + minf(45.0, (dv - 3.0) * 4.0) * ts.car.armor)
 		crash_fx.rpc(ts.idx, dv)
-	if ts.car.speed_kmh > 145.0 and ts.phase == 0:
-		ts.damage = minf(100.0, ts.damage + (ts.car.speed_kmh - 145.0) * 0.12 * delta)
+	if ts.car.speed_kmh > ts.car.overheat_kmh and ts.phase == 0:
+		ts.damage = minf(100.0, ts.damage + (ts.car.speed_kmh - ts.car.overheat_kmh) * 0.12 * delta)
 	elif ts.phase == 0 and ts.fire < 0.03 and ts.inner < 0.03:
 		ts.damage = maxf(0.0, ts.damage - 0.35 * delta)
 	# ignition
@@ -516,18 +530,25 @@ func _update_damage(ts: TeamState, delta: float) -> void:
 		if feeding:
 			ts.fire = minf(1.0, ts.fire + (0.03 if ts.phase < 3 else 0.12) * delta)
 			ts.damage = maxf(ts.damage, 80.0)
-		if ts.burn_t > 45.0:
-			_wreck(ts)
+		var left: float = ts.car.burn_time - ts.burn_t
+		if left < 10.0 and ts.alarm_i != int(left):
+			if ts.alarm_i == -1:
+				show_message.rpc("boom_soon", ts.idx)
+			ts.alarm_i = int(left)
+			repair_fx.rpc(ts.idx, "alarm")
+		if ts.burn_t > ts.car.burn_time:
+			_explode(ts)
 			return
 	# extinguisher
 	if ts.spraying and ts.aimed and ts.phase >= 3:
-		ts.fire = maxf(0.0, ts.fire - 0.45 * delta)
+		ts.fire = maxf(0.0, ts.fire - 0.45 * ts.car.ext_mult * delta)
 		if ts.cover:
-			ts.inner = maxf(0.0, ts.inner - 0.4 * delta)
+			ts.inner = maxf(0.0, ts.inner - 0.4 * ts.car.ext_mult * delta)
 		if ts.burn_t > 0.0 and ts.fire < 0.03 and ts.inner < 0.03:
 			ts.fire = 0.0
 			ts.inner = 0.0
 			ts.burn_t = 0.0
+			ts.alarm_i = -1
 			ts.damage = minf(ts.damage, 70.0)
 			repair_fx.rpc(ts.idx, "out")
 	# cooling while the hood is up
@@ -535,16 +556,61 @@ func _update_damage(ts: TeamState, delta: float) -> void:
 		ts.damage = maxf(0.0, ts.damage - 12.0 * delta)
 
 
+## the fire was not put out in time: the car blows up in the middle of the road and tumbles through the air
+func _explode(ts: TeamState) -> void:
+	var car := ts.car
+	ts.spraying = false
+	ts.boom_t = 0.0
+	ts.fire = 1.0
+	ts.inner = 0.0
+	_set_phase(ts, 4, ts.repairer, false)
+	car.hold = false
+	car.angular_damp = 0.25
+	car.linear_damp = 0.05
+	var fwd := -car.global_basis.z
+	var right := car.global_basis.x
+	car.apply_central_impulse(Vector3(0, car.mass * 12.5, 0) + fwd * car.mass * 4.0)
+	car.apply_torque_impulse(-right * car.mass * 6.5 + car.global_basis.z * car.mass * randf_range(-2.0, 2.0))
+	explode_fx.rpc(ts.idx)
+
+
+@rpc("authority", "call_local", "reliable")
+func explode_fx(team: int) -> void:
+	var ts := teams[team]
+	var car := ts.car
+	car.explode_fx()
+	Sfx.play3d("boom", car, 10.0, 0.8)
+	Sfx.play3d("crash_hard", car, 6.0, 0.7)
+	var d := car.global_position.distance_to(local_avatar.global_position) if local_avatar else 0.0
+	if team == my_team or d < 40.0:
+		shake = 1.0
+		flash = 1.0
+		flash_rect.color = Color(1.0, 0.85, 0.5, 0.0)
+		get_tree().create_timer(2.0).timeout.connect(func(): flash_rect.color = Color(0.9, 0.1, 0.1, 0.0))
+	# whoever stood in front of the car is thrown away
+	if ts.repairer != 0 and avatars.has(ts.repairer):
+		var av: Avatar = avatars[ts.repairer]
+		if av.outside:
+			var gp := av.global_position
+			var fwd := -car.global_basis.z
+			av.get_parent().remove_child(av)
+			add_child(av)
+			av.global_position = gp
+			av.blast(fwd * 7.0 + Vector3(0, 6.5, 0), gp.y - 0.95)
+
+
 func _wreck(ts: TeamState) -> void:
 	ts.penalty += 25.0
 	ts.fire = 0.0
 	ts.inner = 0.0
 	ts.burn_t = 0.0
+	ts.alarm_i = -1
 	ts.damage = 30.0
 	ts.spraying = false
+	ts.car.angular_damp = 1.5
+	ts.car.linear_damp = 0.12
 	_set_phase(ts, 0, 0, false)
 	_reset_team(ts)
-	repair_fx.rpc(ts.idx, "boom")
 	show_message.rpc("wreck", ts.idx)
 
 
@@ -565,6 +631,12 @@ func repair_state(team: int, ph: int, who: int, cov: bool) -> void:
 		if id == 0 or not avatars.has(id):
 			continue
 		var av: Avatar = avatars[id]
+		if ph == 4:
+			continue
+		if av.get_parent() != ts.car:
+			av.get_parent().remove_child(av)
+			ts.car.add_child(av)
+			av.reseat()
 		if id == who and ph >= 2:
 			av.go_outside(OUT_POS)
 			av.work = 1
@@ -595,8 +667,13 @@ func repair_fx(team: int, kind: String) -> void:
 			Sfx.play3d("thud", car, 0.0)
 		"out":
 			Sfx.play3d("success", car, 2.0)
+			if teams[team].repairer == my_id:
+				Profile.event("fire_out")
+				Profile.stats["fires"] = int(Profile.stats["fires"]) + 1
 		"boom":
 			Sfx.play3d("boom", car, 6.0)
+		"alarm":
+			Sfx.play3d("warn", car, 6.0, 1.4)
 
 
 @rpc("authority", "call_local", "reliable")
@@ -623,7 +700,7 @@ func request_spray(on: bool, aim: bool) -> void:
 
 func _server_spray(peer: int, on: bool, aim: bool) -> void:
 	var ts := teams[Net.team_of.get(peer, 0)]
-	if ts.repairer != peer or ts.phase < 3:
+	if ts.repairer != peer or ts.phase != 3:
 		ts.spraying = false
 		return
 	ts.spraying = on
@@ -703,6 +780,9 @@ func _server_reset(peer: int) -> void:
 # ====================================================================== local frame loop
 
 func _process(delta: float) -> void:
+	if state == State.RUNNING and not fast_done and teams[my_team].speed > 140.0 and my_role == "driver":
+		fast_done = true
+		Profile.event("speed140")
 	if state == State.COUNTDOWN:
 		countdown_left -= delta
 	if my_role == "driver":
@@ -815,10 +895,43 @@ func _do_punch() -> void:
 	look_idle = 0.0
 	if teams[my_team].phase >= 1:
 		return
+	if not solo:
+		Profile.event("punch")
 	if multiplayer.is_server():
 		_server_punch(my_id)
 	else:
 		request_punch.rpc_id(1)
+
+
+func _do_emote() -> void:
+	if teams[my_team].phase >= 1:
+		return
+	Profile.event("emote")
+	if multiplayer.is_server():
+		_server_emote(my_id)
+	else:
+		request_emote.rpc_id(1)
+
+
+@rpc("any_peer", "reliable")
+func request_emote() -> void:
+	if multiplayer.is_server():
+		_server_emote(multiplayer.get_remote_sender_id())
+
+
+func _server_emote(peer: int) -> void:
+	var now := Time.get_ticks_msec()
+	if now - int(last_punch.get(-peer, 0)) < 3000 or not avatars.has(peer):
+		return
+	last_punch[-peer] = now
+	var o: Dictionary = (Net.loadouts.get(peer, {}) as Dictionary).get("outfit", {})
+	emote_fx.rpc(peer, str(o.get("emote", "wave")))
+
+
+@rpc("authority", "call_local", "reliable")
+func emote_fx(peer: int, id: String) -> void:
+	if avatars.has(peer):
+		(avatars[peer] as Avatar).play_emote(id)
 
 
 func _set_gesture(g: int) -> void:
@@ -834,6 +947,7 @@ func _set_gesture(g: int) -> void:
 func _do_beacon() -> void:
 	if my_role != "navigator" and (not solo or Net.ffa):
 		return
+	Profile.event("beacon")
 	if multiplayer.is_server():
 		_server_beacon(my_id)
 	else:
@@ -890,6 +1004,8 @@ func _input(event: InputEvent) -> void:
 		_repair_action()
 	elif event.is_action_pressed("map_toggle"):
 		_toggle_map()
+	elif event.is_action_pressed("emote"):
+		_do_emote()
 
 
 func _touch_press(index: int, pos: Vector2) -> void:
@@ -1319,7 +1435,7 @@ func _build_teams() -> void:
 					ts.nav_id = id
 		var car := Car.new()
 		car.name = "Car%d" % t
-		car.setup(t, ts.color, not multiplayer.is_server())
+		car.setup(t, ts.color, not multiplayer.is_server(), Net.loadouts.get(ts.driver_id, {}))
 		car.transform = _grid_transform(t)
 		add_child(car)
 		if Net.blind and not solo:
@@ -1341,6 +1457,7 @@ func _make_avatar(ts: TeamState, id: int) -> void:
 	av.helmet_color = ts.color
 	av.shirt_color = ts.color.darkened(0.2)
 	av.is_local = (id == my_id)
+	av.outfit = (Net.loadouts.get(id, {}) as Dictionary).get("outfit", {})
 	if av.is_local and ipad_vp:
 		av.ipad_tex = ipad_vp.get_texture()
 	av.position = ts.car.seat_origin(role)
@@ -1450,6 +1567,7 @@ func _build_hud() -> void:
 	_make_zone("spray", L.t("z_spray"), 0.0, 0.5, 20, 0, 210, 90, 22)
 	zones["act"].visible = false
 	zones["spray"].visible = false
+	_make_zone("emote", L.t("z_emote"), 1.0, 0.5, -140, 55, -14, 120, 20, _do_emote)
 	_make_zone("reset", L.t("z_reset"), 1.0, 0.0, -150, 14, -14, 64, 22, _request_reset)
 	if not solo:
 		_make_zone("punch", L.t("z_punch"), 1.0, 0.5, -140, -45, -14, 45, 22, _do_punch)
@@ -1525,7 +1643,7 @@ func _ahead(a: TeamState, b: TeamState) -> bool:
 
 func _am_repairer() -> bool:
 	var ts := teams[my_team]
-	return ts.phase >= 2 and ts.repairer == my_id
+	return ts.phase >= 2 and ts.phase <= 3 and ts.repairer == my_id
 
 
 func _aimed_at_engine() -> bool:
@@ -1625,9 +1743,9 @@ func _update_repair_ui(delta: float) -> void:
 	act_zone.visible = act_key != ""
 	if act_key != "":
 		((act_zone.get_child(0)) as Label).text = L.t(act_key)
-	zones["spray"].visible = rep and my.phase >= 3
+	zones["spray"].visible = rep and my.phase == 3
 	# spray input (only the repairer)
-	if rep and my.phase >= 3:
+	if rep and my.phase == 3:
 		var want := Input.is_action_pressed("spray") or _zone_pressed("spray")
 		var aim := _aimed_at_engine()
 		var now := Time.get_ticks_msec()
@@ -1728,37 +1846,80 @@ func _refresh_result() -> void:
 
 func _show_result(place: int, t: float) -> void:
 	var medal := L.t("no_medal")
-	for m in MEDALS:
-		if t <= m[1]:
-			medal = L.t(m[0])
+	var mi := -1
+	for i in MEDALS.size():
+		if t <= MEDALS[i][1]:
+			medal = L.t(MEDALS[i][0])
+			mi = i
 			break
+	var rw := Profile.race_reward(place, Net.team_count, mi, track.theme == "mountain")
 	result_panel = PanelContainer.new()
 	result_panel.set_anchors_preset(Control.PRESET_CENTER)
 	result_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	result_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 14)
+	vb.add_theme_constant_override("separation", 10)
 	result_panel.add_child(vb)
 	var title := Label.new()
 	title.text = "%s  %s" % [L.t("finish"), _place(place - 1) if Net.team_count > 1 else ""]
-	title.add_theme_font_size_override("font_size", 52)
+	title.add_theme_font_size_override("font_size", 46)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(title)
 	var res := Label.new()
 	res.text = "%s  %s\n%s  %s" % [L.t("time"), _fmt(t), L.t("medal"), medal]
-	res.add_theme_font_size_override("font_size", 32)
+	res.add_theme_font_size_override("font_size", 28)
 	res.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(res)
+	var rl := Label.new()
+	rl.text = "+%d %s    +%d XP" % [int(rw["coins"]), UI.tx("coins", "عملة"), int(rw["xp"])]
+	if rw["chest"] != "":
+		rl.text += "    +1 " + UI.tx("chest", "صندوق")
+	if rw["level_up"]:
+		rl.text += "\n" + UI.tx("LEVEL UP!  Level %d", "ارتقيت! المستوى %d") % Profile.level
+	rl.add_theme_font_size_override("font_size", 26)
+	rl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
+	rl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(rl)
 	if Net.team_count > 1:
 		result_standings = Label.new()
-		result_standings.add_theme_font_size_override("font_size", 24)
+		result_standings.add_theme_font_size_override("font_size", 22)
 		result_standings.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vb.add_child(result_standings)
 		_refresh_result()
-	var btn := Button.new()
-	btn.text = L.t("to_menu")
-	btn.custom_minimum_size = Vector2(320, 70)
-	btn.add_theme_font_size_override("font_size", 28)
-	btn.pressed.connect(Net.return_to_menu)
-	vb.add_child(btn)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	vb.add_child(row)
+	var solo_room := Net.required_players <= 1
+	rematch_btn = Button.new()
+	rematch_btn.text = UI.tx("Race again", "سباق جديد") if solo_room else UI.tx("Rematch", "إعادة المباراة")
+	rematch_btn.custom_minimum_size = Vector2(260, 64)
+	rematch_btn.add_theme_font_size_override("font_size", 26)
+	rematch_btn.pressed.connect(func():
+		if solo_room:
+			Net.start_now()
+		else:
+			Net.return_to_room(true))
+	row.add_child(rematch_btn)
+	room_btn = Button.new()
+	room_btn.text = UI.tx("Main menu", "القائمة الرئيسية") if solo_room else UI.tx("Back to room", "الرجوع للغرفة")
+	room_btn.custom_minimum_size = Vector2(260, 64)
+	room_btn.add_theme_font_size_override("font_size", 26)
+	room_btn.pressed.connect(func():
+		if solo_room:
+			Net.return_to_menu()
+		else:
+			Net.return_to_room(false))
+	row.add_child(room_btn)
+	_update_result_buttons()
 	hud_root.add_child(result_panel)
+
+
+## the host runs the physics: he may only leave when everybody has finished
+func _update_result_buttons() -> void:
+	if rematch_btn == null:
+		return
+	var wait := multiplayer.is_server() and state != State.ENDED and Net.required_players > 1
+	rematch_btn.disabled = wait
+	room_btn.disabled = wait
+	if wait:
+		rematch_btn.text = UI.tx("Waiting for the others...", "ننتظر باقي اللاعبين...")

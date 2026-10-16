@@ -31,6 +31,22 @@ var power := 1.0
 var throttle_in := 0.0
 var impact_acc := 0.0
 
+var team_color := Color(0.78, 0.08, 0.08)
+var lo := {}                 # loadout: car model, paint, stripe, rim, glow, upgrades
+var model := "hatch"
+var preview := false         # garage preview: no sound, no physics
+var power_mult := 1.0
+var top_speed := TOP_SPEED_KMH
+var grip_base := 1.0
+var armor := 1.0             # damage taken multiplier (lower = tougher)
+var overheat_kmh := 145.0
+var burn_time := 45.0
+var ext_mult := 1.0
+var body_mat: StandardMaterial3D
+var _holders: Array[Node3D] = []
+var _spin := 0.0
+var charred := false
+
 var wheel_list: Array[VehicleWheel3D] = []
 var _grip := 1.0
 var _hood_pivot: Node3D
@@ -53,10 +69,28 @@ var _wheel_pivot: Node3D
 var _wheel_mesh: Node3D
 
 
-func setup(p_team: int, color: Color, remote: bool) -> void:
+func setup(p_team: int, color: Color, remote: bool, p_lo := {}, p_preview := false) -> void:
 	team = p_team
+	team_color = color
 	body_color = color
-	is_remote = remote
+	is_remote = remote or p_preview
+	preview = p_preview
+	lo = p_lo
+	model = str(lo.get("car", "hatch"))
+	if not Catalog.CARS.has(model):
+		model = "hatch"
+	var m: Dictionary = Catalog.CARS[model]
+	var up: Dictionary = lo.get("up", {})
+	var eng := int(up.get("engine", 0))
+	power_mult = float(m["power"]) * (1.0 + 0.06 * eng)
+	top_speed = float(m["top"]) * (1.0 + 0.03 * eng)
+	grip_base = float(m["grip"]) * (1.0 + 0.05 * int(up.get("tires", 0)))
+	armor = float(m["armor"]) * (1.0 - 0.08 * int(up.get("armor", 0)))
+	overheat_kmh = float(m["top"]) * 0.88 + 6.0 * int(up.get("cooling", 0))
+	burn_time = 45.0 + 5.0 * int(up.get("cooling", 0))
+	ext_mult = 1.0 + 0.15 * int(up.get("extinguisher", 0))
+	if lo.has("paint") and Catalog.PAINTS.has(lo["paint"]):
+		body_color = Catalog.PAINTS[lo["paint"]]["c"]
 
 
 func seat_origin(role: String) -> Vector3:
@@ -81,7 +115,13 @@ func _ready() -> void:
 	_add_wheels()
 	_build_visuals()
 	_build_fx()
-	_build_audio()
+	if not preview:
+		_build_audio()
+
+
+func rim_color() -> Color:
+	var r: Dictionary = Catalog.RIMS.get(lo.get("rim", "steel"), Catalog.RIMS["steel"])
+	return r["c"]
 
 
 func _add_wheels() -> void:
@@ -90,9 +130,11 @@ func _add_wheels() -> void:
 			if is_remote:
 				# clients only display the car: plain meshes, no vehicle physics (avoids NaNs on a frozen body)
 				var holder := Node3D.new()
-				holder.position = Vector3(x, 0.4, z)
+				holder.position = Vector3(x, 0.45, z)
+				holder.set_meta("front", z < 0.0)
 				add_child(holder)
-				_box(holder, Vector3(0.32, 0.8, 0.8), Vector3.ZERO, Color(0.05, 0.05, 0.06))
+				CarStyle.make_wheel(holder, rim_color(), model)
+				_holders.append(holder)
 				continue
 			var w := VehicleWheel3D.new()
 			w.position = Vector3(x, 0.45, z)
@@ -103,12 +145,12 @@ func _add_wheels() -> void:
 			w.suspension_max_force = 7000.0
 			w.damping_compression = 1.0
 			w.damping_relaxation = 1.3
-			w.wheel_friction_slip = 3.2
+			w.wheel_friction_slip = 3.2 * grip_base
 			w.wheel_roll_influence = 0.25
 			w.use_as_traction = true
 			w.use_as_steering = z < 0.0
 			add_child(w)
-			_box(w, Vector3(0.32, 0.8, 0.8), Vector3.ZERO, Color(0.05, 0.05, 0.06))
+			CarStyle.make_wheel(w, rim_color(), model)
 
 
 # ------------------------------------------------------------------ controls
@@ -129,7 +171,7 @@ func set_controls(steer: float, throttle: float, brk: float) -> void:
 		engine_force = brk * 600.0
 		brake = 0.0
 	else:
-		engine_force = -throttle * ENGINE * power if speed_kmh < TOP_SPEED_KMH else 0.0
+		engine_force = -throttle * ENGINE * power * power_mult if speed_kmh < top_speed * (1.0 if power >= 1.0 else 0.8) else 0.0
 		brake = brk * BRAKE_FORCE
 
 
@@ -139,7 +181,7 @@ func set_grip(f: float) -> void:
 		return
 	_grip = f
 	for w in wheel_list:
-		w.wheel_friction_slip = 3.2 * f
+		w.wheel_friction_slip = 3.2 * f * grip_base
 
 
 ## dark-mode lights: headlights + a dim cabin light so the blind driver can see the co-driver
@@ -166,6 +208,8 @@ func teleport(t: Transform3D) -> void:
 	PhysicsServer3D.body_set_state(rid, PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, Vector3.ZERO)
 	PhysicsServer3D.body_set_state(rid, PhysicsServer3D.BODY_STATE_ANGULAR_VELOCITY, Vector3.ZERO)
 	steering = 0.0
+	_prev_vel = Vector3.ZERO
+	impact_acc = 0.0
 
 
 # ------------------------------------------------------------------ visuals
@@ -182,7 +226,7 @@ func _box(parent: Node, size: Vector3, pos: Vector3, c: Color) -> MeshInstance3D
 	var bm := BoxMesh.new()
 	bm.size = size
 	mi.mesh = bm
-	mi.material_override = _mat(c)
+	mi.material_override = body_mat if (body_mat != null and c == body_color) else _mat(c)
 	mi.position = pos
 	parent.add_child(mi)
 	return mi
@@ -190,18 +234,29 @@ func _box(parent: Node, size: Vector3, pos: Vector3, c: Color) -> MeshInstance3D
 
 func _build_visuals() -> void:
 	var c := body_color
+	var pd: Dictionary = Catalog.PAINTS.get(lo.get("paint", ""), {})
+	body_mat = StandardMaterial3D.new()
+	body_mat.albedo_color = c
+	body_mat.metallic = minf(0.55, float(pd.get("m", 0.0)))     # no reflections in the compatibility renderer: keep it light
+	if float(pd.get("m", 0.0)) >= 0.9:
+		body_mat.emission_enabled = true
+		body_mat.emission = c
+		body_mat.emission_energy_multiplier = 0.25
+	body_mat.roughness = float(pd.get("ro", 0.9))
+	if float(pd.get("m", 0.0)) > 0.0:
+		body_mat.clearcoat_enabled = true
+		body_mat.clearcoat = 0.6
 	_box(self, Vector3(1.9, 0.5, 4.0), Vector3(0, 0.62, 0), c)                  # body
 	_box(self, Vector3(1.8, 0.08, 3.8), Vector3(0, 0.88, 0.0), NAVY)            # floor
 	_box(self, Vector3(1.9, 0.12, 2.0), Vector3(0, 1.95, 0.35), c)              # roof
 	_box(self, Vector3(0.1, 0.42, 2.0), Vector3(-0.95, 1.12, 0.35), c)          # doors
 	_box(self, Vector3(0.1, 0.42, 2.0), Vector3(0.95, 1.12, 0.35), c)
 	_box(self, Vector3(1.9, 0.42, 0.1), Vector3(0, 1.12, 1.35), c)              # rear wall
-	_box(self, Vector3(0.14, 1.0, 0.14), Vector3(-0.9, 1.42, -0.65), c)         # A pillars
-	_box(self, Vector3(0.14, 1.0, 0.14), Vector3(0.9, 1.42, -0.65), c)
 	_box(self, Vector3(1.9, 0.14, 0.14), Vector3(0, 1.9, -0.65), c)             # windshield top
 	_box(self, Vector3(1.9, 0.3, 0.9), Vector3(0, 1.0, -1.2), DARK.lightened(0.15))  # dashboard
 	_box(self, Vector3(0.35, 0.08, 0.06), Vector3(0, 1.78, -0.6), DARK)         # rear-view mirror
 	_build_engine_bay(c)
+	CarStyle.decorate(self, model, lo, body_mat, team_color)
 	_box(self, Vector3(1.9, 0.3, 0.2), Vector3(0, 0.5, -2.05), DARK)            # bumpers
 	_box(self, Vector3(1.9, 0.3, 0.2), Vector3(0, 0.5, 2.05), DARK)
 	for x in [-0.45, 0.45]:                                                     # front seats
@@ -400,6 +455,9 @@ func apply_state(dmg: float, fr: float, inr: float, flags: int, thr: float) -> v
 	spraying = (flags & 32) != 0
 	throttle_in = thr
 	power = 1.0 if damage < 40.0 else (0.75 if damage < 80.0 else 0.45)
+	if charred and damage < 50.0 and fr < 0.03 and body_mat:
+		charred = false
+		body_mat.albedo_color = body_color
 
 
 func _vol(db: float, on: bool) -> float:
@@ -407,6 +465,12 @@ func _vol(db: float, on: bool) -> float:
 
 
 func _process(delta: float) -> void:
+	if not _holders.is_empty():
+		_spin -= (speed_kmh / 3.6) * delta / 0.4
+		if preview:
+			_spin -= delta * 1.5
+		for h in _holders:
+			h.rotation = Vector3(_spin, -steer_visual * 0.4 if h.get_meta("front") else 0.0, 0.0)
 	if not is_remote:
 		steer_visual = move_toward(steer_visual, steer_target, delta * 5.0)
 	var phi := -steer_visual * 1.6
@@ -493,3 +557,100 @@ func _update_damage_fx(delta: float) -> void:
 	(_snd["fire"] as AudioStreamPlayer3D).volume_db = _vol(-14.0 + burning * 10.0, burning > 0.03)
 	(_snd["hiss"] as AudioStreamPlayer3D).volume_db = _vol(-24.0, smoking and burning < 0.03)
 	(_snd["spray"] as AudioStreamPlayer3D).volume_db = _vol(-8.0, spraying)
+
+
+# ------------------------------------------------------------------ explosion (every peer plays this)
+
+func _burst(pos: Vector3, amount: int, life: float, size: float, additive: bool, ramp: Gradient, vmin: float, vmax: float, grav: Vector3, smin := 1.0, smax := 2.0) -> void:
+	var p := _particles(pos, amount, life, size, additive, ramp)
+	p.one_shot = true
+	p.explosiveness = 0.92
+	p.direction = Vector3(0, 1, 0)
+	p.spread = 180.0
+	p.initial_velocity_min = vmin
+	p.initial_velocity_max = vmax
+	p.gravity = grav
+	p.scale_amount_min = smin
+	p.scale_amount_max = smax
+	p.emitting = true
+	get_tree().create_timer(life + 1.0).timeout.connect(p.queue_free)
+
+
+func explode_fx() -> void:
+	var fb := Gradient.new()
+	fb.colors = PackedColorArray([Color(1.0, 0.95, 0.6, 0.9), Color(1.0, 0.5, 0.1, 0.7), Color(0.3, 0.08, 0.02, 0.0)])
+	fb.offsets = PackedFloat32Array([0.0, 0.35, 1.0])
+	var sm := Gradient.new()
+	sm.colors = PackedColorArray([Color(0.2, 0.2, 0.22, 0.0), Color(0.12, 0.12, 0.14, 0.6), Color(0.05, 0.05, 0.06, 0.0)])
+	sm.offsets = PackedFloat32Array([0.0, 0.25, 1.0])
+	var sp := Gradient.new()
+	sp.colors = PackedColorArray([Color(1.0, 0.9, 0.5, 1.0), Color(1.0, 0.4, 0.05, 0.0)])
+	_burst(Vector3(0, 1.0, 0), 60, 1.0, 2.0, true, fb, 5.0, 13.0, Vector3(0, 1.0, 0), 0.7, 1.7)
+	_burst(Vector3(0, 1.0, 0), 45, 4.5, 2.0, false, sm, 2.0, 6.0, Vector3(0, 2.0, 0), 0.8, 1.7)
+	_burst(Vector3(0, 1.0, 0), 90, 1.6, 0.16, true, sp, 8.0, 20.0, Vector3(0, -10.0, 0), 0.6, 1.6)
+	# a second fireball in the air
+	get_tree().create_timer(0.5).timeout.connect(func():
+		if is_instance_valid(self):
+			_burst(Vector3(0, 1.0, 0), 30, 0.9, 1.8, true, fb, 3.0, 8.0, Vector3(0, 1.0, 0), 0.8, 1.6))
+	# shock ring (world space)
+	var world := get_parent()
+	var ring := MeshInstance3D.new()
+	var sph := SphereMesh.new()
+	sph.radius = 1.0
+	sph.height = 2.0
+	sph.radial_segments = 16
+	sph.rings = 8
+	ring.mesh = sph
+	var rm := StandardMaterial3D.new()
+	rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	rm.albedo_color = Color(1.0, 0.8, 0.5, 0.45)
+	rm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	rm.cull_mode = BaseMaterial3D.CULL_FRONT
+	ring.material_override = rm
+	world.add_child(ring)
+	ring.global_position = global_position + Vector3(0, 1.0, 0)
+	var tw := ring.create_tween().set_parallel(true)
+	tw.tween_property(ring, "scale", Vector3(16, 16, 16), 0.55).from(Vector3(1, 1, 1))
+	tw.tween_property(rm, "albedo_color:a", 0.0, 0.55)
+	tw.chain().tween_callback(ring.queue_free)
+	# flash light
+	var fl := OmniLight3D.new()
+	fl.light_color = Color(1.0, 0.7, 0.3)
+	fl.omni_range = 30.0
+	fl.light_energy = 9.0
+	world.add_child(fl)
+	fl.global_position = global_position + Vector3(0, 2.0, 0)
+	var tl := fl.create_tween()
+	tl.tween_property(fl, "light_energy", 0.0, 0.9)
+	tl.tween_callback(fl.queue_free)
+	# flying debris: hood, doors, bumpers, wheels
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7 + team
+	var parts := [[Vector3(1.7, 0.1, 1.0), body_color], [Vector3(0.1, 0.5, 1.8), body_color], [Vector3(0.1, 0.5, 1.8), body_color],
+		[Vector3(1.8, 0.3, 0.2), DARK], [Vector3(0.5, 0.8, 0.8), Color(0.05, 0.05, 0.06)], [Vector3(0.5, 0.8, 0.8), Color(0.05, 0.05, 0.06)],
+		[Vector3(0.9, 0.2, 0.9), Color(0.15, 0.15, 0.18)], [Vector3(0.4, 0.4, 0.4), Color(1.0, 0.5, 0.1)]]
+	for pd in parts:
+		var rb := RigidBody3D.new()
+		rb.collision_layer = 2
+		rb.collision_mask = 1
+		var cs := CollisionShape3D.new()
+		var bs := BoxShape3D.new()
+		bs.size = pd[0]
+		cs.shape = bs
+		rb.add_child(cs)
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = pd[0]
+		mi.mesh = bm
+		mi.material_override = _mat(Color(pd[1]).darkened(0.35))
+		rb.add_child(mi)
+		world.add_child(rb)
+		rb.global_position = global_position + Vector3(rng.randf_range(-1, 1), 1.2, rng.randf_range(-1.5, 1.5))
+		rb.linear_velocity = Vector3(rng.randf_range(-9, 9), rng.randf_range(7, 15), rng.randf_range(-9, 9))
+		rb.angular_velocity = Vector3(rng.randf_range(-8, 8), rng.randf_range(-8, 8), rng.randf_range(-8, 8))
+		get_tree().create_timer(7.0).timeout.connect(rb.queue_free)
+	# charred paint
+	if body_mat:
+		charred = true
+		body_mat.albedo_color = body_color.darkened(0.75)
