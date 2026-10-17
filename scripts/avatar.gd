@@ -36,6 +36,7 @@ var reach_t := 0.0         # 0 hood closed .. 1 hood fully up
 var cover_hand := false    # left hand on the engine cover
 var _ext: Node3D
 var _seat_pos := Vector3.ZERO
+var map_screen: MapScreen
 var ipad_tex: Texture2D     # live map texture (local co-driver only)
 var outfit := {}            # slot -> item id (see Catalog), empty = defaults
 var standing := false       # preview / outside the car: legs straight
@@ -349,29 +350,16 @@ func blast(vel: Vector3, ground_y: float) -> void:
 
 
 func _build_clipboard() -> void:
-	# an iPad resting in the lap: the co-driver has to look DOWN to read the map
-	var root := Node3D.new()
-	root.position = CLIP_POS
-	root.rotation.x = deg_to_rad(-55.0)
-	add_child(root)
-	_box(root, Vector3(0.44, 0.32, 0.025), Vector3.ZERO, Color(0.75, 0.76, 0.8))
-	var screen := MeshInstance3D.new()
-	var q := QuadMesh.new()
-	q.size = Vector2(0.38, 0.26)
-	screen.mesh = q
-	var m := StandardMaterial3D.new()
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	if ipad_tex:
-		m.albedo_texture = ipad_tex
-	else:
-		m.albedo_color = Color(0.12, 0.2, 0.3)
-	screen.material_override = m
-	screen.position = Vector3(0, 0, 0.0135)
-	root.add_child(screen)
+	# the map "TV" in the co-driver's lap: flips open, 3 sizes, can be pulled close
+	map_screen = MapScreen.new()
+	map_screen.tex = ipad_tex
+	map_screen.position = CLIP_POS
+	map_screen.open_angle = -52.0
+	map_screen.closed_angle = -88.0
+	map_screen.near_offset = Vector3(0, 0.3, -0.3)
+	add_child(map_screen)
 	if ipad_tex == null:
-		for p in [Vector3(-0.08, -0.07, 0.016), Vector3(0.05, -0.03, 0.016), Vector3(-0.04, 0.02, 0.016), Vector3(0.07, 0.06, 0.016)]:
-			var dot := _box(root, Vector3(0.05, 0.05, 0.004), p, Color(0.98, 0.93, 0.6))
-			(dot.material_override as StandardMaterial3D).shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		map_screen.set_open(true)
 
 
 ## Car space -> avatar space (the avatar only has a translation).

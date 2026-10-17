@@ -80,6 +80,7 @@ var room_btn: Button
 const OUT_POS := Vector3(-0.2, 1.0, -2.85)
 var ipad_vp: SubViewport
 var map_mode := false
+var map_screen: MapScreen
 var _pillars: Array[Transform3D] = []
 var _road_body: StaticBody3D
 var teams: Array[TeamState] = []
@@ -151,7 +152,7 @@ func _ready() -> void:
 	track = Track.from_stage(Net.stage)
 	th = THEMES[track.theme]
 	blind_mode = Net.blind and my_role == "driver" and not solo
-	if my_role == "navigator" and not solo:
+	if my_role == "navigator" or solo:
 		_build_ipad()
 	_build_environment()
 	_build_track()
@@ -850,8 +851,12 @@ func _update_look(delta: float) -> void:
 	if local_avatar.cam:
 		local_avatar.cam.fov = move_toward(local_avatar.cam.fov, 40.0 if map_mode else 82.0, delta * 160.0)
 	if map_mode and not dragging:
-		look_yaw = move_toward(look_yaw, 0.0, delta * 5.0)
-		look_pitch = move_toward(look_pitch, -1.03, delta * 4.0)
+		if solo and local_avatar.role == "driver":      # the dashboard screen is on the passenger side
+			look_yaw = move_toward(look_yaw, -0.72, delta * 5.0)
+			look_pitch = move_toward(look_pitch, -0.12, delta * 4.0)
+		else:
+			look_yaw = move_toward(look_yaw, 0.0, delta * 5.0)
+			look_pitch = move_toward(look_pitch, -1.03, delta * 4.0)
 		look_idle = 0.0
 	elif Input.is_action_pressed("look_mate") and local_avatar.seat_dx != 0.0:
 		var target_yaw := -signf(local_avatar.seat_dx) * 1.45
@@ -954,11 +959,34 @@ func _do_beacon() -> void:
 		request_beacon.rpc_id(1)
 
 
+## MAP button: closed -> flips open and the camera looks at it -> back to the road (stays open) -> closes
 func _toggle_map() -> void:
-	if ipad_vp:
+	if map_screen:
+		if not map_screen.is_open:
+			map_screen.set_open(true)
+			map_mode = true
+		elif map_mode:
+			map_mode = false
+		else:
+			map_screen.set_open(false)
+	elif ipad_vp:
 		map_mode = not map_mode
 	elif clipboard:
 		clipboard.visible = not clipboard.visible
+
+
+func _map_size() -> void:
+	if map_screen:
+		map_screen.cycle_size()
+		if not map_screen.is_open:
+			map_screen.set_open(true)
+
+
+func _map_near() -> void:
+	if map_screen:
+		map_screen.toggle_near()
+		if not map_screen.is_open:
+			map_screen.set_open(true)
 
 
 func _input(event: InputEvent) -> void:
@@ -1006,6 +1034,10 @@ func _input(event: InputEvent) -> void:
 		_toggle_map()
 	elif event.is_action_pressed("emote"):
 		_do_emote()
+	elif event.is_action_pressed("map_size"):
+		_map_size()
+	elif event.is_action_pressed("map_near"):
+		_map_near()
 
 
 func _touch_press(index: int, pos: Vector2) -> void:
@@ -1441,6 +1473,7 @@ func _build_teams() -> void:
 		if Net.blind and not solo:
 			car.add_lights()
 		ts.car = car
+		car.set_plate_text(str(Net.players.get(ts.driver_id, char(65 + t))))
 		ts.target = car.transform
 		teams.append(ts)
 		for id in [ts.driver_id, ts.nav_id]:
@@ -1460,11 +1493,24 @@ func _make_avatar(ts: TeamState, id: int) -> void:
 	av.outfit = (Net.loadouts.get(id, {}) as Dictionary).get("outfit", {})
 	if av.is_local and ipad_vp:
 		av.ipad_tex = ipad_vp.get_texture()
+	var dash_wanted: bool = av.is_local and solo and role == "driver"
 	av.position = ts.car.seat_origin(role)
 	var mate := ts.nav_id if role == "driver" else ts.driver_id
 	if mate != 0:
 		av.seat_dx = ts.car.seat_origin(Net.roles[mate]).x - av.position.x
 	ts.car.add_child(av)
+	if dash_wanted:
+		# solo / FFA: the map is a screen on the dashboard of your own car
+		map_screen = MapScreen.new()
+		map_screen.tex = ipad_vp.get_texture()
+		map_screen.position = Vector3(0.12, 1.14, -0.95)
+		map_screen.open_angle = -22.0
+		map_screen.closed_angle = 88.0
+		map_screen.near_offset = Vector3(-0.35, 0.12, 0.45)
+		ts.car.add_child(map_screen)
+	elif av.is_local and av.map_screen:
+		map_screen = av.map_screen
+		map_screen.set_open(true)
 	avatars[id] = av
 	if role == "driver":
 		ts.car.driver_avatar = av
@@ -1586,6 +1632,8 @@ func _build_hud() -> void:
 		if not Net.ffa:
 			_make_zone("beacon", L.t("z_signal"), 1.0, 1.0, -330, by, -180, by + 90, 20, _do_beacon)
 		_make_zone("map", L.t("z_map"), 1.0, 1.0, -170, by, -20, by + 90, 20, _toggle_map)
+		_make_zone("msize", UI.tx("SIZE", "الحجم"), 1.0, 1.0, -170, by - 62, -95, by - 8, 16, _map_size)
+		_make_zone("mnear", UI.tx("NEAR", "قرّب"), 1.0, 1.0, -90, by - 62, -20, by - 8, 16, _map_near)
 		if ipad_vp == null:
 			clipboard = Clipboard.new()
 			clipboard.mouse_filter = Control.MOUSE_FILTER_IGNORE

@@ -2,20 +2,28 @@ class_name UI
 extends RefCounted
 ## Shared look for the hub screens (garage, workshop, character, shop, quests).
 
-const GOLD := Color(1.0, 0.82, 0.25)
-const NAVY := Color(0.07, 0.09, 0.18)
-const PANEL := Color(0.05, 0.06, 0.14, 0.86)
-const TXT2 := Color(0.74, 0.8, 0.93)
-const GREEN := Color(0.15, 0.62, 0.3)
-const RED := Color(0.75, 0.2, 0.25)
-const BLUE := Color(0.2, 0.4, 0.8)
+# One accent colour (rally orange) on a graphite base. Rarity colours only appear on items.
+const ACCENT := Color(1.0, 0.47, 0.1)
+const GOLD := ACCENT
+const BG := Color(0.045, 0.05, 0.062)
+const NAVY := Color(0.09, 0.1, 0.125)
+const PANEL := Color(0.075, 0.08, 0.1, 0.94)
+const CARD := Color(0.1, 0.108, 0.135)
+const CARD2 := Color(0.14, 0.15, 0.185)
+const LINE := Color(1, 1, 1, 0.09)
+const TXT := Color(0.94, 0.95, 0.97)
+const TXT2 := Color(0.62, 0.66, 0.74)
+const OK := Color(0.3, 0.85, 0.5)
+const GREEN := ACCENT
+const RED := Color(0.72, 0.17, 0.2)
+const BLUE := Color(0.17, 0.19, 0.25)
 
 
 static func tx(en: String, ar: String) -> String:
 	return ar if L.is_ar() else en
 
 
-static func sb(col: Color, radius := 16, border := Color.TRANSPARENT, bw := 0) -> StyleBoxFlat:
+static func sb(col: Color, radius := 8, border := Color.TRANSPARENT, bw := 0) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
 	s.bg_color = col
 	s.set_corner_radius_all(radius)
@@ -66,9 +74,9 @@ static func btn(parent: Node, text: String, col: Color, cb: Callable, fs := 22, 
 	return b
 
 
-static func panel(parent: Node, col := PANEL, radius := 20) -> PanelContainer:
+static func panel(parent: Node, col := PANEL, radius := 10) -> PanelContainer:
 	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", sb(col, radius, Color(1, 1, 1, 0.1), 2))
+	p.add_theme_stylebox_override("panel", sb(col, radius, LINE, 1))
 	if parent:
 		parent.add_child(p)
 	return p

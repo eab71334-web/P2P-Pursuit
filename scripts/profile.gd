@@ -6,6 +6,7 @@ signal leveled(level: int, reward: Dictionary)
 
 const SAVE := "user://profile.json"
 
+var pname := ""
 var coins := 1000
 var gems := 20
 var xp := 0
@@ -25,6 +26,9 @@ var _busy_save := false
 
 func _ready() -> void:
 	_load()
+	if pname == "":
+		pname = "Player%d" % (randi() % 900 + 100)
+		save()
 	refresh_quests()
 
 
@@ -38,6 +42,7 @@ func _load() -> void:
 	var d: Variant = JSON.parse_string(f.get_as_text())
 	if not (d is Dictionary):
 		return
+	pname = str(d.get("pname", pname))
 	coins = int(d.get("coins", coins))
 	gems = int(d.get("gems", gems))
 	xp = int(d.get("xp", xp))
@@ -61,7 +66,7 @@ func _load() -> void:
 func save() -> void:
 	var f := FileAccess.open(SAVE, FileAccess.WRITE)
 	if f:
-		f.store_string(JSON.stringify({"coins": coins, "gems": gems, "xp": xp, "level": level, "owned": owned, "cars": cars, "car": car,
+		f.store_string(JSON.stringify({"pname": pname, "coins": coins, "gems": gems, "xp": xp, "level": level, "owned": owned, "cars": cars, "car": car,
 			"carset": carset, "up": up, "outfit": outfit, "quests": quests, "chests": chests, "login": login, "stats": stats}))
 	changed.emit()
 

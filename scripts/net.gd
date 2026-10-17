@@ -72,6 +72,8 @@ func _setup_inputs() -> void:
 		"map_toggle": [KEY_M],
 		"look_mate": [KEY_V],
 		"emote": [KEY_T],
+		"map_size": [KEY_N],
+		"map_near": [KEY_B],
 	}
 	for action in map:
 		if not InputMap.has_action(action):

@@ -1,23 +1,18 @@
 extends Control
-## Main menu (landscape, animated) + lobby with an animated "waiting for your friends" screen.
+## Main menu: sidebar hub (play / garage / workshop / ...) with a 3D showroom behind the PLAY page,
+## game setup screen and the room (ready check + 5 s countdown).
 
-const GOLD := Color(1.0, 0.82, 0.25)
-const NAVY := Color(0.08, 0.1, 0.19)
-const CARD_COLORS := [Color(0.2, 0.55, 0.95), Color(0.2, 0.75, 0.4), Color(0.95, 0.5, 0.15), Color(0.85, 0.25, 0.4)]
-const SLOT_COLORS := [Color(0.82, 0.1, 0.1), Color(0.15, 0.4, 0.95), Color(0.15, 0.7, 0.3), Color(0.95, 0.72, 0.1), Color(0.65, 0.25, 0.85), Color(0.1, 0.75, 0.8)]
+const SLOT_COLORS := [Color(0.9, 0.22, 0.2), Color(0.25, 0.5, 0.95), Color(0.25, 0.75, 0.4), Color(0.95, 0.75, 0.15), Color(0.7, 0.4, 0.9), Color(0.2, 0.8, 0.85)]
 
 
 # ====================================================================== small drawn widgets
 
 class Backdrop extends Control:
 	var t := 0.0
-	var flakes: Array = []
 
 	func _ready() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		for i in 60:
-			flakes.append(Vector3(randf(), randf(), randf_range(0.3, 1.0)))
 
 	func _process(d: float) -> void:
 		t += d
@@ -26,79 +21,87 @@ class Backdrop extends Control:
 	func _draw() -> void:
 		var w := size.x
 		var h := size.y
-		var bands := 24
-		for i in bands:
-			var f := float(i) / bands
-			draw_rect(Rect2(0, h * f, w, h / bands + 1), Color(0.04, 0.05, 0.13).lerp(Color(0.32, 0.14, 0.36), pow(f, 1.6)))
-		# stars / snow
-		for fl in flakes:
-			var x := fposmod(fl.x * w + sin(t * 0.7 + fl.y * 9.0) * 14.0, w)
-			var y := fposmod(fl.y * h * 0.8 + t * 22.0 * fl.z, h * 0.8)
-			draw_circle(Vector2(x, y), 1.0 + fl.z * 1.6, Color(1, 1, 1, 0.25 + 0.5 * fl.z))
-		# parallax mountains
-		for layer in 3:
-			var base := h * (0.58 + layer * 0.05)
-			var col := Color(0.09, 0.1, 0.22).lerp(Color(0.03, 0.04, 0.1), layer / 2.0)
-			var pts := PackedVector2Array()
-			pts.append(Vector2(0, h))
-			var step := 40.0
-			var off := t * (6.0 + layer * 10.0)
-			for k in int(w / step) + 3:
-				var x := k * step - fposmod(off, step * 8.0)
-				var seed_x := (k + int(off / (step * 8.0)) * 8)
-				var peak := 60.0 + 50.0 * absf(sin(seed_x * 1.7 + layer)) + 30.0 * layer
-				pts.append(Vector2(x, base - peak * (0.5 + 0.5 * sin(seed_x * 0.9))))
-			pts.append(Vector2(w + 100, h))
-			draw_colored_polygon(pts, col)
-		# road in perspective
-		var horizon := h * 0.74
-		draw_colored_polygon(PackedVector2Array([Vector2(w * 0.5 - 18, horizon), Vector2(w * 0.5 + 18, horizon), Vector2(w * 1.05, h), Vector2(-w * 0.05, h)]), Color(0.09, 0.09, 0.13))
-		for k in 9:
-			var f := fposmod(float(k) / 9.0 + t * 0.35, 1.0)
-			var y := horizon + (h - horizon) * f * f
-			var wd := 2.0 + 14.0 * f * f
-			draw_rect(Rect2(w * 0.5 - wd * 0.5, y, wd, 4.0 + 22.0 * f * f), Color(1, 1, 1, 0.5))
-		# little red car
-		var cx := w * 0.5 + sin(t * 0.9) * w * 0.07
-		var cy := h * 0.9 + sin(t * 9.0) * 1.5
-		draw_rect(Rect2(cx - 52, cy - 26, 104, 34), Color(0.82, 0.08, 0.08))
-		draw_rect(Rect2(cx - 34, cy - 50, 68, 26), Color(0.62, 0.05, 0.05))
-		draw_rect(Rect2(cx - 28, cy - 46, 56, 16), Color(0.1, 0.12, 0.2))
-		draw_rect(Rect2(cx - 60, cy - 6, 22, 16), Color(0.03, 0.03, 0.04))
-		draw_rect(Rect2(cx + 38, cy - 6, 22, 16), Color(0.03, 0.03, 0.04))
-		draw_rect(Rect2(cx - 48, cy - 20, 14, 8), Color(1.0, 0.9, 0.5, 0.9))
-		draw_rect(Rect2(cx + 34, cy - 20, 14, 8), Color(1.0, 0.9, 0.5, 0.9))
+		for i in 20:
+			var f := float(i) / 20.0
+			draw_rect(Rect2(0, h * f, w, h / 20.0 + 1), Color(0.035, 0.04, 0.052).lerp(Color(0.085, 0.09, 0.11), f))
+		# slow diagonal light streaks
+		for k in 7:
+			var x := fposmod(k * w / 6.0 + t * (14.0 + k * 3.0), w + 400.0) - 200.0
+			var a := 0.035 + 0.02 * sin(t * 0.7 + k)
+			draw_colored_polygon(PackedVector2Array([Vector2(x, 0), Vector2(x + 26, 0), Vector2(x - 220, h), Vector2(x - 246, h)]), Color(1.0, 0.47, 0.1, a))
 
 
-class Icon extends Control:
+class ModeIcon extends Control:
 	var kind := "solo"
-	var color := Color.WHITE
-	var t := 0.0
+	var hot := false
 
-	func _process(d: float) -> void:
-		t += d
-		queue_redraw()
+	func _init(k := "solo") -> void:
+		kind = k
+		custom_minimum_size = Vector2(70, 56)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _car(p: Vector2, col: Color) -> void:
+		draw_rect(Rect2(p.x - 16, p.y - 4, 32, 10), col)
+		draw_rect(Rect2(p.x - 9, p.y - 11, 18, 8), col)
+		draw_circle(p + Vector2(-9, 7), 3.2, Color(0.04, 0.045, 0.06))
+		draw_circle(p + Vector2(9, 7), 3.2, Color(0.04, 0.045, 0.06))
 
 	func _draw() -> void:
 		var c := size * 0.5
-		draw_circle(c, 46.0, color.darkened(0.55))
-		draw_arc(c, 46.0, 0.0, TAU, 40, color, 3.0)
-		var car := func(p: Vector2, col: Color) -> void:
-			draw_rect(Rect2(p.x - 15, p.y - 6, 30, 12), col)
-			draw_rect(Rect2(p.x - 9, p.y - 13, 18, 8), col.darkened(0.3))
+		var col := UI.ACCENT if hot else UI.TXT
 		match kind:
 			"solo":
-				car.call(c + Vector2(sin(t * 2.0) * 10.0, 0), Color(0.9, 0.15, 0.15))
+				_car(c, col)
 			"coop":
-				car.call(c + Vector2(0, 6), Color(0.9, 0.15, 0.15))
-				draw_circle(c + Vector2(-9, -16), 6, Color(0.93, 0.84, 0.7))
-				draw_circle(c + Vector2(9, -16), 6, Color(0.93, 0.84, 0.7))
+				_car(c + Vector2(0, 5), col)
+				draw_circle(c + Vector2(-5, -6), 3.5, col)
+				draw_circle(c + Vector2(5, -6), 3.5, col)
 			"teams":
-				car.call(c + Vector2(-10 + sin(t * 2.0) * 4.0, -12), SLOT_COLORS[0])
-				car.call(c + Vector2(10 - sin(t * 2.0) * 4.0, 14), SLOT_COLORS[1])
+				_car(c + Vector2(-6, -9), col)
+				_car(c + Vector2(6, 11), col.darkened(0.3))
 			"ffa":
-				for i in 3:
-					car.call(c + Vector2(-14 + fposmod(t * 30.0 + i * 20.0, 30.0) * 0.0 + sin(t * 3.0 + i) * 6.0, -18 + i * 18), SLOT_COLORS[i])
+				_car(c + Vector2(-8, -14), col)
+				_car(c + Vector2(4, 0), col.darkened(0.2))
+				_car(c + Vector2(-4, 14), col.darkened(0.4))
+
+
+## one game mode in the PLAY list
+class ModeRow extends Button:
+	var micon: ModeIcon
+
+	func _init(k: String, title: String, desc: String, cb: Callable) -> void:
+		custom_minimum_size = Vector2(0, 78)
+		size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var n := UI.sb(Color(0.075, 0.08, 0.1, 0.9), 8, UI.LINE, 1)
+		var hv := UI.sb(Color(0.13, 0.12, 0.12, 0.95), 8, UI.ACCENT, 2)
+		add_theme_stylebox_override("normal", n)
+		add_theme_stylebox_override("hover", hv)
+		add_theme_stylebox_override("pressed", hv)
+		add_theme_stylebox_override("focus", n)
+		pressed.connect(cb)
+		var h := HBoxContainer.new()
+		h.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		h.offset_left = 10
+		h.offset_right = -14
+		h.add_theme_constant_override("separation", 10)
+		h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(h)
+		micon = ModeIcon.new(k)
+		h.add_child(micon)
+		var v := VBoxContainer.new()
+		v.alignment = BoxContainer.ALIGNMENT_CENTER
+		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v.add_theme_constant_override("separation", 1)
+		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		h.add_child(v)
+		UI.lbl(v, title, 22, UI.TXT, false)
+		UI.lbl(v, desc, 14, UI.TXT2, false)
+		mouse_entered.connect(func():
+			micon.hot = true
+			micon.queue_redraw())
+		mouse_exited.connect(func():
+			micon.hot = false
+			micon.queue_redraw())
 
 
 class Spinner extends Control:
@@ -110,11 +113,8 @@ class Spinner extends Control:
 
 	func _draw() -> void:
 		var c := size * 0.5
-		draw_arc(c, 34.0, 0.0, TAU, 40, Color(1, 1, 1, 0.12), 8.0)
-		draw_arc(c, 34.0, t * 4.0, t * 4.0 + 1.6, 20, Color(1.0, 0.82, 0.25), 8.0)
-		draw_arc(c, 34.0, t * 4.0 + PI, t * 4.0 + PI + 0.8, 12, Color(1.0, 0.82, 0.25, 0.6), 8.0)
-		draw_rect(Rect2(c.x - 13, c.y - 5, 26, 10), Color(0.85, 0.1, 0.1))
-		draw_rect(Rect2(c.x - 7, c.y - 11, 14, 7), Color(0.6, 0.05, 0.05))
+		draw_arc(c, 30.0, 0.0, TAU, 40, Color(1, 1, 1, 0.1), 5.0)
+		draw_arc(c, 30.0, t * 4.0, t * 4.0 + 1.6, 20, UI.ACCENT, 5.0)
 
 
 # ====================================================================== state
@@ -122,10 +122,9 @@ class Spinner extends Control:
 var root_box: Control
 var panels := {}
 var current := "main"
-var name_text := ""
-var name_edit: LineEdit
 var ip_edit: LineEdit
 var status: Label
+var _status_tw: Tween
 var hosts_box: VBoxContainer
 var blind_check: CheckBox
 var setup_mode := ""
@@ -134,6 +133,7 @@ var count_row: HBoxContainer
 var setup_title: Label
 var setup_blind_row: Control
 var lobby_title: Label
+var lobby_sub: Label
 var lobby_slots: GridContainer
 var lobby_ips: Label
 var lobby_bar: ProgressBar
@@ -142,29 +142,41 @@ var cd_label: Label
 var ready_btn: Button
 var confirm_box: Control
 var room_hub: Hub
+var hub: Hub
+var hero: Preview3D
+var hero_name: Label
+var _hero_key := ""
 var _last_cd := -1
 var _t := 0.0
 var _backdrop: Backdrop
 
 
 func _ready() -> void:
-	name_text = "Player%d" % (randi() % 900 + 100)
 	Net.players_changed.connect(_refresh_lobby)
 	Net.hosts_changed.connect(_refresh_hosts)
 	Net.joined.connect(_show_lobby)
 	Net.join_failed.connect(_on_join_failed)
 	Net.lobby_closed.connect(_on_lobby_closed)
-	L.changed.connect(_build_ui)
+	L.changed.connect(_on_lang)
+	Profile.changed.connect(_refresh_hero)
 	Net.start_browsing()
 	_backdrop = Backdrop.new()
 	add_child(_backdrop)
+	status = UI.lbl(null, "", 22, Color.WHITE, false)
+	status.add_theme_stylebox_override("normal", UI.sb(Color(0, 0, 0, 0.9), 8, UI.ACCENT, 1))
+	status.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	status.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	status.position.y = 14
+	status.z_index = 60
+	status.modulate.a = 0.0
+	add_child(status)
 	if Net.in_room and not Net.players.is_empty():      # back from a race: the room stays open
 		current = "lobby"
 		Net.enter_room(Net.enter_ready)
 		Net.enter_ready = false
 	_build_ui()
 	if Net.pending_message != "":
-		status.text = Net.pending_message
+		_say(Net.pending_message)
 		Net.pending_message = ""
 
 
@@ -172,194 +184,93 @@ func _exit_tree() -> void:
 	Net.stop_browsing()
 
 
+func _say(text: String) -> void:
+	if status == null or not is_instance_valid(status):
+		return
+	status.text = "  " + text + "  "
+	if _status_tw:
+		_status_tw.kill()
+	_status_tw = status.create_tween()
+	_status_tw.tween_property(status, "modulate:a", 1.0, 0.15)
+	_status_tw.tween_interval(3.2)
+	_status_tw.tween_property(status, "modulate:a", 0.0, 0.4)
+
+
+func _on_lang() -> void:
+	# deferred: never rebuild the UI from inside a button callback of the old UI
+	_build_ui.call_deferred()
+
+
 func _process(d: float) -> void:
 	_t += d
-	if status:
-		status.visible = status.text != ""
-	if current == "lobby" and lobby_title:
-		var full := Net.players.size() >= Net.required_players
-		var base := L.t("waiting") if not full else (UI.tx("Press READY when you are set", "اضغط جاهز لما تخلص استعدادك") if Net.lobby_cd < 0.0 else UI.tx("Starting!", "بدأنا!"))
-		lobby_title.text = base + ("." .repeat(int(_t * 2.5) % 4) if not full else "")
+	if current == "lobby" and lobby_title and is_instance_valid(lobby_title):
+		_update_lobby_texts()
 		_update_countdown()
 		if lobby_bar:
 			var target := 100.0 * Net.players.size() / maxf(1.0, Net.required_players)
 			lobby_bar.value = lerpf(lobby_bar.value, target, clampf(d * 6.0, 0.0, 1.0))
 
 
-# ====================================================================== building blocks
-
-func _label(parent: Node, text: String, fs: int, color := Color.WHITE) -> Label:
-	var l := Label.new()
-	l.text = text
-	l.add_theme_font_size_override("font_size", fs)
-	l.add_theme_color_override("font_color", color)
-	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	parent.add_child(l)
-	return l
-
-
-func _sb(col: Color, radius := 18) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = col
-	sb.set_corner_radius_all(radius)
-	sb.content_margin_left = 18
-	sb.content_margin_right = 18
-	sb.content_margin_top = 10
-	sb.content_margin_bottom = 10
-	return sb
-
-
-func _hover_pop(c: Control, amount := 1.06) -> void:
-	c.resized.connect(func(): c.pivot_offset = c.size * 0.5)
-	c.mouse_entered.connect(func(): create_tween().tween_property(c, "scale", Vector2(amount, amount), 0.12))
-	c.mouse_exited.connect(func(): create_tween().tween_property(c, "scale", Vector2.ONE, 0.12))
-	if c is BaseButton:
-		(c as BaseButton).button_down.connect(func(): create_tween().tween_property(c, "scale", Vector2(0.96, 0.96), 0.06))
-
-
-func _button(parent: Node, text: String, col: Color, cb: Callable, fs := 26, min_size := Vector2(0, 62)) -> Button:
-	var b := Button.new()
-	b.text = text
-	b.custom_minimum_size = min_size
-	b.add_theme_font_size_override("font_size", fs)
-	b.add_theme_stylebox_override("normal", _sb(col))
-	b.add_theme_stylebox_override("hover", _sb(col.lightened(0.18)))
-	b.add_theme_stylebox_override("pressed", _sb(col.darkened(0.15)))
-	b.add_theme_stylebox_override("focus", _sb(col))
-	b.pressed.connect(cb)
-	_hover_pop(b)
-	parent.add_child(b)
-	return b
-
-
-func _card(parent: Node, kind: String, tkey: String, dkey: String, col: Color, cb: Callable) -> Button:
-	var b := Button.new()
-	b.custom_minimum_size = Vector2(270, 250)
-	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var n := _sb(NAVY.lightened(0.04), 24)
-	n.border_color = col
-	n.set_border_width_all(3)
-	b.add_theme_stylebox_override("normal", n)
-	var h := _sb(col.darkened(0.45), 24)
-	h.border_color = col.lightened(0.3)
-	h.set_border_width_all(4)
-	b.add_theme_stylebox_override("hover", h)
-	b.add_theme_stylebox_override("pressed", h)
-	b.add_theme_stylebox_override("focus", n)
-	b.pressed.connect(cb)
-	_hover_pop(b, 1.05)
-	var vb := VBoxContainer.new()
-	vb.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vb.add_theme_constant_override("separation", 6)
-	vb.alignment = BoxContainer.ALIGNMENT_CENTER
-	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	b.add_child(vb)
-	var ic := Icon.new()
-	ic.kind = kind
-	ic.color = col
-	ic.custom_minimum_size = Vector2(0, 100)
-	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vb.add_child(ic)
-	var t := _label(vb, L.t(tkey), 27, col.lightened(0.35))
-	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var d := _label(vb, L.t(dkey), 17, Color(0.8, 0.85, 0.95))
-	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	parent.add_child(b)
-	return b
-
-
-func _panel_frame() -> PanelContainer:
-	var p := PanelContainer.new()
-	var sb := _sb(Color(0.05, 0.06, 0.14, 0.82), 22)
-	sb.border_color = Color(1, 1, 1, 0.1)
-	sb.set_border_width_all(2)
-	p.add_theme_stylebox_override("panel", sb)
-	return p
-
-
 # ====================================================================== UI
 
 func _build_ui() -> void:
-	if name_edit:
-		name_text = name_edit.text
-	if root_box:
-		root_box.queue_free()
+	if root_box and is_instance_valid(root_box):
+		root_box.free()
+	hub = null
+	hero = null
+	room_hub = null
+	confirm_box = null
 	panels.clear()
 	layout_direction = Control.LAYOUT_DIRECTION_RTL if L.is_ar() else Control.LAYOUT_DIRECTION_LTR
-	root_box = MarginContainer.new()
-	root_box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var mc := MarginContainer.new()
+	mc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for side in ["left", "right", "top", "bottom"]:
-		root_box.add_theme_constant_override("margin_" + side, 14)
-	add_child(root_box)
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 12)
-	root_box.add_child(vb)
-
-	# header: title + name + language
-	var head := HBoxContainer.new()
-	head.add_theme_constant_override("separation", 16)
-	vb.add_child(head)
-	var tcol := VBoxContainer.new()
-	tcol.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(tcol)
-	var title := _label(tcol, L.t("title"), 38, GOLD)
-	title.add_theme_color_override("font_outline_color", Color(0.3, 0.1, 0.0))
-	title.add_theme_constant_override("outline_size", 8)
-	title.pivot_offset = Vector2(160, 30)
-	var tw := create_tween().set_loops()
-	tw.tween_property(title, "rotation", 0.012, 1.6).set_trans(Tween.TRANS_SINE)
-	tw.tween_property(title, "rotation", -0.012, 1.6).set_trans(Tween.TRANS_SINE)
-	_label(tcol, L.t("subtitle"), 15, Color(0.8, 0.85, 0.95))
-	var ncol := VBoxContainer.new()
-	head.add_child(ncol)
-	_label(ncol, L.t("name"), 12, Color(0.7, 0.75, 0.9))
-	name_edit = LineEdit.new()
-	name_edit.text = name_text
-	name_edit.max_length = 16
-	name_edit.custom_minimum_size = Vector2(230, 38)
-	name_edit.add_theme_font_size_override("font_size", 18)
-	ncol.add_child(name_edit)
-	var lb := _button(head, L.t("lang_btn"), Color(0.25, 0.28, 0.5), func(): L.set_lang("en" if L.is_ar() else "ar"), 22, Vector2(130, 56))
-	lb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	lb.custom_minimum_size = Vector2(120, 46)
-
-	status = _label(vb, "", 20, Color(1.0, 0.6, 0.5))
-	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status.visible = false
-
+		mc.add_theme_constant_override("margin_" + side, 12)
+	add_child(mc)
+	root_box = mc
 	var stack := Control.new()
-	stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vb.add_child(stack)
-	var hub := Hub.new()
+	mc.add_child(stack)
+	hub = Hub.new()
 	hub.tab_ids = ["play", "garage", "workshop", "character", "shop", "quests", "chests"]
 	hub.play_content = _build_main()
 	panels["main"] = hub
 	panels["setup"] = _build_setup()
 	panels["lobby"] = _build_lobby()
-	for k in panels:
-		var p: Control = panels[k]
-		p.set_anchors_preset(Control.PRESET_FULL_RECT)
-		stack.add_child(p)
-		p.visible = (k == current)
 	if current == "lobby" and not Net.is_hosting and Net.players.is_empty():
 		current = "main"
-		panels["main"].visible = true
-		panels["lobby"].visible = false
+	if current == "room_garage" or not panels.has(current):
+		current = "lobby" if Net.in_room and not Net.players.is_empty() else "main"
+	for k in panels:
+		var p: Control = panels[k]
+		stack.add_child(p)
+		p.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		p.visible = (k == current)
 	_refresh_hosts()
 	_refresh_lobby()
 	var root_p: Control = panels[current]
 	root_p.modulate.a = 0.0
-	create_tween().tween_property(root_p, "modulate:a", 1.0, 0.35)
+	root_p.create_tween().tween_property(root_p, "modulate:a", 1.0, 0.3)
 
 
 func _build_main() -> Control:
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 14)
-	var cards := HBoxContainer.new()
-	cards.add_theme_constant_override("separation", 16)
-	cards.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vb.add_child(cards)
+	var c := Control.new()
+	hero = Preview3D.new()
+	hero.hero = true
+	hero.custom_minimum_size = Vector2(10, 10)
+	hero.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	c.add_child(hero)
+	hero.ready.connect(func(): hero.show_car(Profile.loadout()))
+	_hero_key = ""
+	var h := HBoxContainer.new()
+	h.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	c.add_child(h)
+	var col := VBoxContainer.new()
+	col.custom_minimum_size = Vector2(470, 0)
+	col.add_theme_constant_override("separation", 8)
+	h.add_child(col)
+	var cap := UI.lbl(col, UI.tx("SELECT MODE", "اختر نمط اللعب"), 16, UI.ACCENT, false)
+	cap.add_theme_constant_override("outline_size", 0)
 	var specs := [
 		["solo", "solo", "solo_d", func(): _on_solo()],
 		["coop", "coop", "coop_d", func(): _open_setup("coop")],
@@ -367,58 +278,86 @@ func _build_main() -> Control:
 		["ffa", "ffa", "ffa_d", func(): _open_setup("ffa")],
 	]
 	for i in specs.size():
-		var c := _card(cards, specs[i][0], specs[i][1], specs[i][2], CARD_COLORS[i], specs[i][3])
-		# staggered pop-in
-		c.modulate.a = 0.0
-		c.position.y += 30
-		var tw := create_tween().set_parallel(true)
-		tw.tween_interval(0.08 * i)
-		tw.chain().tween_property(c, "modulate:a", 1.0, 0.35)
-	# join strip
-	var join := _panel_frame()
-	vb.add_child(join)
-	var jh := HBoxContainer.new()
-	jh.add_theme_constant_override("separation", 22)
-	join.add_child(jh)
-	var left := VBoxContainer.new()
-	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	jh.add_child(left)
-	_label(left, L.t("games_found"), 20, GOLD)
+		var r := ModeRow.new(specs[i][0], L.t(specs[i][1]), L.t(specs[i][2]), specs[i][3])
+		col.add_child(r)
+		r.modulate.a = 0.0
+		r.create_tween().tween_interval(0.07 * i)
+		r.create_tween().tween_property(r, "modulate:a", 1.0, 0.35).set_delay(0.07 * i)
+	# LAN strip
+	var join := UI.panel(col, UI.PANEL, 8)
+	var jv := VBoxContainer.new()
+	jv.add_theme_constant_override("separation", 6)
+	join.add_child(jv)
+	var jt := HBoxContainer.new()
+	jv.add_child(jt)
+	var ttl := UI.lbl(jt, L.t("games_found") + "  (LAN)", 16, UI.TXT, false)
+	ttl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hosts_box = VBoxContainer.new()
-	hosts_box.add_theme_constant_override("separation", 6)
-	left.add_child(hosts_box)
-	var right := VBoxContainer.new()
-	right.custom_minimum_size = Vector2(380, 0)
-	jh.add_child(right)
-	_label(right, L.t("join") + "  -  " + L.t("ip_hint"), 18, Color(0.8, 0.85, 0.95))
+	hosts_box.add_theme_constant_override("separation", 4)
+	jv.add_child(hosts_box)
 	var rr := HBoxContainer.new()
-	rr.add_theme_constant_override("separation", 10)
-	right.add_child(rr)
+	rr.add_theme_constant_override("separation", 8)
+	jv.add_child(rr)
 	ip_edit = LineEdit.new()
-	ip_edit.placeholder_text = "192.168.1.10"
-	ip_edit.custom_minimum_size = Vector2(0, 54)
+	ip_edit.placeholder_text = L.t("ip_hint") + "  192.168.1.10"
+	ip_edit.custom_minimum_size = Vector2(0, 44)
 	ip_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ip_edit.add_theme_font_size_override("font_size", 22)
+	ip_edit.add_theme_font_size_override("font_size", 18)
+	ip_edit.add_theme_stylebox_override("normal", UI.sb(Color(1, 1, 1, 0.06), 6, UI.LINE, 1))
+	ip_edit.add_theme_stylebox_override("focus", UI.sb(Color(1, 1, 1, 0.1), 6, UI.ACCENT, 1))
 	rr.add_child(ip_edit)
-	_button(rr, L.t("join_btn"), Color(0.15, 0.6, 0.3), func(): _join(ip_edit.text), 24, Vector2(120, 54))
-	return vb
+	UI.btn(rr, L.t("join_btn"), UI.ACCENT, func(): _join(ip_edit.text), 20, Vector2(110, 44))
+	# spacer + car info (the 3D car is behind everything)
+	var sp := Control.new()
+	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(sp)
+	var info := VBoxContainer.new()
+	info.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	info.alignment = BoxContainer.ALIGNMENT_END
+	info.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sp.add_child(info)
+	hero_name = UI.lbl(info, "", 26, UI.TXT, false)
+	hero_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var cb := UI.btn(null, UI.tx("CUSTOMIZE", "تخصيص"), UI.CARD2, func(): hub.select("garage"), 18, Vector2(220, 44))
+	cb.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	info.add_child(cb)
+	_update_hero_name()
+	return c
+
+
+func _update_hero_name() -> void:
+	if hero_name and is_instance_valid(hero_name):
+		var m: Dictionary = Catalog.CARS[Profile.car]
+		hero_name.text = Catalog.nm(m)
+		hero_name.add_theme_color_override("font_color", (Catalog.RARITY_COLOR[int(m["r"])] as Color).lightened(0.2))
+
+
+func _refresh_hero() -> void:
+	if hero == null or not is_instance_valid(hero) or hero.vp == null:
+		return
+	var key := JSON.stringify(Profile.loadout())
+	if key != _hero_key:
+		_hero_key = key
+		hero.show_car(Profile.loadout())
+		_update_hero_name()
 
 
 func _build_setup() -> Control:
 	var wrap := CenterContainer.new()
-	var p := _panel_frame()
-	p.custom_minimum_size = Vector2(760, 0)
+	var p := UI.panel(null, UI.PANEL, 12)
+	p.custom_minimum_size = Vector2(720, 0)
 	wrap.add_child(p)
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 18)
 	p.add_child(vb)
-	setup_title = _label(vb, "", 38, GOLD)
+	setup_title = UI.lbl(vb, "", 34, UI.TXT, false)
 	setup_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var q := _label(vb, L.t("choose"), 22, Color(0.8, 0.85, 0.95))
+	var q := UI.lbl(vb, L.t("choose"), 18, UI.TXT2, false)
 	q.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	count_row = HBoxContainer.new()
 	count_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	count_row.add_theme_constant_override("separation", 14)
+	count_row.add_theme_constant_override("separation", 12)
 	vb.add_child(count_row)
 	var bl := VBoxContainer.new()
 	vb.add_child(bl)
@@ -426,13 +365,13 @@ func _build_setup() -> Control:
 	blind_check = CheckBox.new()
 	blind_check.text = L.t("blind") + "  -  " + L.t("blind_d")
 	blind_check.button_pressed = true
-	blind_check.add_theme_font_size_override("font_size", 22)
+	blind_check.add_theme_font_size_override("font_size", 19)
 	bl.add_child(blind_check)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 14)
+	row.add_theme_constant_override("separation", 12)
 	vb.add_child(row)
-	_button(row, L.t("back"), Color(0.3, 0.32, 0.5), func(): _go("main"), 26, Vector2(180, 64))
-	var go := _button(row, L.t("start_host"), Color(0.15, 0.6, 0.3), _on_create, 28, Vector2(0, 64))
+	UI.btn(row, L.t("back"), UI.CARD2, func(): _go("main"), 22, Vector2(170, 56))
+	var go := UI.btn(row, L.t("start_host"), UI.ACCENT, _on_create, 24, Vector2(0, 56))
 	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return wrap
 
@@ -445,9 +384,9 @@ func _open_setup(mode: String) -> void:
 	setup_blind_row.visible = mode != "ffa"
 	if mode == "coop":
 		setup_count = 1
-		var l := _label(count_row, L.t("coop_d"), 26, Color(0.7, 0.95, 0.8))
+		var l := UI.lbl(count_row, L.t("coop_d"), 22, UI.TXT, false)
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		l.custom_minimum_size = Vector2(640, 96)
+		l.custom_minimum_size = Vector2(600, 80)
 		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	else:
 		var lo := 2
@@ -458,18 +397,17 @@ func _open_setup(mode: String) -> void:
 			var b := Button.new()
 			b.toggle_mode = true
 			b.button_group = group
-			b.custom_minimum_size = Vector2(96, 96)
+			b.custom_minimum_size = Vector2(88, 88)
 			b.text = str(n)
-			b.add_theme_font_size_override("font_size", 40)
-			b.add_theme_stylebox_override("normal", _sb(Color(0.15, 0.17, 0.3), 20))
-			b.add_theme_stylebox_override("hover", _sb(Color(0.25, 0.28, 0.45), 20))
-			b.add_theme_stylebox_override("pressed", _sb(Color(0.95, 0.7, 0.15), 20))
+			b.add_theme_font_size_override("font_size", 38)
+			b.add_theme_stylebox_override("normal", UI.sb(UI.CARD2, 8, UI.LINE, 1))
+			b.add_theme_stylebox_override("hover", UI.sb(UI.CARD2.lightened(0.1), 8, UI.LINE, 1))
+			b.add_theme_stylebox_override("pressed", UI.sb(UI.ACCENT, 8))
+			b.add_theme_stylebox_override("hover_pressed", UI.sb(UI.ACCENT, 8))
 			b.add_theme_color_override("font_pressed_color", Color.BLACK)
 			b.add_theme_color_override("font_hover_pressed_color", Color.BLACK)
-			b.add_theme_stylebox_override("hover_pressed", _sb(Color(1.0, 0.8, 0.3), 20))
 			b.button_pressed = (n == lo)
 			b.pressed.connect(func(): setup_count = n)
-			_hover_pop(b)
 			count_row.add_child(b)
 	_go("setup")
 
@@ -480,49 +418,59 @@ func _build_lobby() -> Control:
 	vb.add_theme_constant_override("separation", 12)
 	var top := HBoxContainer.new()
 	top.alignment = BoxContainer.ALIGNMENT_CENTER
-	top.add_theme_constant_override("separation", 20)
+	top.add_theme_constant_override("separation", 16)
 	vb.add_child(top)
 	var sp := Spinner.new()
-	sp.custom_minimum_size = Vector2(80, 80)
+	sp.custom_minimum_size = Vector2(70, 70)
 	top.add_child(sp)
-	lobby_title = _label(top, "", 36, GOLD)
-	lobby_title.custom_minimum_size = Vector2(620, 0)
-	cd_label = _label(vb, "", 96, Color(1.0, 0.9, 0.4))
+	var tv := VBoxContainer.new()
+	tv.add_theme_constant_override("separation", 2)
+	top.add_child(tv)
+	lobby_title = UI.lbl(tv, "", 32, UI.TXT, false)
+	lobby_title.custom_minimum_size = Vector2(560, 0)
+	lobby_sub = UI.lbl(tv, "", 17, UI.TXT2, false)
+	cd_label = UI.lbl(vb, "", 92, UI.ACCENT, false)
 	cd_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	cd_label.custom_minimum_size = Vector2(0, 110)
-	cd_label.add_theme_color_override("font_outline_color", Color(0.3, 0.1, 0.0))
-	cd_label.add_theme_constant_override("outline_size", 12)
-	cd_label.pivot_offset = Vector2(640, 55)
+	cd_label.custom_minimum_size = Vector2(0, 104)
+	cd_label.pivot_offset = Vector2(640, 52)
 	lobby_bar = ProgressBar.new()
-	lobby_bar.custom_minimum_size = Vector2(0, 14)
+	lobby_bar.custom_minimum_size = Vector2(0, 6)
 	lobby_bar.show_percentage = false
-	lobby_bar.add_theme_stylebox_override("fill", _sb(GOLD, 8))
-	lobby_bar.add_theme_stylebox_override("background", _sb(Color(1, 1, 1, 0.1), 8))
+	var lf := UI.sb(UI.ACCENT, 3)
+	var lb := UI.sb(Color(1, 1, 1, 0.1), 3)
+	for sbx in [lf, lb]:
+		sbx.content_margin_top = 0
+		sbx.content_margin_bottom = 0
+	lobby_bar.add_theme_stylebox_override("fill", lf)
+	lobby_bar.add_theme_stylebox_override("background", lb)
 	vb.add_child(lobby_bar)
 	lobby_slots = GridContainer.new()
 	lobby_slots.columns = 3
-	lobby_slots.add_theme_constant_override("h_separation", 14)
+	lobby_slots.add_theme_constant_override("h_separation", 12)
 	lobby_slots.add_theme_constant_override("v_separation", 10)
 	var cc := CenterContainer.new()
 	cc.add_child(lobby_slots)
 	vb.add_child(cc)
-	lobby_ips = _label(vb, "", 20, Color(0.7, 0.9, 1.0))
+	lobby_ips = UI.lbl(vb, "", 18, UI.TXT2, false)
 	lobby_ips.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 16)
+	row.add_theme_constant_override("separation", 14)
 	vb.add_child(row)
-	_button(row, UI.tx("< Back", "< رجوع"), Color(0.7, 0.2, 0.25), _ask_leave, 26, Vector2(190, 64))
-	_button(row, UI.tx("GARAGE / WORKSHOP", "الكراج / الورشة"), Color(0.2, 0.45, 0.9), _open_room_garage, 26, Vector2(330, 64))
-	ready_btn = _button(row, UI.tx("READY", "جاهز"), Color(0.15, 0.6, 0.3), _toggle_ready, 30, Vector2(260, 64))
-	ready_btn.toggle_mode = false
+	UI.btn(row, UI.tx("< Back", "< رجوع"), UI.CARD2, _ask_leave, 22, Vector2(170, 58))
+	UI.btn(row, UI.tx("GARAGE / WORKSHOP", "الكراج / الورشة"), UI.CARD2, _open_room_garage, 22, Vector2(310, 58))
+	ready_btn = UI.btn(row, UI.tx("READY", "جاهز"), UI.ACCENT, _toggle_ready, 26, Vector2(300, 58))
 	shown_slots = 0
 	return vb
 
 
 func _toggle_ready() -> void:
 	var me := multiplayer.get_unique_id()
-	Net.toggle_ready(not Net.rdy.get(me, false))
+	var now: bool = not Net.rdy.get(me, false)
+	Net.toggle_ready(now)
+	Sfx.play("click")
+	_refresh_lobby()
+	_update_countdown()
 
 
 func _open_room_garage() -> void:
@@ -539,7 +487,7 @@ func _open_room_garage() -> void:
 	panels["lobby"].visible = false
 	current = "room_garage"
 	room_hub.modulate.a = 0.0
-	create_tween().tween_property(room_hub, "modulate:a", 1.0, 0.25)
+	room_hub.create_tween().tween_property(room_hub, "modulate:a", 1.0, 0.25)
 
 
 func _close_room_garage() -> void:
@@ -558,7 +506,7 @@ func _ask_leave() -> void:
 	if confirm_box and is_instance_valid(confirm_box):
 		return
 	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.7)
+	dim.color = Color(0, 0, 0, 0.75)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	dim.z_index = 50
 	add_child(dim)
@@ -566,28 +514,51 @@ func _ask_leave() -> void:
 	var cc := CenterContainer.new()
 	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	dim.add_child(cc)
-	var p := _panel_frame()
-	p.custom_minimum_size = Vector2(620, 0)
+	var p := UI.panel(null, UI.PANEL, 12)
+	p.custom_minimum_size = Vector2(600, 0)
 	cc.add_child(p)
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 18)
 	p.add_child(vb)
-	var t := _label(vb, UI.tx("Are you sure you want to leave the room?", "هل أنت متأكد أنك تريد الخروج من الغرفة؟"), 32, GOLD)
+	var t := UI.lbl(vb, UI.tx("Are you sure you want to leave the room?", "هل أنت متأكد أنك تريد الخروج من الغرفة؟"), 28, UI.TXT)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	if Net.is_hosting and Net.players.size() > 1:
-		var w := _label(vb, UI.tx("You are the host: the room will close for everyone.", "أنت صاحب الغرفة: الغرفة بتتقفل على الكل."), 20, Color(1.0, 0.65, 0.5))
+		var w := UI.lbl(vb, UI.tx("You are the host: the room will close for everyone.", "أنت صاحب الغرفة: الغرفة بتتقفل على الكل."), 17, Color(1.0, 0.65, 0.5))
 		w.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 14)
+	row.add_theme_constant_override("separation", 12)
 	vb.add_child(row)
-	var no := _button(row, UI.tx("Stay", "ابقَ"), Color(0.3, 0.32, 0.5), func(): dim.queue_free(), 26, Vector2(0, 64))
+	var no := UI.btn(row, UI.tx("Stay", "ابقَ"), UI.CARD2, func(): dim.queue_free(), 22, Vector2(0, 58))
 	no.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var yes := _button(row, UI.tx("Confirm", "تأكيد"), Color(0.75, 0.2, 0.25), func():
+	var yes := UI.btn(row, UI.tx("Confirm", "تأكيد"), UI.RED, func():
 		dim.queue_free()
-		_on_cancel(), 26, Vector2(0, 64))
+		_on_cancel(), 22, Vector2(0, 58))
 	yes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dim.modulate.a = 0.0
-	create_tween().tween_property(dim, "modulate:a", 1.0, 0.15)
+	dim.create_tween().tween_property(dim, "modulate:a", 1.0, 0.15)
+
+
+func _update_lobby_texts() -> void:
+	var req := maxi(1, Net.required_players)
+	var full := Net.players.size() >= req
+	var me := multiplayer.get_unique_id()
+	var mine: bool = Net.rdy.get(me, false)
+	var n_ready := 0
+	for id in Net.players:
+		if Net.rdy.get(id, false):
+			n_ready += 1
+	if not full:
+		lobby_title.text = L.t("waiting") + ".".repeat(int(_t * 2.5) % 4)
+		lobby_sub.text = UI.tx("%d / %d players   -   you can press READY now", "%d / %d لاعبين   -   تقدر تضغط جاهز من الحين") % [Net.players.size(), req]
+	elif Net.lobby_cd >= 0.0:
+		lobby_title.text = UI.tx("Everyone is ready!", "الكل جاهز!")
+		lobby_sub.text = UI.tx("Race starts in...", "السباق يبدأ بعد...")
+	elif mine:
+		lobby_title.text = UI.tx("You are READY", "أنت جاهز")
+		lobby_sub.text = UI.tx("Waiting for the others...  (%d / %d ready)", "بانتظار الباقين...  (%d / %d جاهزين)") % [n_ready, req]
+	else:
+		lobby_title.text = UI.tx("Get ready", "استعد")
+		lobby_sub.text = UI.tx("Customize in the garage, then press READY  (%d / %d ready)", "غيّر شكلك في الكراج ثم اضغط جاهز  (%d / %d جاهزين)") % [n_ready, req]
 
 
 func _update_countdown() -> void:
@@ -600,21 +571,21 @@ func _update_countdown() -> void:
 		if n > 0:
 			Sfx.play("beep", 0.0, 1.0 + (5 - n) * 0.05)
 			cd_label.scale = Vector2(1.6, 1.6)
-			create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).tween_property(cd_label, "scale", Vector2.ONE, 0.35)
+			cd_label.create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).tween_property(cd_label, "scale", Vector2.ONE, 0.35)
 	if ready_btn and is_instance_valid(ready_btn):
 		var me := multiplayer.get_unique_id()
 		var is_r: bool = Net.rdy.get(me, false)
-		ready_btn.text = UI.tx("NOT READY", "إلغاء الاستعداد") if is_r else UI.tx("READY", "جاهز")
-		var col := Color(0.8, 0.5, 0.1) if is_r else Color(0.15, 0.6, 0.3)
-		ready_btn.add_theme_stylebox_override("normal", _sb(col))
-		ready_btn.add_theme_stylebox_override("hover", _sb(col.lightened(0.18)))
-		ready_btn.disabled = Net.players.size() < Net.required_players
+		ready_btn.text = (UI.tx("READY  -  tap to cancel", "جاهز  -  اضغط للإلغاء")) if is_r else UI.tx("READY", "جاهز")
+		var col := Color(0.16, 0.5, 0.3) if is_r else UI.ACCENT
+		ready_btn.add_theme_stylebox_override("normal", UI.sb(col))
+		ready_btn.add_theme_stylebox_override("hover", UI.sb(col.lightened(0.15)))
+		ready_btn.disabled = false
 
 
 # ====================================================================== navigation
 
 func _go(to: String) -> void:
-	if to == current:
+	if to == current or not panels.has(to):
 		return
 	if current == "room_garage":
 		if room_hub and is_instance_valid(room_hub):
@@ -625,22 +596,21 @@ func _go(to: String) -> void:
 		panels["lobby"].visible = true
 		if to == "lobby":
 			return
-	var from_p: Control = panels[current]
 	var to_p: Control = panels[to]
-	var tw := create_tween()
-	tw.tween_property(from_p, "modulate:a", 0.0, 0.15)
-	await tw.finished
-	from_p.visible = false
+	current = to
+	for k in panels:
+		var pp: Control = panels[k]
+		if pp != to_p:
+			pp.visible = false
 	to_p.visible = true
 	to_p.modulate.a = 0.0
-	current = to
-	create_tween().tween_property(to_p, "modulate:a", 1.0, 0.25)
+	to_p.create_tween().tween_property(to_p, "modulate:a", 1.0, 0.22)
 
 
 # ====================================================================== actions
 
 func _my_name() -> String:
-	var n := name_edit.text.strip_edges()
+	var n := Profile.pname.strip_edges()
 	return n if n != "" else "Player"
 
 
@@ -654,7 +624,7 @@ func _on_create() -> void:
 		"ffa":
 			err = Net.host_game(_my_name(), 0, false, setup_count)
 	if err != OK:
-		status.text = L.t("err_host")
+		_say(L.t("err_host"))
 		_go("main")
 		return
 	_show_lobby()
@@ -663,19 +633,19 @@ func _on_create() -> void:
 func _on_solo() -> void:
 	var err := Net.host_game(_my_name(), 0, false)
 	if err != OK:
-		status.text = L.t("err_host")
+		_say(L.t("err_host"))
 		return
 	_show_lobby()
 
 
 func _join(ip: String) -> void:
 	if ip.strip_edges() == "":
-		status.text = L.t("err_ip")
+		_say(L.t("err_ip"))
 		return
-	status.text = L.t("connecting")
+	_say(L.t("connecting"))
 	var err := Net.join_game(ip, _my_name())
 	if err != OK:
-		status.text = L.t("err_addr")
+		_say(L.t("err_addr"))
 
 
 func _on_cancel() -> void:
@@ -684,19 +654,20 @@ func _on_cancel() -> void:
 
 
 func _on_join_failed() -> void:
-	status.text = L.t("err_conn")
+	_say(L.t("err_conn"))
 	if current != "main":
 		_go("main")
 
 
 func _on_lobby_closed(reason: String) -> void:
-	status.text = reason
+	_say(reason)
 	if current != "main":
 		_go("main")
 
 
 func _show_lobby() -> void:
-	status.text = ""
+	if status:
+		status.modulate.a = 0.0
 	shown_slots = 0
 	_go("lobby")
 	_refresh_lobby()
@@ -712,35 +683,51 @@ func _refresh_lobby() -> void:
 	lobby_slots.columns = 3 if req > 4 else 2 if req > 1 else 1
 	for i in req:
 		var p := PanelContainer.new()
-		p.custom_minimum_size = Vector2(380, 84)
+		p.custom_minimum_size = Vector2(360, 82)
 		lobby_slots.add_child(p)
-		var l := Label.new()
-		l.add_theme_font_size_override("font_size", 20)
-		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 10)
+		p.add_child(h)
 		if i < rows.size():
 			var r: Dictionary = rows[i]
 			var col: Color = SLOT_COLORS[int(r["team"]) % 6]
-			var tag := "[%s]" % L.t("host_tag") if r["host"] else ""
-			l.text = "%s %s  -  %s %s\n%s  (%s)    %s" % [L.t("team"), char(65 + int(r["team"])), r["name"], tag, r["car"], r["role"],
-				UI.tx("READY", "جاهز") if r["ready"] else (UI.tx("in garage...", "في الكراج...") if not r["present"] else UI.tx("not ready", "غير جاهز"))]
-			l.add_theme_color_override("font_color", Color(0.6, 1.0, 0.7) if r["ready"] else Color.WHITE)
-			var sbx := _sb(col.darkened(0.35), 16)
+			var bar := ColorRect.new()
+			bar.color = col
+			bar.custom_minimum_size = Vector2(5, 0)
+			h.add_child(bar)
+			var v := VBoxContainer.new()
+			v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			v.alignment = BoxContainer.ALIGNMENT_CENTER
+			v.add_theme_constant_override("separation", 1)
+			h.add_child(v)
+			var tag := "   [%s]" % L.t("host_tag") if r["host"] else ""
+			UI.lbl(v, "%s%s" % [r["name"], tag], 21, UI.TXT, false)
+			var sub := "%s  -  %s" % [r["car"], r["role"]]
+			if not Net.ffa and req > 1:
+				sub = "%s %s  -  %s" % [L.t("team"), char(65 + int(r["team"])), sub]
+			UI.lbl(v, sub, 14, UI.TXT2, false)
+			var st := UI.lbl(h, "", 16, UI.TXT2, false)
+			st.custom_minimum_size = Vector2(96, 0)
+			st.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			var sbx := UI.sb(UI.PANEL, 8, UI.LINE, 1)
 			if r["ready"]:
-				sbx.border_color = Color(0.3, 1.0, 0.5)
-				sbx.set_border_width_all(3)
+				st.text = UI.tx("READY", "جاهز")
+				st.add_theme_color_override("font_color", UI.OK)
+				sbx = UI.sb(Color(0.08, 0.14, 0.11, 0.95), 8, UI.OK, 2)
+			elif not r["present"]:
+				st.text = UI.tx("in garage", "في الكراج")
+			else:
+				st.text = UI.tx("not ready", "غير جاهز")
 			p.add_theme_stylebox_override("panel", sbx)
 			if i >= shown_slots:
 				p.pivot_offset = p.custom_minimum_size * 0.5
-				p.scale = Vector2(0.6, 0.6)
-				create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).tween_property(p, "scale", Vector2.ONE, 0.4)
+				p.scale = Vector2(0.7, 0.7)
+				p.create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).tween_property(p, "scale", Vector2.ONE, 0.35)
 		else:
-			l.text = "...  " + L.t("empty_slot")
-			l.add_theme_color_override("font_color", Color(0.6, 0.65, 0.8))
-			var sb2 := _sb(Color(1, 1, 1, 0.05), 16)
-			sb2.border_color = Color(1, 1, 1, 0.2)
-			sb2.set_border_width_all(2)
+			var l := UI.lbl(h, "...  " + L.t("empty_slot"), 17, UI.TXT2, false)
+			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			var sb2 := UI.sb(Color(1, 1, 1, 0.03), 8, UI.LINE, 1)
 			p.add_theme_stylebox_override("panel", sb2)
-		p.add_child(l)
 	shown_slots = rows.size()
 	if Net.is_hosting:
 		lobby_ips.text = L.t("tell_friends") + "   " + "   ".join(Net.local_ips())
@@ -754,9 +741,9 @@ func _refresh_hosts() -> void:
 	for c in hosts_box.get_children():
 		c.queue_free()
 	if Net.found_hosts.is_empty():
-		_label(hosts_box, L.t("none_found"), 18, Color(0.6, 0.65, 0.75))
+		UI.lbl(hosts_box, L.t("none_found"), 15, UI.TXT2, false)
 		return
 	for ip in Net.found_hosts:
 		var h: Dictionary = Net.found_hosts[ip]
 		var text := "%s   %d/%d   (%s)" % [h["name"], h["count"], h["required"], ip]
-		_button(hosts_box, text, Color(0.2, 0.35, 0.6), _join.bind(ip), 20, Vector2(0, 46))
+		UI.btn(hosts_box, text, UI.CARD2, _join.bind(ip), 17, Vector2(0, 40))

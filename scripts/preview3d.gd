@@ -8,6 +8,7 @@ var cam: Camera3D
 var car: Car
 var avatar: Avatar
 var spin := true
+var hero := false             # big menu background showroom
 var yaw := 0.4
 var _drag := false
 var _t := 0.0
@@ -17,7 +18,7 @@ var _ring: MeshInstance3D
 
 func _init() -> void:
 	stretch = true
-	custom_minimum_size = Vector2(440, 360)
+	custom_minimum_size = Vector2(340, 300)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
 
@@ -30,9 +31,9 @@ func _ready() -> void:
 	var env := WorldEnvironment.new()
 	var e := Environment.new()
 	e.background_mode = Environment.BG_COLOR
-	e.background_color = Color(0.09, 0.1, 0.2)
+	e.background_color = Color(0.05, 0.055, 0.07)
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color(0.75, 0.8, 0.95)
+	e.ambient_light_color = Color(0.8, 0.84, 0.92)
 	e.ambient_light_energy = 0.85
 	env.environment = e
 	vp.add_child(env)
@@ -43,7 +44,7 @@ func _ready() -> void:
 	var rim := DirectionalLight3D.new()
 	rim.rotation_degrees = Vector3(-20, 150, 0)
 	rim.light_energy = 0.6
-	rim.light_color = Color(0.6, 0.7, 1.0)
+	rim.light_color = Color(1.0, 0.6, 0.35)
 	vp.add_child(rim)
 	cam = Camera3D.new()
 	cam.fov = 38.0
@@ -57,7 +58,7 @@ func _ready() -> void:
 	cm.radial_segments = 40
 	pod.mesh = cm
 	var pm := StandardMaterial3D.new()
-	pm.albedo_color = Color(0.13, 0.14, 0.24)
+	pm.albedo_color = Color(0.1, 0.105, 0.125)
 	pm.roughness = 0.5
 	pod.material_override = pm
 	pod.position.y = -0.1
@@ -79,10 +80,34 @@ func _ready() -> void:
 	vp.add_child(_ring)
 	pivot = Node3D.new()
 	vp.add_child(pivot)
+	if hero:
+		var fog_e := e
+		fog_e.fog_enabled = true
+		fog_e.fog_light_color = Color(0.05, 0.055, 0.07)
+		fog_e.fog_density = 0.012
+		var side := -1.0 if L.is_ar() else 1.0
+		pod.mesh.set("top_radius", 3.9)
+		pod.mesh.set("bottom_radius", 4.1)
+		(_ring.mesh as TorusMesh).inner_radius = 3.86
+		(_ring.mesh as TorusMesh).outer_radius = 3.93
+		pod.position.x = 3.0 * side
+		_ring.position.x = 3.0 * side
+		pivot.position.x = 3.0 * side
+		var spot := SpotLight3D.new()
+		spot.position = Vector3(0, 9, 3)
+		spot.rotation_degrees = Vector3(-90, 0, 0)
+		spot.spot_range = 20.0
+		spot.spot_angle = 38.0
+		spot.light_energy = 2.4
+		vp.add_child(spot)
 	_frame_car()
 
 
 func _frame_car() -> void:
+	if hero:
+		cam.position = Vector3(0, 3.5, 13.6)
+		cam.look_at(Vector3(0, 0.9, 0))
+		return
 	cam.position = Vector3(0, 3.8, 10.6)
 	cam.look_at(Vector3(0, 0.9, 0))
 
@@ -106,6 +131,7 @@ func show_car(lo: Dictionary) -> void:
 	car = Car.new()
 	car.setup(0, Color(0.2, 0.8, 0.3), false, lo, true)
 	pivot.add_child(car)
+	car.set_plate_text(Profile.pname)
 	var rar := int(Catalog.CARS.get(lo.get("car", "hatch"), Catalog.CARS["hatch"])["r"])
 	((_ring.material_override) as StandardMaterial3D).albedo_color = Catalog.RARITY_COLOR[rar]
 	((_ring.material_override) as StandardMaterial3D).emission = Catalog.RARITY_COLOR[rar]
@@ -135,8 +161,12 @@ func play_emote(id: String) -> void:
 func _process(d: float) -> void:
 	_t += d
 	if spin and not _drag:
-		yaw += d * 0.55
+		yaw += d * (0.3 if hero else 0.55)
 	pivot.rotation.y = yaw
+	if hero:
+		pivot.position.y = sin(_t * 1.6) * 0.025
+		cam.position.x = sin(_t * 0.35) * 0.8
+		cam.look_at(Vector3(0, 0.9, 0))
 	if avatar and avatar.emote == "spin":
 		pass
 	if _flash > 0.0:

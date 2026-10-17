@@ -11,6 +11,7 @@ const DARK := Color(0.12, 0.12, 0.16)
 const NAVY := Color(0.1, 0.12, 0.25)
 
 var team := 0
+var plate_labels: Array = []
 var body_color := Color(0.78, 0.08, 0.08)
 var speed_kmh := 0.0
 var steer_target := 0.0
@@ -268,6 +269,7 @@ func _build_visuals() -> void:
 	# team letter on the roof and on the back
 	for spec in [[Vector3(0, 2.03, 0.35), Vector3(-90, 0, 0)], [Vector3(0, 1.3, 1.42), Vector3(0, 0, 0)]]:
 		var lab := Label3D.new()
+		plate_labels.append(lab)
 		lab.text = char(65 + team)
 		lab.font_size = 160
 		lab.pixel_size = 0.006
@@ -654,3 +656,13 @@ func explode_fx() -> void:
 	if body_mat:
 		charred = true
 		body_mat.albedo_color = body_color.darkened(0.75)
+
+
+## the roof / back plate shows the driver's name instead of the team letter
+func set_plate_text(txt: String) -> void:
+	var n := txt.length()
+	for l in plate_labels:
+		var lab := l as Label3D
+		lab.text = txt
+		lab.font_size = 150 if n <= 1 else int(clampf(190.0 - 16.0 * n, 40.0, 120.0))
+		lab.width = 900.0

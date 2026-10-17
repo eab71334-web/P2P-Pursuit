@@ -18,6 +18,7 @@ var coin_label: Label
 var gem_label: Label
 var toast: Label
 var preview: Preview3D
+var name_edit: LineEdit
 var g_car := "hatch"           # car being looked at in the garage
 var browser_slot := ""
 var browser_id := ""
@@ -33,7 +34,7 @@ class LevelBadge extends Control:
 	var t := 0.0
 
 	func _init() -> void:
-		custom_minimum_size = Vector2(64, 64)
+		custom_minimum_size = Vector2(52, 52)
 
 	func _process(d: float) -> void:
 		t += d
@@ -41,89 +42,219 @@ class LevelBadge extends Control:
 
 	func _draw() -> void:
 		var c := size * 0.5
-		draw_circle(c, 30.0, Color(0.12, 0.14, 0.3))
-		draw_arc(c, 30.0, 0.0, TAU, 40, UI.GOLD, 4.0)
-		draw_arc(c, 24.0, t, t + 1.2, 12, Color(1, 0.9, 0.5, 0.7), 3.0)
+		# hexagon badge
+		var pts := PackedVector2Array()
+		for k in 7:
+			var a := TAU * k / 6.0 + PI / 6.0
+			pts.append(c + Vector2(cos(a), sin(a)) * 25.0)
+		draw_colored_polygon(pts.slice(0, 6), Color(0.12, 0.13, 0.17))
+		draw_polyline(pts, UI.ACCENT, 2.5)
 		var f := ThemeDB.fallback_font
 		var s := str(level)
-		var sz := f.get_string_size(s, HORIZONTAL_ALIGNMENT_CENTER, -1, 28)
-		draw_string(f, c + Vector2(-sz.x * 0.5, 10), s, HORIZONTAL_ALIGNMENT_CENTER, -1, 28, UI.GOLD)
+		var sz := f.get_string_size(s, HORIZONTAL_ALIGNMENT_CENTER, -1, 24)
+		draw_string(f, c + Vector2(-sz.x * 0.5, 8), s, HORIZONTAL_ALIGNMENT_CENTER, -1, 24, UI.TXT)
+
+
+## sidebar entry: flat button, accent bar on the active one, small drawn icon
+class NavItem extends Button:
+	var kind := ""
+	var active := false:
+		set(v):
+			active = v
+			add_theme_color_override("font_color", UI.TXT if v else UI.TXT2)
+			queue_redraw()
+
+	func _init(k := "") -> void:
+		kind = k
+		custom_minimum_size = Vector2(0, 54)
+		alignment = HORIZONTAL_ALIGNMENT_LEFT
+		add_theme_font_size_override("font_size", 20)
+		var n := UI.sb(Color(0, 0, 0, 0), 6)
+		n.content_margin_left = 58
+		n.content_margin_right = 58
+		add_theme_stylebox_override("normal", n)
+		var h := UI.sb(Color(1, 1, 1, 0.06), 6)
+		h.content_margin_left = 58
+		h.content_margin_right = 58
+		add_theme_stylebox_override("hover", h)
+		add_theme_stylebox_override("pressed", h)
+		add_theme_stylebox_override("focus", n)
+		add_theme_color_override("font_color", UI.TXT2)
+		add_theme_color_override("font_hover_color", UI.TXT)
+
+	func _draw() -> void:
+		var rtl := is_layout_rtl()
+		var col := UI.ACCENT if active else UI.TXT2
+		if active:
+			draw_rect(Rect2(0, 0, size.x, size.y), Color(1.0, 0.47, 0.1, 0.12))
+			draw_rect(Rect2(size.x - 4 if rtl else 0, 6, 4, size.y - 12), UI.ACCENT)
+		var c := Vector2(size.x - 30 if rtl else 30, size.y * 0.5)
+		match kind:
+			"play":
+				draw_colored_polygon(PackedVector2Array([c + Vector2(-7, -10), c + Vector2(10, 0), c + Vector2(-7, 10)]), col)
+			"garage":
+				draw_rect(Rect2(c.x - 12, c.y - 2, 24, 8), col)
+				draw_rect(Rect2(c.x - 7, c.y - 8, 14, 7), col)
+				draw_circle(c + Vector2(-7, 7), 3.5, UI.BG)
+				draw_circle(c + Vector2(7, 7), 3.5, UI.BG)
+				draw_arc(c + Vector2(-7, 7), 3.5, 0, TAU, 12, col, 1.5)
+				draw_arc(c + Vector2(7, 7), 3.5, 0, TAU, 12, col, 1.5)
+			"workshop":
+				draw_arc(c, 8, 0, TAU, 16, col, 3.0)
+				for k in 6:
+					var a := TAU * k / 6.0
+					draw_line(c + Vector2(cos(a), sin(a)) * 8, c + Vector2(cos(a), sin(a)) * 12, col, 3.5)
+			"character":
+				draw_circle(c + Vector2(0, -6), 5, col)
+				draw_rect(Rect2(c.x - 8, c.y + 1, 16, 10), col)
+			"shop":
+				draw_rect(Rect2(c.x - 10, c.y - 4, 20, 14), col)
+				draw_arc(c + Vector2(0, -4), 5, PI, TAU, 10, col, 2.0)
+			"quests":
+				for k in 3:
+					draw_rect(Rect2(c.x - 11, c.y - 9 + k * 8, 4, 4), col)
+					draw_rect(Rect2(c.x - 4, c.y - 8 + k * 8, 15, 2.5), col)
+			"chests":
+				draw_rect(Rect2(c.x - 11, c.y - 2, 22, 12), col)
+				draw_rect(Rect2(c.x - 11, c.y - 9, 22, 7), col.darkened(0.25))
+				draw_rect(Rect2(c.x - 2, c.y - 3, 4, 6), UI.BG)
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	Profile.changed.connect(_update_top)
-	Profile.leveled.connect(func(lv: int, r: Dictionary): _pending_levelups.append([lv, r]))
+	Profile.leveled.connect(_on_leveled)
 	_build()
 	select(tab_ids[0])
 
 
+func _on_leveled(lv: int, r: Dictionary) -> void:
+	_pending_levelups.append([lv, r])
+
+
 func _build() -> void:
+	var root := HBoxContainer.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_theme_constant_override("separation", 12)
+	add_child(root)
+	# ---- sidebar
+	var side := UI.panel(root, UI.PANEL, 10)
+	side.custom_minimum_size = Vector2(228, 0)
+	var sv := VBoxContainer.new()
+	sv.add_theme_constant_override("separation", 4)
+	side.add_child(sv)
+	var logo := VBoxContainer.new()
+	logo.add_theme_constant_override("separation", 0)
+	sv.add_child(logo)
+	UI.lbl(logo, "CO-DRIVER", 25, UI.TXT, false)
+	var rl := UI.lbl(logo, "RALLY", 25, UI.ACCENT, false)
+	rl.add_theme_constant_override("outline_size", 0)
+	if L.is_ar():
+		logo.get_child(0).text = "رالي"
+		rl.text = "السائق المساعد"
+		rl.add_theme_font_size_override("font_size", 21)
+	var bar := ColorRect.new()
+	bar.color = UI.ACCENT
+	bar.custom_minimum_size = Vector2(46, 3)
+	sv.add_child(bar)
+	var sp0 := Control.new()
+	sp0.custom_minimum_size = Vector2(0, 10)
+	sv.add_child(sp0)
+	var names := {"play": ["PLAY", "العب"], "garage": ["GARAGE", "الكراج"], "workshop": ["WORKSHOP", "الورشة"], "character": ["CHARACTER", "الشخصية"],
+		"shop": ["SHOP", "المتجر"], "quests": ["QUESTS", "المهام"], "chests": ["CHESTS", "الصناديق"]}
+	for id in tab_ids:
+		var b := NavItem.new(id)
+		b.text = UI.tx(names[id][0], names[id][1])
+		b.pressed.connect(func():
+			Sfx.play("click", -8.0)
+			select(id))
+		sv.add_child(b)
+		nav_btns[id] = b
+	var grow := Control.new()
+	grow.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sv.add_child(grow)
+	if in_room:
+		UI.btn(sv, UI.tx("< Back to room", "< رجوع للغرفة"), UI.ACCENT, func(): closed.emit(), 20, Vector2(0, 50))
+	else:
+		UI.btn(sv, L.t("lang_btn"), UI.CARD2, func(): L.set_lang("en" if L.is_ar() else "ar"), 18, Vector2(0, 42))
+	# ---- main column
 	var vb := VBoxContainer.new()
-	vb.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vb.add_theme_constant_override("separation", 10)
-	add_child(vb)
-	# ---- top bar
-	var top := UI.panel(vb, Color(0.05, 0.06, 0.14, 0.9), 18)
+	root.add_child(vb)
+	var top := UI.panel(vb, UI.PANEL, 10)
 	var th := HBoxContainer.new()
 	th.add_theme_constant_override("separation", 14)
 	top.add_child(th)
-	if in_room:
-		UI.btn(th, UI.tx("< Back to room", "< رجوع للغرفة"), UI.BLUE, func(): closed.emit(), 22, Vector2(200, 50))
 	var badge := LevelBadge.new()
 	badge.name = "badge"
 	th.add_child(badge)
+	var pv := VBoxContainer.new()
+	pv.add_theme_constant_override("separation", 0)
+	pv.custom_minimum_size = Vector2(190, 0)
+	th.add_child(pv)
+	name_edit = LineEdit.new()
+	name_edit.text = Profile.pname
+	name_edit.max_length = 14
+	name_edit.flat = true
+	name_edit.select_all_on_focus = true
+	name_edit.add_theme_font_size_override("font_size", 21)
+	name_edit.add_theme_color_override("font_color", UI.TXT)
+	name_edit.add_theme_stylebox_override("normal", UI.sb(Color(1, 1, 1, 0.05), 6))
+	name_edit.add_theme_stylebox_override("focus", UI.sb(Color(1, 1, 1, 0.1), 6, UI.ACCENT, 1))
+	name_edit.text_changed.connect(_on_name)
+	name_edit.text_submitted.connect(func(_t): name_edit.release_focus())
+	name_edit.focus_exited.connect(func(): _on_name(name_edit.text, true))
+	name_edit.editable = not in_room
+	pv.add_child(name_edit)
+	lv_label = UI.lbl(pv, "", 14, UI.TXT2, false)
 	var xv := VBoxContainer.new()
 	xv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	xv.alignment = BoxContainer.ALIGNMENT_CENTER
 	th.add_child(xv)
-	lv_label = UI.lbl(xv, "", 20, UI.GOLD, false)
 	xp_bar = ProgressBar.new()
-	xp_bar.custom_minimum_size = Vector2(0, 14)
+	xp_bar.custom_minimum_size = Vector2(0, 8)
 	xp_bar.show_percentage = false
-	xp_bar.add_theme_stylebox_override("fill", UI.sb(UI.GOLD, 7))
-	xp_bar.add_theme_stylebox_override("background", UI.sb(Color(1, 1, 1, 0.12), 7))
+	xp_bar.add_theme_stylebox_override("fill", UI.sb(UI.ACCENT, 4))
+	xp_bar.add_theme_stylebox_override("background", UI.sb(Color(1, 1, 1, 0.1), 4))
 	xv.add_child(xp_bar)
-	xp_label = UI.lbl(xv, "", 14, UI.TXT2, false)
-	var cp := UI.panel(th, Color(0.1, 0.12, 0.25), 14)
-	var ch := HBoxContainer.new()
-	ch.add_theme_constant_override("separation", 6)
-	cp.add_child(ch)
-	ch.add_child(UI.Coin.new(false))
-	coin_label = UI.lbl(ch, "0", 24, Color.WHITE, false)
-	var gp := UI.panel(th, Color(0.1, 0.12, 0.25), 14)
-	var gh := HBoxContainer.new()
-	gh.add_theme_constant_override("separation", 6)
-	gp.add_child(gh)
-	gh.add_child(UI.Coin.new(true))
-	gem_label = UI.lbl(gh, "0", 24, Color.WHITE, false)
-	# ---- content
+	xp_label = UI.lbl(xv, "", 13, UI.TXT2, false)
+	for gem in [false, true]:
+		var cp := UI.panel(th, UI.CARD, 8)
+		var ch := HBoxContainer.new()
+		ch.add_theme_constant_override("separation", 6)
+		cp.add_child(ch)
+		ch.add_child(UI.Coin.new(gem))
+		var l := UI.lbl(ch, "0", 22, UI.TXT, false)
+		if gem:
+			gem_label = l
+		else:
+			coin_label = l
 	content = Control.new()
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content.clip_contents = true
 	vb.add_child(content)
-	# ---- nav
-	var nav := HBoxContainer.new()
-	nav.add_theme_constant_override("separation", 8)
-	vb.add_child(nav)
-	var names := {"play": ["PLAY", "العب"], "garage": ["GARAGE", "الكراج"], "workshop": ["WORKSHOP", "الورشة"], "character": ["CHARACTER", "الشخصية"],
-		"shop": ["SHOP", "المتجر"], "quests": ["QUESTS", "المهام"], "chests": ["CHESTS", "الصناديق"]}
-	var cols := {"play": Color(0.15, 0.6, 0.3), "garage": Color(0.2, 0.45, 0.9), "workshop": Color(0.9, 0.5, 0.1), "character": Color(0.7, 0.3, 0.85),
-		"shop": Color(0.9, 0.7, 0.1), "quests": Color(0.2, 0.75, 0.75), "chests": Color(0.85, 0.3, 0.4)}
-	for id in tab_ids:
-		var b := UI.btn(nav, UI.tx(names[id][0], names[id][1]), cols[id], select.bind(id), 21, Vector2(0, 50))
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.toggle_mode = false
-		nav_btns[id] = b
-	toast = UI.lbl(self, "", 26, Color.WHITE, false)
-	toast.add_theme_stylebox_override("normal", UI.sb(Color(0, 0, 0, 0.82), 20))
+	toast = UI.lbl(self, "", 24, Color.WHITE, false)
+	toast.add_theme_stylebox_override("normal", UI.sb(Color(0, 0, 0, 0.88), 8, UI.ACCENT, 1))
 	toast.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	toast.position.y -= 120
+	toast.position.y -= 80
 	toast.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	toast.modulate.a = 0.0
 	toast.z_index = 20
 	_update_top()
+
+
+func _on_name(t: String, final := false) -> void:
+	var n := t.strip_edges()
+	if n == "":
+		n = Profile.pname if final else ""
+		if final:
+			name_edit.text = n
+		return
+	Profile.pname = n
+	if final:
+		Profile.save()
 
 
 func _update_top() -> void:
@@ -170,7 +301,7 @@ func select(id: String) -> void:
 	browser_box = null
 	cur = id
 	for k in nav_btns:
-		(nav_btns[k] as Button).modulate = Color(1, 1, 1) if k == id else Color(0.72, 0.74, 0.82)
+		(nav_btns[k] as NavItem).active = (k == id)
 	var p: Control
 	match id:
 		"play":
@@ -196,7 +327,7 @@ func select(id: String) -> void:
 
 
 func _scroll(parent: Node) -> ScrollContainer:
-	var sc := ScrollContainer.new()
+	var sc := TScroll.new()
 	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -264,14 +395,14 @@ func _browser(slots: Array, on_pick: Callable) -> Control:
 	vb.add_theme_constant_override("separation", 8)
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 6)
-	var tsc := ScrollContainer.new()
+	var tsc := TScroll.new()
 	tsc.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	tsc.custom_minimum_size = Vector2(0, 52)
 	tsc.add_child(tabs)
 	vb.add_child(tsc)
 	var grid_sc := _scroll(vb)
 	var grid := GridContainer.new()
-	grid.columns = 4
+	grid.columns = 3
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 8)
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -282,6 +413,9 @@ func _browser(slots: Array, on_pick: Callable) -> Control:
 	vb.add_child(action_box)
 	var fill := func(slot: String) -> void:
 		browser_slot = slot
+		for tb in tabs.get_children():
+			var on: bool = tb.get_meta("slot") == slot
+			(tb as Button).add_theme_stylebox_override("normal", UI.sb(UI.ACCENT if on else UI.CARD2, 6))
 		for c in grid.get_children():
 			c.queue_free()
 		var order: Array = []
@@ -297,7 +431,7 @@ func _browser(slots: Array, on_pick: Callable) -> Control:
 			grid.add_child(_item_cell(slot, id, equipped, on_pick, grid))
 		_action_bar(slot, browser_id)
 	for s in slots:
-		var b := UI.btn(tabs, Catalog.txt(Catalog.SLOT_NAME[s]), Color(0.2, 0.24, 0.45), func(): fill.call(s), 20, Vector2(0, 46))
+		var b := UI.btn(tabs, Catalog.txt(Catalog.SLOT_NAME[s]), UI.CARD2, func(): fill.call(s), 20, Vector2(0, 46))
 		b.set_meta("slot", s)
 	browser_box = vb
 	vb.set_meta("fill", fill)
@@ -319,11 +453,11 @@ func _item_cell(slot: String, id: String, equipped: String, on_pick: Callable, g
 	var rc: Color = Catalog.RARITY_COLOR[rar]
 	var owned := Profile.owns(slot, id)
 	var b := Button.new()
-	b.custom_minimum_size = Vector2(150, 118)
+	b.custom_minimum_size = Vector2(120, 112)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var n := UI.sb(Color(0.1, 0.12, 0.24), 14, rc.darkened(0.2), 2)
-	var sel := UI.sb(Color(0.16, 0.2, 0.38), 14, rc, 4)
-	b.add_theme_stylebox_override("normal", n if id != equipped else UI.sb(Color(0.12, 0.28, 0.2), 14, Color(0.3, 1.0, 0.5), 4))
+	var n := UI.sb(UI.CARD, 14, rc.darkened(0.2), 2)
+	var sel := UI.sb(UI.CARD2, 14, rc, 4)
+	b.add_theme_stylebox_override("normal", n if id != equipped else UI.sb(Color(0.1, 0.2, 0.15), 14, UI.OK, 4))
 	b.add_theme_stylebox_override("hover", sel)
 	b.add_theme_stylebox_override("pressed", sel)
 	b.add_theme_stylebox_override("focus", n)
@@ -361,14 +495,14 @@ func _item_cell(slot: String, id: String, equipped: String, on_pick: Callable, g
 		for c in grid.get_children():
 			var cid: String = c.get_meta("id")
 			var eq := _equipped(slot)
-			var st := UI.sb(Color(0.16, 0.2, 0.38), 14, rc, 4)
+			var st := UI.sb(UI.CARD2, 14, rc, 4)
 			if cid == id:
 				(c as Button).add_theme_stylebox_override("normal", st)
 			elif cid == eq:
-				(c as Button).add_theme_stylebox_override("normal", UI.sb(Color(0.12, 0.28, 0.2), 14, Color(0.3, 1.0, 0.5), 4))
+				(c as Button).add_theme_stylebox_override("normal", UI.sb(Color(0.1, 0.2, 0.15), 14, UI.OK, 4))
 			else:
 				var ce: Dictionary = Catalog.entry(slot, cid)
-				(c as Button).add_theme_stylebox_override("normal", UI.sb(Color(0.1, 0.12, 0.24), 14, (Catalog.RARITY_COLOR[int(ce["r"])] as Color).darkened(0.2), 2)))
+				(c as Button).add_theme_stylebox_override("normal", UI.sb(UI.CARD, 14, (Catalog.RARITY_COLOR[int(ce["r"])] as Color).darkened(0.2), 2)))
 	return b
 
 
@@ -443,7 +577,7 @@ func _tab_garage() -> Control:
 	h.add_theme_constant_override("separation", 12)
 	# left: showroom
 	var left := VBoxContainer.new()
-	left.custom_minimum_size = Vector2(440, 0)
+	left.custom_minimum_size = Vector2(360, 0)
 	left.add_theme_constant_override("separation", 8)
 	h.add_child(left)
 	preview = Preview3D.new()
@@ -458,7 +592,7 @@ func _tab_garage() -> Control:
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right.add_theme_constant_override("separation", 8)
 	h.add_child(right)
-	var csc := ScrollContainer.new()
+	var csc := TScroll.new()
 	csc.custom_minimum_size = Vector2(0, 124)
 	csc.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	right.add_child(csc)
@@ -512,11 +646,11 @@ func _car_card(id: String, cb: Callable) -> Control:
 	var rc: Color = Catalog.RARITY_COLOR[int(m["r"])]
 	var owned := Profile.cars.has(id)
 	var b := Button.new()
-	b.custom_minimum_size = Vector2(140, 112)
-	var n := UI.sb(Color(0.1, 0.12, 0.24), 16, rc if id == Profile.car else rc.darkened(0.4), 4 if id == Profile.car else 2)
+	b.custom_minimum_size = Vector2(124, 108)
+	var n := UI.sb(UI.CARD, 16, rc if id == Profile.car else rc.darkened(0.4), 4 if id == Profile.car else 2)
 	b.add_theme_stylebox_override("normal", n)
-	b.add_theme_stylebox_override("hover", UI.sb(Color(0.17, 0.2, 0.38), 16, rc, 4))
-	b.add_theme_stylebox_override("pressed", UI.sb(Color(0.17, 0.2, 0.38), 16, rc, 4))
+	b.add_theme_stylebox_override("hover", UI.sb(UI.CARD2, 16, rc, 4))
+	b.add_theme_stylebox_override("pressed", UI.sb(UI.CARD2, 16, rc, 4))
 	b.add_theme_stylebox_override("focus", n)
 	b.pressed.connect(cb)
 	UI.pop(b, 1.05)
@@ -541,7 +675,7 @@ func _tab_workshop() -> Control:
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 12)
 	var left := VBoxContainer.new()
-	left.custom_minimum_size = Vector2(440, 0)
+	left.custom_minimum_size = Vector2(360, 0)
 	left.add_theme_constant_override("separation", 8)
 	h.add_child(left)
 	preview = Preview3D.new()
@@ -566,7 +700,7 @@ func _tab_workshop() -> Control:
 	for key in Catalog.UPGRADE_ORDER:
 		var u: Dictionary = Catalog.UPGRADES[key]
 		var lv := Profile.up_level(Profile.car, key)
-		var row := UI.panel(list, Color(0.09, 0.11, 0.23, 0.95), 16)
+		var row := UI.panel(list, UI.CARD, 16)
 		var rh := HBoxContainer.new()
 		rh.add_theme_constant_override("separation", 12)
 		row.add_child(rh)
@@ -609,7 +743,7 @@ func _tab_character() -> Control:
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 12)
 	var left := VBoxContainer.new()
-	left.custom_minimum_size = Vector2(440, 0)
+	left.custom_minimum_size = Vector2(360, 0)
 	left.add_theme_constant_override("separation", 8)
 	h.add_child(left)
 	preview = Preview3D.new()
@@ -634,7 +768,7 @@ func _tab_character() -> Control:
 # ====================================================================== SHOP
 
 func _tab_shop() -> Control:
-	var sc := ScrollContainer.new()
+	var sc := TScroll.new()
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	var vb := VBoxContainer.new()
 	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -647,7 +781,7 @@ func _tab_shop() -> Control:
 	for it in Profile.daily_deals():
 		var e: Dictionary = Catalog.entry(it["slot"], it["id"])
 		var rc: Color = Catalog.RARITY_COLOR[int(e["r"])]
-		var p := UI.panel(deals, Color(0.09, 0.11, 0.23), 18)
+		var p := UI.panel(deals, UI.CARD, 18)
 		p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var v := VBoxContainer.new()
 		p.add_child(v)
@@ -676,7 +810,7 @@ func _tab_shop() -> Control:
 	vb.add_child(chs)
 	for kind in ["bronze", "silver", "gold"]:
 		var cd: Dictionary = Catalog.CHESTS[kind]
-		var p := UI.panel(chs, Color(0.09, 0.11, 0.23), 18)
+		var p := UI.panel(chs, UI.CARD, 18)
 		p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var v := VBoxContainer.new()
 		p.add_child(v)
@@ -732,14 +866,14 @@ class ChestArt extends Control:
 
 func _tab_quests() -> Control:
 	Profile.refresh_quests()
-	var sc := ScrollContainer.new()
+	var sc := TScroll.new()
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	var vb := VBoxContainer.new()
 	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vb.add_theme_constant_override("separation", 10)
 	sc.add_child(vb)
 	# daily login
-	var lp := UI.panel(vb, Color(0.09, 0.11, 0.23), 18)
+	var lp := UI.panel(vb, UI.CARD, 18)
 	var lv := VBoxContainer.new()
 	lp.add_child(lv)
 	var got: bool = Profile.login["last"] == Time.get_date_string_from_system()
@@ -749,7 +883,7 @@ func _tab_quests() -> Control:
 	lv.add_child(days)
 	var cur_day := (int(Profile.login["streak"]) - 1) % 7 + 1 if int(Profile.login["streak"]) > 0 else 0
 	for d in range(1, 8):
-		var cell := UI.panel(days, Color(0.2, 0.55, 0.3) if (d < cur_day or (d == cur_day and got)) else Color(0.12, 0.14, 0.28), 12)
+		var cell := UI.panel(days, Color(0.18, 0.45, 0.3) if (d < cur_day or (d == cur_day and got)) else UI.CARD, 12)
 		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var cv := VBoxContainer.new()
 		cell.add_child(cv)
@@ -769,7 +903,7 @@ func _tab_quests() -> Control:
 	for i in (Profile.quests["list"] as Array).size():
 		var q: Dictionary = Profile.quests["list"][i]
 		var d := Profile.quest_def(q["id"])
-		var row := UI.panel(vb, Color(0.09, 0.11, 0.23), 16)
+		var row := UI.panel(vb, UI.CARD, 16)
 		var rh := HBoxContainer.new()
 		rh.add_theme_constant_override("separation", 14)
 		row.add_child(rh)
@@ -814,7 +948,7 @@ func _tab_chests() -> Control:
 	for kind in ["bronze", "silver", "gold"]:
 		var n := int(Profile.chests.get(kind, 0))
 		var cd: Dictionary = Catalog.CHESTS[kind]
-		var p := UI.panel(row, Color(0.09, 0.11, 0.23), 18)
+		var p := UI.panel(row, UI.CARD, 18)
 		p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var v := VBoxContainer.new()
 		p.add_child(v)
