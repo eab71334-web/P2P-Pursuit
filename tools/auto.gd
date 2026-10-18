@@ -120,6 +120,14 @@ func _process(d: float) -> void:
 				_cars_setup()
 			elif step >= 1 and step <= 100 and t > 2.0 + step * 0.45:
 				_cars_step()
+		"gear":
+			# driver hand -> gear lever test. CARS="hatch,m4" picks cars; shots: wheel, mid-shift, new gear
+			if step == 0 and t > 1.5:
+				step = 1
+				sc.visible = false
+				_cars_setup()
+			elif step >= 1 and t > 1.5 + step * 0.5:
+				_gear_step()
 		"pod4":
 			if step == 0 and t > 2.0:
 				step = 1
@@ -136,6 +144,7 @@ func _process(d: float) -> void:
 				cc.on_again = func(): pass
 				cc.on_exit = func(): pass
 				sc.visible = false
+				cc.position = Vector3(0, 1800, 0)
 				get_tree().root.add_child(cc)
 				sc.get_node("Ceremony") if false else null
 			elif step == 1 and t > 2.0 + float(OS.get_environment("SHOT_AT")):
@@ -239,15 +248,65 @@ func _cars_step() -> void:
 		car.set_plate_text("Racer")
 		_cs_car = car
 	else:
-		var views := [Vector3(-5.2, 1.7, -6.2), Vector3(5.4, 2.0, 6.8), Vector3(8.2, 1.3, 0.0), Vector3(-0.45, 1.5, 0.2)]
+		var views := [Vector3(-5.2, 1.7, -6.2), Vector3(5.4, 2.0, 6.8), Vector3(8.2, 1.3, 0.0), Vector3(-0.45, 1.62, 0.25)]
 		_cs_cam.position = views[k - 1]
 		if k == 4:
 			_cs_car.speed_kmh = _cs_car.top_speed * 0.55
 			_cs_cam.fov = 70.0
-			_cs_cam.look_at(Vector3(-0.45, 1.3, -0.98))
+			_cs_cam.look_at(Vector3(-0.45, 1.2, -0.93))
 		else:
 			_cs_cam.fov = 38.0
 			_cs_cam.look_at(Vector3(0, 0.95, 0))
 		_cs_cam.current = true
 		shot("car_%s_%d" % [id, k])
+	step += 1
+
+
+var _gv_av: Avatar
+
+
+func _gear_step() -> void:
+	var i := (step - 1) / 6
+	var k := (step - 1) % 6
+	if i >= _cs_list.size():
+		get_tree().quit()
+		return
+	var id: String = _cs_list[i]
+	if k == 0:
+		if _cs_car:
+			_cs_car.queue_free()
+		var lo := {"car": id, "paint": Catalog.CARS[id].get("paint", "red"), "stripe": "none", "rim": "steel", "glow": "none"}
+		var car := Car.new()
+		car.setup(0, Color(0.2, 0.8, 0.3), false, lo, true)
+		get_tree().root.add_child(car)
+		var av := Avatar.new()
+		av.role = "driver"
+		av.helmet_color = Color(0.2, 0.8, 0.3)
+		av.shirt_color = Color(0.1, 0.5, 0.2)
+		av.position = car.seat_origin("driver")
+		car.add_child(av)
+		car.driver_avatar = av
+		_cs_car = car
+		_gv_av = av
+	else:
+		var car: Car = _cs_car
+		var a: String = "N"
+		var b: String = "D"
+		match car._gear_style:
+			"h5", "h6": b = "1"
+			"seq": b = "1"
+			"buttons": b = "D"
+		_cs_cam.fov = 75.0; _cs_cam.near = 0.05
+		_cs_cam.position = car.to_global(Vector3(0.42, 1.5, 0.55))
+		_cs_cam.look_at(car.to_global(Vector3(-0.2, 1.0, 0.0)))
+		_cs_cam.current = true
+		if k == 1:
+			shot("gear_%s_0wheel" % id)
+		elif k == 2:
+			car._begin_shift(car.gear_sel, b)
+			car.gear_sel = b
+		elif k == 3:
+			shot("gear_%s_1reach" % id)
+		elif k == 5:
+			shot("gear_%s_2done" % id)
 	step += 1
