@@ -62,6 +62,7 @@ var _foam: CPUParticles3D
 var _fire_light: OmniLight3D
 var _snd := {}
 var _rpm := 0.2
+var brake_in := 0.0
 var _hood_ang := 0.0
 var _cover_ang := 0.0
 var _lever_ang := 0.0
@@ -170,6 +171,7 @@ func set_controls(steer: float, throttle: float, brk: float) -> void:
 	var lim := lerpf(0.42, 0.08, clampf(speed_kmh / 120.0, 0.0, 1.0))
 	steer_target = steer
 	throttle_in = throttle
+	brake_in = brk
 	if hold:
 		engine_force = 0.0
 		brake = BRAKE_FORCE
@@ -491,6 +493,7 @@ func _process(delta: float) -> void:
 	_update_motion_audio(delta)
 	_update_damage_fx(delta)
 	_tick_mirrors(delta)
+	_update_gear(delta)
 	_update_cluster(delta)
 
 
@@ -877,9 +880,9 @@ func _build_cluster() -> void:
 	_cl_spec = CLUSTERS.get(model, CLUSTERS["hatch"])
 	var style: String = _cl_spec["style"]
 	var root := Node3D.new()
-	root.position = Vector3(-0.45, 1.36 - sd * 0.2, -0.98)
-	root.scale = Vector3(1.6, 1.6, 1.6)
-	root.rotation_degrees.x = -24.0
+	root.position = Vector3(-0.45, 1.2 - sd * 0.5, -0.745)
+	root.scale = Vector3(1.3, 1.3, 1.3)
+	root.rotation_degrees.x = -14.0
 	add_child(root)
 	# hood / binnacle
 	CarStyle.box(root, Vector3(0.5, 0.2, 0.02), Vector3(0, 0, -0.016), CarStyle.mat(Color(0.03, 0.03, 0.04), 0.2, 0.6))
@@ -933,6 +936,8 @@ func _update_cluster(delta: float) -> void:
 	# simulated gearbox: 6 gears spread over the top speed
 	var span := maxf(top_speed, 100.0) / 6.0
 	var g := clampi(int(spd / span) + 1, 1, 6)
+	if gear_sel.is_valid_int():
+		g = int(gear_sel)
 	var in_gear := clampf((spd - (g - 1) * span) / span, 0.0, 1.0)
 	var target := 0.22 + in_gear * 0.72 if spd > 2.0 else 0.18 + throttle_in * 0.5
 	_cl_rpm = lerpf(_cl_rpm, clampf(target, 0.1, 1.0), clampf(delta * 8.0, 0.0, 1.0))
@@ -950,8 +955,129 @@ func _update_cluster(delta: float) -> void:
 	if _cl_text:
 		_cl_text.text = "%03d" % int(spd) + (" km/h" if _cl_spec["style"] == "digital" else "")
 	if _cl_gear:
-		_cl_gear.text = str(g) if spd > 1.0 else "N"
+		_cl_gear.text = gear_sel if gear_sel != "" else "N"
+		_cl_gear.modulate = Color(1.0, 0.75, 0.2) if gear_sel in ["R", "P"] else Color(1, 1, 1)
 	var lit := int(_cl_rpm * _cl_leds.size())
 	for i in _cl_leds.size():
 		var d: Dictionary = _cl_leds[i]
 		((d["mesh"] as MeshInstance3D).material_override as StandardMaterial3D).albedo_color = (d["col"] as Color) * (1.0 if i < lit else 0.12)
+
+
+# ------------------------------------------------------------------ gearbox: state, lever, driver's hand
+var gear_sel := "N"
+var _gear_style := "h5"
+var _gear_map: Dictionary = {}
+var _gear_base := Vector3.ZERO
+var _gear_pivot: Node3D
+var _gear_buttons: Dictionary = {}
+var _gear_letters: Dictionary = {}
+var _gear_len := 0.2
+var _gear_tip_extra := 0.04
+var _gprev := Vector3.ZERO
+var _gprev_ok := false
+var _fs := 0.0
+var _g_pending := ""
+var _g_hold := 0.0
+var _g_idle := 0.0
+var _shift_t := -1.0
+var _shift_dur := 0.7
+var _shift_from := Vector2.ZERO
+var _shift_to := Vector2.ZERO
+var _lever_now := Vector2.ZERO
+
+
+func _gear_target() -> String:
+	var auto := _gear_style == "auto"
+	var n := CarInterior.gear_count(_gear_style)
+	if _fs < -0.8:
+		return "R"
+	if _fs > 0.8:
+		if auto or n == 0:
+			return "D"
+		return str(clampi(int(speed_kmh / maxf(top_speed / float(n), 1.0)) + 1, 1, n))
+	# standing still
+	if brake_in > 0.1:
+		return "R"
+	if throttle_in > 0.1:
+		return "D" if (auto or n == 0) else "1"
+	if auto and _g_idle > 1.6:
+		return "P"
+	return "N"
+
+
+func _update_gear(delta: float) -> void:
+	if _gear_map.is_empty():
+		return
+	if preview or delta <= 0.0:
+		_apply_lever(delta)
+		return
+	var pos := global_position
+	if _gprev_ok:
+		var v := (pos - _gprev) / delta
+		var f := clampf(-global_transform.basis.z.dot(v), -60.0, 90.0)
+		_fs = lerpf(_fs, f, clampf(delta * 10.0, 0.0, 1.0))
+	_gprev = pos
+	_gprev_ok = true
+	if absf(_fs) < 0.8 and throttle_in < 0.1 and brake_in < 0.1:
+		_g_idle += delta
+	else:
+		_g_idle = 0.0
+	var want := _gear_target()
+	if not _gear_map.has(want):
+		want = "N"
+	if want != gear_sel:
+		if want == _g_pending:
+			_g_hold += delta
+		else:
+			_g_pending = want
+			_g_hold = 0.0
+		if _g_hold >= 0.12:
+			_begin_shift(gear_sel, want)
+			gear_sel = want
+			_g_pending = ""
+	else:
+		_g_pending = ""
+	_apply_lever(delta)
+
+
+func _begin_shift(from_g: String, to_g: String) -> void:
+	_shift_from = _lever_now
+	_shift_to = _gear_map.get(to_g, Vector2.ZERO)
+	var numeric := to_g.is_valid_int() and from_g.is_valid_int()
+	_shift_dur = 0.45 if numeric else 0.8
+	_shift_t = 0.0
+	# the lights on the gate follow the lever
+	for g in _gear_letters:
+		(_gear_letters[g] as Label3D).modulate = Color(1.0, 0.75, 0.2) if g == to_g else Color(0.55, 0.58, 0.65)
+	if _gear_buttons.has(to_g):
+		for g in _gear_buttons:
+			var m := ((_gear_buttons[g] as MeshInstance3D).material_override as StandardMaterial3D)
+			m.emission_enabled = g == to_g
+			m.emission = Color(1.0, 0.6, 0.15)
+
+
+## moves the lever / pushes the button and tells the driver where his right hand has to go
+func _apply_lever(delta: float) -> void:
+	var k := 0.0
+	var ease_t := 1.0
+	if _shift_t >= 0.0:
+		_shift_t += delta
+		var u := clampf(_shift_t / _shift_dur, 0.0, 1.0)
+		k = smoothstep(0.0, 0.3, u) * (1.0 - smoothstep(0.7, 1.0, u))
+		ease_t = smoothstep(0.3, 0.7, u)
+		_lever_now = _shift_from.lerp(_shift_to, ease_t)
+		if u >= 1.0:
+			_shift_t = -1.0
+			_lever_now = _shift_to
+	elif not _gear_map.is_empty() and _lever_now == Vector2.ZERO and gear_sel != "":
+		_lever_now = _gear_map.get(gear_sel, Vector2.ZERO)
+	var hand := Vector3.ZERO
+	if _gear_pivot:
+		var ox := _lever_now.x
+		var oz := _lever_now.y
+		_gear_pivot.rotation = Vector3(atan2(oz, _gear_len), 0.0, -atan2(ox, _gear_len))
+		hand = _gear_pivot.position + _gear_pivot.transform.basis * Vector3(0, _gear_len + _gear_tip_extra, 0)
+	else:
+		hand = _gear_base + Vector3(_lever_now.x, 0.09, 0.0)
+	if driver_avatar:
+		driver_avatar.set_shift_hand(hand, k)

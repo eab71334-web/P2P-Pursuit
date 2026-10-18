@@ -188,7 +188,7 @@ func _build_stage() -> void:
 		sp.position = Vector3(-9 + i * 6.0, 10.8, 1.0)
 		sp.look_at_from_position(sp.position, targets[i], Vector3.UP) if false else null
 		add_child(sp)
-		sp.look_at(targets[i], Vector3.UP)
+		sp.look_at(to_global(targets[i]), Vector3.UP)
 		sp.spot_range = 30.0
 		sp.spot_angle = 24.0
 		sp.light_energy = 3.0 if i == 0 else 2.0
@@ -212,7 +212,7 @@ func _build_stage() -> void:
 			beam.material_override = bm
 			beam.position = sp.position.lerp(targets[i], 0.5)
 			add_child(beam)
-			beam.look_at(targets[i], Vector3.UP)
+			beam.look_at(to_global(targets[i]), Vector3.UP)
 			beam.rotate_object_local(Vector3.RIGHT, PI * 0.5)
 			_beams.append(beam)
 	var amb := OmniLight3D.new()
@@ -667,22 +667,81 @@ func _build_final_overlay() -> void:
 	bottom.position.y = -16
 	_final_box.add_child(left)
 	_final_box.add_child(bottom)
+	# action bar: reward chips + two big buttons with icons
+	var bar := PanelContainer.new()
+	bar.add_theme_stylebox_override("panel", UI.sb(Color(0.035, 0.04, 0.055, 0.93), 16, Color(1, 1, 1, 0.12), 1))
+	bottom.add_child(bar)
+	var bv := VBoxContainer.new()
+	bv.add_theme_constant_override("separation", 10)
+	bar.add_child(bv)
 	if info_line != "":
-		var rp := PanelContainer.new()
-		rp.add_theme_stylebox_override("panel", UI.sb(Color(0.03, 0.035, 0.05, 0.9), 12, UI.ACCENT, 2))
-		bottom.add_child(rp)
-		var rl := UI.lbl(rp, info_line, 24, Color(1.0, 0.85, 0.3), false)
+		var rl := UI.lbl(bv, info_line, 22, Color(1.0, 0.85, 0.3), false)
 		rl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var sep := ColorRect.new()
+		sep.color = Color(1, 1, 1, 0.08)
+		sep.custom_minimum_size = Vector2(0, 1)
+		bv.add_child(sep)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	bottom.add_child(row)
-	var b1 := UI.btn(row, again_text, UI.ACCENT, func(): on_again.call(), 24, Vector2(280, 60))
+	bv.add_child(row)
+	var b1 := _action_btn(row, "replay", again_text, UI.tx("Same stage, new race", "نفس المرحلة من جديد") if false else "", true, func(): on_again.call())
 	b1.name = "again"
-	var b2 := UI.btn(row, exit_text, UI.CARD2, func(): on_exit.call(), 24, Vector2(280, 60))
+	var b2 := _action_btn(row, "exit", exit_text, "", false, func(): on_exit.call())
 	b2.name = "exit"
 	_final_box.modulate.a = 0.0
 	_final_box.create_tween().tween_property(_final_box, "modulate:a", 1.0, 0.6)
+
+
+## icon drawn with code (no textures): "replay" = circular arrow, "exit" = door with arrow
+class _Ic extends Control:
+	var kind := "replay"
+	var col := Color.WHITE
+
+	func _draw() -> void:
+		var c := size * 0.5
+		var r := minf(size.x, size.y) * 0.34
+		if kind == "replay":
+			draw_arc(c, r, deg_to_rad(-60), deg_to_rad(230), 28, col, 3.5, true)
+			var a := deg_to_rad(230)
+			var tip := c + Vector2(cos(a), sin(a)) * r
+			draw_colored_polygon(PackedVector2Array([tip + Vector2(-7, -3), tip + Vector2(6, -6), tip + Vector2(2, 8)]), col)
+		else:
+			draw_rect(Rect2(c.x - r, c.y - r, r * 1.2, r * 2.0), col, false, 3.0)
+			draw_line(Vector2(c.x - 1, c.y), Vector2(c.x + r + 4, c.y), col, 3.5, true)
+			draw_colored_polygon(PackedVector2Array([Vector2(c.x + r + 8, c.y), Vector2(c.x + r - 2, c.y - 7), Vector2(c.x + r - 2, c.y + 7)]), col)
+
+
+func _action_btn(parent: Control, icon: String, text: String, sub: String, primary: bool, cb: Callable) -> Button:
+	var b := Button.new()
+	b.custom_minimum_size = Vector2(300, 68)
+	b.focus_mode = Control.FOCUS_NONE
+	var fill := UI.ACCENT if primary else Color(0.12, 0.13, 0.17)
+	var border := UI.ACCENT.lightened(0.25) if primary else Color(1, 1, 1, 0.18)
+	b.add_theme_stylebox_override("normal", UI.sb(fill, 14, border, 2))
+	b.add_theme_stylebox_override("hover", UI.sb(fill.lightened(0.12), 14, Color.WHITE if primary else UI.ACCENT, 2))
+	b.add_theme_stylebox_override("pressed", UI.sb(fill.darkened(0.15), 14, border, 2))
+	b.add_theme_stylebox_override("focus", UI.sb(fill, 14, border, 2))
+	var h := HBoxContainer.new()
+	h.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	h.offset_left = 16
+	h.offset_right = -16
+	h.alignment = BoxContainer.ALIGNMENT_CENTER
+	h.add_theme_constant_override("separation", 12)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(h)
+	var ic := _Ic.new()
+	ic.kind = icon
+	ic.col = Color(0.08, 0.05, 0.02) if primary else UI.TXT
+	ic.custom_minimum_size = Vector2(40, 40)
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(ic)
+	var l := UI.lbl(h, text, 24, Color(0.08, 0.05, 0.02) if primary else UI.TXT, false)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.pressed.connect(cb)
+	UI.pop(b, 1.03)
+	parent.add_child(b)
+	return b
 
 
 # ---------------------------------------------------------------- per frame
@@ -756,5 +815,5 @@ func _update_camera(d: float) -> void:
 	# gentle handheld sway
 	pos += Vector3(sin(t * 0.9) * 0.05, sin(t * 1.3) * 0.04, 0)
 	cam.position = pos
-	cam.look_at(look, Vector3.UP)
+	cam.look_at(to_global(look), Vector3.UP)
 	cam.fov = fov

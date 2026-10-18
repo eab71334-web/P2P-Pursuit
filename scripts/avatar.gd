@@ -71,6 +71,8 @@ var _limbs := {}
 var _cur := {"L": Vector3(-0.3, 0.1, -0.3), "R": Vector3(0.3, 0.1, -0.3)}
 var _wheel_l := Vector3(-0.2, 0.1, -0.6)
 var _wheel_r := Vector3(0.2, 0.1, -0.6)
+var _shift_r := Vector3.ZERO
+var _shift_k := 0.0
 
 
 func _mat(c: Color) -> StandardMaterial3D:
@@ -370,6 +372,12 @@ func _build_clipboard() -> void:
 		map_screen.set_open(true)
 
 
+## the driver's right hand goes to the gear lever (k = 0 on the wheel .. 1 on the knob); car space
+func set_shift_hand(car_pos: Vector3, k: float) -> void:
+	_shift_r = car_pos - position
+	_shift_k = k
+
+
 ## Car space -> avatar space (the avatar only has a translation).
 func set_wheel_hands(left_car: Vector3, right_car: Vector3) -> void:
 	_wheel_l = left_car - position
@@ -477,7 +485,7 @@ func _process(delta: float) -> void:
 	match role:
 		"driver":
 			dl = _wheel_l
-			dr = _wheel_r
+			dr = _wheel_r.lerp(_shift_r, _shift_k) if _shift_k > 0.001 else _wheel_r
 		"navigator":
 			dl = CLIP_HAND
 			dr = _gesture_target()
