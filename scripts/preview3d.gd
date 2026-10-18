@@ -25,7 +25,10 @@ func _init() -> void:
 func _ready() -> void:
 	vp = SubViewport.new()
 	vp.own_world_3d = true
-	vp.msaa_3d = Viewport.MSAA_2X
+	vp.msaa_3d = Gfx.subviewport_msaa()
+	if Gfx.scale < 0.7:
+		stretch_shrink = 2
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	vp.size = Vector2i(440, 360)
 	add_child(vp)
 	var env := WorldEnvironment.new()
@@ -118,11 +121,14 @@ func _frame_avatar() -> void:
 
 
 func _clear() -> void:
+	# remove right now (not at end of frame) so the old and the new model are never drawn together
 	if car:
-		car.queue_free()
+		pivot.remove_child(car)
+		car.free()
 		car = null
 	if avatar:
-		avatar.queue_free()
+		pivot.remove_child(avatar)
+		avatar.free()
 		avatar = null
 
 
@@ -137,6 +143,7 @@ func show_car(lo: Dictionary) -> void:
 	((_ring.material_override) as StandardMaterial3D).emission = Catalog.RARITY_COLOR[rar]
 	_frame_car()
 	_flash = 1.0
+	_kick()
 
 
 func show_avatar(outfit: Dictionary) -> void:
@@ -151,6 +158,19 @@ func show_avatar(outfit: Dictionary) -> void:
 	pivot.add_child(avatar)
 	_frame_avatar()
 	_flash = 1.0
+	_kick()
+
+
+## weak-device mode: no continuous 3D rendering in menus, only a refresh when something changes
+func _kick() -> void:
+	if vp == null:
+		return
+	if hero and not Gfx.hero:
+		spin = false
+		vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+		get_tree().create_timer(0.35).timeout.connect(func():
+			if is_instance_valid(vp):
+				vp.render_target_update_mode = SubViewport.UPDATE_ONCE)
 
 
 func play_emote(id: String) -> void:

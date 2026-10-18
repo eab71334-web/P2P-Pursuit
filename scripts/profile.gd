@@ -59,6 +59,8 @@ func _load() -> void:
 	chests = d.get("chests", chests)
 	login = d.get("login", login)
 	stats = d.get("stats", stats)
+	for cid in cars:
+		_grant_defaults(str(cid))
 	if not Catalog.CARS.has(car) or not cars.has(car):
 		car = "hatch"
 
@@ -122,15 +124,25 @@ func buy_car(id: String) -> bool:
 	coins -= int(e["price"])
 	cars[id] = true
 	car = id
+	_grant_defaults(id)
 	save()
 	return true
+
+
+## a car comes with its showroom paint / stripe / rims
+func _grant_defaults(id: String) -> void:
+	var e: Dictionary = Catalog.CARS.get(id, {})
+	for slot in ["paint", "stripe", "rim"]:
+		if e.has(slot):
+			owned[slot + ":" + str(e[slot])] = true
 
 
 func car_set(id := "") -> Dictionary:
 	if id == "":
 		id = car
 	var d: Dictionary = carset.get(id, {})
-	return {"paint": d.get("paint", "red"), "stripe": d.get("stripe", "none"), "rim": d.get("rim", "steel"), "glow": d.get("glow", "none")}
+	var cd: Dictionary = Catalog.CARS.get(id, {})
+	return {"paint": d.get("paint", cd.get("paint", "red")), "stripe": d.get("stripe", cd.get("stripe", "none")), "rim": d.get("rim", cd.get("rim", "steel")), "glow": d.get("glow", "none")}
 
 
 func equip_car_part(slot: String, id: String) -> void:
@@ -152,6 +164,34 @@ func select_car(id: String) -> void:
 	if cars.has(id):
 		car = id
 		save()
+
+
+func part_owned(slot: String, tier: int) -> bool:
+	return owned.has("part:%s:%d" % [slot, tier])
+
+
+func buy_part(slot: String, tier: int) -> bool:
+	var price := int(Catalog.PARTS[slot]["price"][tier - 1])
+	if part_owned(slot, tier) or coins < price:
+		return false
+	coins -= price
+	owned["part:%s:%d" % [slot, tier]] = true
+	install_part(car, slot, tier)
+	return true
+
+
+## fit a bought part on a car (it leaves the car that had it); tier 0 removes
+func install_part(car_id: String, slot: String, tier: int) -> void:
+	if tier > 0 and not part_owned(slot, tier):
+		return
+	if tier > 0:
+		for cid in up.keys():
+			if int((up[cid] as Dictionary).get("fit_" + slot, 0)) == tier:
+				(up[cid] as Dictionary)["fit_" + slot] = 0
+	var d: Dictionary = up.get(car_id, {})
+	d["fit_" + slot] = tier
+	up[car_id] = d
+	save()
 
 
 func up_level(car_id: String, key: String) -> int:

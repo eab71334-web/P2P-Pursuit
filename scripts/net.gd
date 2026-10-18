@@ -24,6 +24,7 @@ var team_count := 1
 var track_seed := 0
 var stage := {}        # stage description made by the offline stage director
 var ffa := false       # every player has his own car + map (2-6 players)
+var squads := 0        # > 0: team race - `squads` teams, every player has his own car, team score = sum of points
 var blind := true      # driver can hardly see (co-driver must guide)
 var in_game := false
 var race_over := false
@@ -74,6 +75,9 @@ func _setup_inputs() -> void:
 		"emote": [KEY_T],
 		"map_size": [KEY_N],
 		"map_near": [KEY_B],
+		"radio_next": [KEY_PERIOD],
+		"radio_prev": [KEY_COMMA],
+		"radio_toggle": [KEY_SLASH],
 	}
 	for action in map:
 		if not InputMap.has_action(action):
@@ -87,13 +91,14 @@ func _setup_inputs() -> void:
 # ---------------------------------------------------------------- hosting / joining
 
 ## teams = 0 -> solo practice, 1 -> co-op (one car, 2 players), 2..4 -> team race (2 players per team)
-func host_game(p_name: String, teams: int, p_blind := true, p_ffa := 0) -> int:
+func host_game(p_name: String, teams: int, p_blind := true, p_ffa := 0, p_squads := 0) -> int:
 	leave()
 	ffa = p_ffa >= 2
+	squads = p_squads if (ffa and p_squads >= 2) else 0
 	player_name = p_name
 	blind = p_blind and teams > 0
 	if ffa:
-		team_count = clampi(p_ffa, 2, 6)
+		team_count = clampi(p_ffa, 2, 8 if squads > 0 else 6)
 		required_players = team_count
 		blind = false
 	elif teams <= 0:
@@ -121,12 +126,24 @@ func host_game(p_name: String, teams: int, p_blind := true, p_ffa := 0) -> int:
 	return OK
 
 
+## team race: players are dealt to the teams in turn (A, B, C, A, B, C ...) so every team stays balanced
+func squad_of_index(i: int) -> int:
+	return i % maxi(squads, 1)
+
+
+func squad_of_peer(id: int) -> int:
+	if squads <= 0:
+		return 0
+	var ids: Array = players.keys()
+	return squad_of_index(maxi(ids.find(id), 0))
+
+
 ## Text lines for the lobby: teams are filled in join order (driver first, then the map holder).
 func lobby_lines() -> Array[String]:
 	var out: Array[String] = []
 	var ids: Array = players.keys()
 	for i in ids.size():
-		var team := i if ffa else ((i >> 1) if required_players > 1 else 0)
+		var team := squad_of_index(i) if squads > 0 else (i if ffa else ((i >> 1) if required_players > 1 else 0))
 		var role := L.t("role_solo") if ffa else (L.t("role_driver") if i % 2 == 0 else L.t("role_nav"))
 		out.append("%s %s  -  %s  (%s)%s" % [L.t("team"), char(65 + team), players[ids[i]], role, "  [%s]" % L.t("host_tag") if ids[i] == 1 else ""])
 	return out
@@ -138,7 +155,7 @@ func lobby_rows() -> Array:
 	var ids: Array = players.keys()
 	for i in ids.size():
 		var id: int = ids[i]
-		var team := i if ffa else ((i >> 1) if required_players > 1 else 0)
+		var team := squad_of_index(i) if squads > 0 else (i if ffa else ((i >> 1) if required_players > 1 else 0))
 		var role := L.t("role_solo") if ffa else (L.t("role_driver") if i % 2 == 0 else L.t("role_nav"))
 		var lo: Dictionary = loadouts.get(id, {})
 		var cid: String = lo.get("car", "hatch")
@@ -163,6 +180,7 @@ func leave() -> void:
 	if peer is ENetMultiplayerPeer:
 		peer.close()
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
+	squads = 0
 	players.clear()
 	loadouts.clear()
 	rdy.clear()
@@ -333,13 +351,14 @@ func toggle_ready(v: bool) -> void:
 
 
 func _broadcast_players() -> void:
-	sync_players.rpc(players, required_players, team_count, ffa, rdy, present, lobby_cd, loadouts)
+	sync_players.rpc(players, required_players, team_count, ffa, rdy, present, lobby_cd, loadouts, squads)
 	players_changed.emit()
 
 
 @rpc("authority", "call_remote", "reliable")
-func sync_players(p: Dictionary, req: int, teams: int, p_ffa: bool, p_ready: Dictionary, p_present: Dictionary, cd: float, p_lo: Dictionary) -> void:
+func sync_players(p: Dictionary, req: int, teams: int, p_ffa: bool, p_ready: Dictionary, p_present: Dictionary, cd: float, p_lo: Dictionary, p_squads := 0) -> void:
 	ffa = p_ffa
+	squads = p_squads
 	rdy = p_ready
 	present = p_present
 	lobby_cd = cd
@@ -377,11 +396,12 @@ func start_now() -> void:
 	for i in ids.size():
 		r[ids[i]] = "driver" if (ffa or i % 2 == 0) else "navigator"
 		tm[ids[i]] = i if ffa else ((i >> 1) if required_players > 1 else 0)
-	begin.rpc(Track.design_stage(randi()), r, tm, players, team_count, blind, ffa, loadouts)
+	begin.rpc(Track.design_stage(randi()), r, tm, players, team_count, blind, ffa, loadouts, squads)
 
 
 @rpc("authority", "call_local", "reliable")
-func begin(p_stage: Dictionary, p_roles: Dictionary, p_teams: Dictionary, p_players: Dictionary, p_team_count: int, p_blind: bool, p_ffa: bool, p_lo: Dictionary) -> void:
+func begin(p_stage: Dictionary, p_roles: Dictionary, p_teams: Dictionary, p_players: Dictionary, p_team_count: int, p_blind: bool, p_ffa: bool, p_lo: Dictionary, p_squads := 0) -> void:
+	squads = p_squads
 	loadouts = p_lo
 	lobby_cd = -1.0
 	present.clear()

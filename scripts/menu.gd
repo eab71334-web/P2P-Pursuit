@@ -129,6 +129,8 @@ var hosts_box: VBoxContainer
 var blind_check: CheckBox
 var setup_mode := ""
 var setup_count := 2
+var setup_per := 2
+var per_row: HBoxContainer
 var count_row: HBoxContainer
 var setup_title: Label
 var setup_blind_row: Control
@@ -231,7 +233,7 @@ func _build_ui() -> void:
 	var stack := Control.new()
 	mc.add_child(stack)
 	hub = Hub.new()
-	hub.tab_ids = ["play", "garage", "workshop", "character", "shop", "quests", "chests"]
+	hub.tab_ids = ["play", "garage", "workshop", "character", "shop", "quests", "chests", "settings"]
 	hub.play_content = _build_main()
 	panels["main"] = hub
 	panels["setup"] = _build_setup()
@@ -259,7 +261,10 @@ func _build_main() -> Control:
 	hero.custom_minimum_size = Vector2(10, 10)
 	hero.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	c.add_child(hero)
-	hero.ready.connect(func(): hero.show_car(Profile.loadout()))
+	hero.ready.connect(func():
+		hero.show_car(Profile.loadout())
+		_hero_key = JSON.stringify(Profile.loadout()))
+	hero.tree_entered.connect(_refresh_hero.call_deferred)
 	_hero_key = ""
 	var h := HBoxContainer.new()
 	h.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -336,6 +341,9 @@ func _update_hero_name() -> void:
 func _refresh_hero() -> void:
 	if hero == null or not is_instance_valid(hero) or hero.vp == null:
 		return
+	if not hero.is_inside_tree() or not hero.is_visible_in_tree():
+		_hero_key = ""        # hidden (another hub tab): refresh when it comes back, no wasted rebuilds
+		return
 	var key := JSON.stringify(Profile.loadout())
 	if key != _hero_key:
 		_hero_key = key
@@ -359,6 +367,10 @@ func _build_setup() -> Control:
 	count_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	count_row.add_theme_constant_override("separation", 12)
 	vb.add_child(count_row)
+	per_row = HBoxContainer.new()
+	per_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	per_row.add_theme_constant_override("separation", 12)
+	vb.add_child(per_row)
 	var bl := VBoxContainer.new()
 	vb.add_child(bl)
 	setup_blind_row = bl
@@ -376,40 +388,70 @@ func _build_setup() -> Control:
 	return wrap
 
 
+func _count_buttons(parent: Control, lo: int, hi: int, cur: int, cb: Callable) -> void:
+	var group := ButtonGroup.new()
+	for n in range(lo, hi + 1):
+		var b := Button.new()
+		b.toggle_mode = true
+		b.button_group = group
+		b.custom_minimum_size = Vector2(88, 80)
+		b.text = str(n)
+		b.add_theme_font_size_override("font_size", 38)
+		b.add_theme_stylebox_override("normal", UI.sb(UI.CARD2, 8, UI.LINE, 1))
+		b.add_theme_stylebox_override("hover", UI.sb(UI.CARD2.lightened(0.1), 8, UI.LINE, 1))
+		b.add_theme_stylebox_override("pressed", UI.sb(UI.ACCENT, 8))
+		b.add_theme_stylebox_override("hover_pressed", UI.sb(UI.ACCENT, 8))
+		b.add_theme_color_override("font_pressed_color", Color.BLACK)
+		b.add_theme_color_override("font_hover_pressed_color", Color.BLACK)
+		b.button_pressed = (n == cur)
+		b.pressed.connect(func(): cb.call(n))
+		parent.add_child(b)
+
+
 func _open_setup(mode: String) -> void:
 	setup_mode = mode
 	for c in count_row.get_children():
 		c.queue_free()
+	for c in per_row.get_children():
+		c.queue_free()
+	per_row.visible = false
 	setup_title.text = L.t(mode)
-	setup_blind_row.visible = mode != "ffa"
+	setup_blind_row.visible = mode == "coop"
 	if mode == "coop":
 		setup_count = 1
 		var l := UI.lbl(count_row, L.t("coop_d"), 22, UI.TXT, false)
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		l.custom_minimum_size = Vector2(600, 80)
 		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	elif mode == "teams":
+		# 2-4 teams, every player drives his own car; the team score is the sum of the members' points
+		setup_count = 2
+		setup_per = 2
+		per_row.visible = true
+		_fill_team_rows()
 	else:
-		var lo := 2
-		var hi := 4 if mode == "teams" else 6
-		setup_count = lo
-		var group := ButtonGroup.new()
-		for n in range(lo, hi + 1):
-			var b := Button.new()
-			b.toggle_mode = true
-			b.button_group = group
-			b.custom_minimum_size = Vector2(88, 88)
-			b.text = str(n)
-			b.add_theme_font_size_override("font_size", 38)
-			b.add_theme_stylebox_override("normal", UI.sb(UI.CARD2, 8, UI.LINE, 1))
-			b.add_theme_stylebox_override("hover", UI.sb(UI.CARD2.lightened(0.1), 8, UI.LINE, 1))
-			b.add_theme_stylebox_override("pressed", UI.sb(UI.ACCENT, 8))
-			b.add_theme_stylebox_override("hover_pressed", UI.sb(UI.ACCENT, 8))
-			b.add_theme_color_override("font_pressed_color", Color.BLACK)
-			b.add_theme_color_override("font_hover_pressed_color", Color.BLACK)
-			b.button_pressed = (n == lo)
-			b.pressed.connect(func(): setup_count = n)
-			count_row.add_child(b)
+		setup_count = 2
+		_count_buttons(count_row, 2, 6, 2, func(n): setup_count = n)
 	_go("setup")
+
+
+## teams: 2..4 ; players per team: 1..(8 / teams)
+func _fill_team_rows() -> void:
+	for c in count_row.get_children():
+		c.queue_free()
+	for c in per_row.get_children():
+		c.queue_free()
+	var q := UI.lbl(count_row, L.t("teams_q") + "   ", 20, UI.TXT2, false)
+	q.custom_minimum_size = Vector2(0, 80)
+	q.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_count_buttons(count_row, 2, 4, setup_count, func(n):
+		setup_count = n
+		setup_per = mini(setup_per, 8 / n)
+		_fill_team_rows.call_deferred())
+	var q2 := UI.lbl(per_row, L.t("per_team_q") + "   ", 20, UI.TXT2, false)
+	q2.custom_minimum_size = Vector2(0, 80)
+	q2.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_count_buttons(per_row, 1, 8 / setup_count if setup_count > 1 else 2, setup_per, func(n): setup_per = n)
 
 
 func _build_lobby() -> Control:
@@ -479,7 +521,7 @@ func _open_room_garage() -> void:
 		room_hub.queue_free()
 	room_hub = Hub.new()
 	room_hub.in_room = true
-	room_hub.tab_ids = ["garage", "workshop", "character", "shop"]
+	room_hub.tab_ids = ["garage", "workshop", "character", "shop", "settings"]
 	room_hub.closed.connect(_close_room_garage)
 	var stack: Control = panels["lobby"].get_parent()
 	stack.add_child(room_hub)
@@ -620,7 +662,7 @@ func _on_create() -> void:
 		"coop":
 			err = Net.host_game(_my_name(), 1, blind_check.button_pressed)
 		"teams":
-			err = Net.host_game(_my_name(), setup_count, blind_check.button_pressed)
+			err = Net.host_game(_my_name(), 0, false, setup_count * setup_per, setup_count)
 		"ffa":
 			err = Net.host_game(_my_name(), 0, false, setup_count)
 	if err != OK:
@@ -703,7 +745,7 @@ func _refresh_lobby() -> void:
 			var tag := "   [%s]" % L.t("host_tag") if r["host"] else ""
 			UI.lbl(v, "%s%s" % [r["name"], tag], 21, UI.TXT, false)
 			var sub := "%s  -  %s" % [r["car"], r["role"]]
-			if not Net.ffa and req > 1:
+			if (not Net.ffa or Net.squads > 0) and req > 1:
 				sub = "%s %s  -  %s" % [L.t("team"), char(65 + int(r["team"])), sub]
 			UI.lbl(v, sub, 14, UI.TXT2, false)
 			var st := UI.lbl(h, "", 16, UI.TXT2, false)

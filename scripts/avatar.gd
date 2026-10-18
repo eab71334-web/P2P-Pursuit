@@ -52,6 +52,14 @@ var _arm_up: Array = []
 var _base_yaw := 0.0
 var _base_y := 0.0
 var _sparks: CPUParticles3D
+# --- podium ceremony ("podium" role): cup lift for 1st, medals for 2nd / 3rd
+var podium_kind := ""          # "cup" | "silver" | "bronze" | "cheer"
+var podium_t := -1.0           # seconds since the award started (-1 = not yet)
+var podium_base_y := 0.0
+var podium_phase := 0.0        # desynchronises two people on the same block
+var _medal: Node3D
+var _cup: Node3D
+var _hop := 0.0
 
 var _head: Node3D
 var _torso: MeshInstance3D
@@ -112,7 +120,7 @@ func _ready() -> void:
 		cam = Camera3D.new()
 		cam.fov = 82.0
 		cam.near = 0.05
-		cam.far = 2500.0
+		cam.far = Gfx.far_clip()
 		_head.add_child(cam)
 		cam.position = Vector3(0, 0, -0.12)
 		cam.current = true
@@ -277,7 +285,7 @@ func play_emote(id: String) -> void:
 			qm.vertex_color_use_as_albedo = true
 			q.material = qm
 			_sparks.mesh = q
-			_sparks.amount = 40
+			_sparks.amount = Gfx.particles(40)
 			_sparks.lifetime = 1.0
 			_sparks.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
 			_sparks.emission_sphere_radius = 0.5
@@ -476,6 +484,10 @@ func _process(delta: float) -> void:
 		"preview":
 			dl = Vector3(-0.4, -0.2, 0.1)
 			dr = Vector3(0.4, -0.2, 0.1)
+		"podium":
+			var pt := _podium_targets()
+			dl = pt[0]
+			dr = pt[1]
 	if emote != "" and not outside:
 		var et := _emote_targets(dl, dr)
 		dl = et[0]
@@ -490,6 +502,8 @@ func _process(delta: float) -> void:
 			dr = a.lerp(b, reach_t)
 			dl = Vector3(-a.x, a.y, a.z).lerp(Vector3(-b.x, b.y, b.z), reach_t)
 	_emote_body(delta)
+	if role == "podium":
+		_podium_body(delta)
 	_pose_legs(delta)
 	var k := 12.0
 	if punch_t >= 0.0:
@@ -554,3 +568,226 @@ func _place(mi: MeshInstance3D, a: Vector3, b: Vector3) -> void:
 		up = Vector3.RIGHT
 	var basis := Basis.looking_at(d, up)
 	mi.transform = Transform3D(basis * Basis.from_scale(Vector3(1, 1, len_m)), (a + b) * 0.5)
+
+
+# ====================================================================== podium ceremony
+
+func _gold_mat(c: Color, glow := 0.6) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = c
+	m.metallic = 0.7
+	m.roughness = 0.3
+	m.emission_enabled = true
+	m.emission = c
+	m.emission_energy_multiplier = glow
+	return m
+
+
+func _pbox(parent: Node, size: Vector3, pos: Vector3, m: Material, rot := Vector3.ZERO) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = size
+	mi.mesh = bm
+	mi.material_override = m
+	mi.position = pos
+	mi.rotation_degrees = rot
+	parent.add_child(mi)
+	return mi
+
+
+## hang a medal around the neck (kind "silver" | "bronze" | "gold"); pops in with a little bounce
+func give_medal(kind: String) -> void:
+	if _medal:
+		_medal.queue_free()
+	var col := Color(0.82, 0.85, 0.9) if kind == "silver" else (Color(0.8, 0.5, 0.22) if kind == "bronze" else Color(1.0, 0.8, 0.2))
+	var rib := StandardMaterial3D.new()
+	rib.albedo_color = Color(0.1, 0.2, 0.55) if kind == "silver" else (Color(0.55, 0.1, 0.12) if kind == "bronze" else Color(0.7, 0.1, 0.12))
+	_medal = Node3D.new()
+	add_child(_medal)
+	_pbox(_medal, Vector3(0.05, 0.62, 0.025), Vector3(-0.1, 0.27, -0.18), rib, Vector3(0, 0, -14))
+	_pbox(_medal, Vector3(0.05, 0.62, 0.025), Vector3(0.1, 0.27, -0.18), rib, Vector3(0, 0, 14))
+	_pbox(_medal, Vector3(0.22, 0.04, 0.05), Vector3(0, 0.6, 0.08), rib)
+	var disc := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.11
+	cm.bottom_radius = 0.11
+	cm.height = 0.035
+	cm.radial_segments = 16
+	disc.mesh = cm
+	disc.material_override = _gold_mat(col, 0.7)
+	disc.rotation_degrees = Vector3(90, 0, 0)
+	disc.position = Vector3(0, -0.03, -0.2)
+	_medal.add_child(disc)
+	var inner := MeshInstance3D.new()
+	var cm2 := CylinderMesh.new()
+	cm2.top_radius = 0.07
+	cm2.bottom_radius = 0.07
+	cm2.height = 0.045
+	cm2.radial_segments = 16
+	inner.mesh = cm2
+	inner.material_override = _gold_mat(col.lightened(0.25), 0.9)
+	inner.rotation_degrees = Vector3(90, 0, 0)
+	inner.position = Vector3(0, -0.03, -0.2)
+	_medal.add_child(inner)
+	_medal.scale = Vector3.ZERO
+	var tw := create_tween()
+	tw.tween_property(_medal, "scale", Vector3.ONE * 1.25, 0.18)
+	tw.tween_property(_medal, "scale", Vector3.ONE, 0.14)
+
+
+## the cup is handed over: appears between the hands
+func give_cup() -> void:
+	if _cup:
+		_cup.queue_free()
+	_cup = Node3D.new()
+	add_child(_cup)
+	var g := _gold_mat(Color(1.0, 0.8, 0.2), 0.8)
+	var dk := _gold_mat(Color(0.25, 0.2, 0.08), 0.1)
+	_pbox(_cup, Vector3(0.26, 0.06, 0.26), Vector3(0, -0.2, 0), dk)
+	_pbox(_cup, Vector3(0.2, 0.06, 0.2), Vector3(0, -0.14, 0), g)
+	_pbox(_cup, Vector3(0.07, 0.2, 0.07), Vector3(0, -0.03, 0), g)
+	_pbox(_cup, Vector3(0.14, 0.05, 0.14), Vector3(0, 0.08, 0), g)
+	_pbox(_cup, Vector3(0.3, 0.2, 0.3), Vector3(0, 0.2, 0), g)             # bowl
+	_pbox(_cup, Vector3(0.34, 0.04, 0.34), Vector3(0, 0.31, 0), g)         # rim
+	for sx in [-1.0, 1.0]:                                                  # handles
+		_pbox(_cup, Vector3(0.06, 0.16, 0.06), Vector3(sx * 0.2, 0.2, 0), g)
+		_pbox(_cup, Vector3(0.1, 0.05, 0.06), Vector3(sx * 0.17, 0.3, 0), g)
+		_pbox(_cup, Vector3(0.1, 0.05, 0.06), Vector3(sx * 0.17, 0.12, 0), g)
+	_pbox(_cup, Vector3(0.08, 0.1, 0.01), Vector3(0, 0.2, -0.155), _gold_mat(Color(1.0, 0.95, 0.7), 1.2))   # shine plate
+	_cup.scale = Vector3.ZERO
+	var tw := create_tween()
+	tw.tween_property(_cup, "scale", Vector3.ONE * 1.3, 0.22)
+	tw.tween_property(_cup, "scale", Vector3.ONE, 0.15)
+
+
+func start_podium() -> void:
+	podium_t = 0.0
+
+
+func _podium_targets() -> Array:
+	var rest_l := Vector3(-0.34, -0.12, 0.05)
+	var rest_r := Vector3(0.34, -0.12, 0.05)
+	if podium_t < 0.0:
+		return [rest_l, rest_r]
+	var t := podium_t + podium_phase
+	var pt := podium_t
+	var dl := rest_l
+	var dr := rest_r
+	match podium_kind:
+		"cup":
+			var recv_l := Vector3(-0.17, 0.0, -0.42)
+			var recv_r := Vector3(0.17, 0.0, -0.42)
+			var up_l := Vector3(-0.16, 1.25, -0.1)
+			var up_r := Vector3(0.16, 1.25, -0.1)
+			if pt < 0.9:
+				var k := smoothstep(0.0, 0.5, pt)
+				dl = rest_l.lerp(recv_l, k)
+				dr = rest_r.lerp(recv_r, k)
+			elif pt < 1.9:
+				var k2 := smoothstep(0.9, 1.9, pt)
+				dl = recv_l.lerp(up_l, k2)
+				dr = recv_r.lerp(up_r, k2)
+			else:
+				var p := sin((pt - 1.9) * 5.2)
+				dl = up_l + Vector3(0, 0.05 * p, 0)
+				dr = up_r + Vector3(0, 0.05 * p, 0)
+		"silver":
+			var chest_l := Vector3(-0.07, 0.1, -0.3)
+			var chest_r := Vector3(0.07, 0.1, -0.3)
+			var cyc := fmod(maxf(pt - 0.9, 0.0), 3.6)
+			if pt < 0.9:
+				var k := smoothstep(0.0, 0.5, pt)
+				dl = rest_l.lerp(chest_l, k)
+				dr = rest_r.lerp(chest_r, k)
+			elif cyc < 1.2:                                  # kiss the medal
+				var k2 := sin(clampf(cyc / 1.2, 0.0, 1.0) * PI)
+				dr = chest_r.lerp(Vector3(0.05, 0.62, -0.28), k2)
+				dl = chest_l.lerp(Vector3(-0.36, 0.0, -0.15), smoothstep(0.0, 0.4, cyc))
+			elif cyc < 2.3:                                  # show it to the cameras
+				var k3 := smoothstep(1.2, 1.6, cyc)
+				dr = chest_r.lerp(Vector3(0.18, 0.72, -0.58), k3) + Vector3(0, sin(cyc * 9.0) * 0.02, 0)
+				dl = Vector3(-0.36, 0.0, -0.15)
+			else:                                            # fist pumps
+				var k4 := smoothstep(2.3, 2.6, cyc)
+				var pump := absf(sin((cyc - 2.3) * 7.0)) * 0.22
+				dr = chest_r.lerp(Vector3(0.32, 0.95 + pump, -0.12), k4)
+				dl = Vector3(-0.36, 0.0, -0.15).lerp(Vector3(-0.32, 0.4, -0.4), k4 * 0.5)
+		"bronze":
+			var show_l := Vector3(-0.2, 0.32, -0.42)
+			var show_r := Vector3(0.2, 0.32, -0.42)
+			var cyc2 := fmod(maxf(pt - 0.8, 0.0), 4.2)
+			if pt < 0.8:
+				var k := smoothstep(0.0, 0.5, pt)
+				dl = rest_l.lerp(show_l, k)
+				dr = rest_r.lerp(show_r, k)
+			elif cyc2 < 1.2:                                 # hold the ribbon out, look at the medal
+				dl = show_l
+				dr = show_r
+			elif cyc2 < 2.6:                                 # arms wide "yeah!"
+				var k2 := smoothstep(1.2, 1.6, cyc2)
+				var shake := sin(cyc2 * 14.0) * 0.04
+				dl = show_l.lerp(Vector3(-0.72, 0.9 + shake, -0.12), k2)
+				dr = show_r.lerp(Vector3(0.72, 0.9 - shake, -0.12), k2)
+			else:                                            # clap clap clap
+				var k3 := smoothstep(2.6, 2.9, cyc2)
+				var cl := 0.03 + 0.15 * absf(sin((cyc2 - 2.6) * 8.0))
+				dl = Vector3(-0.72, 0.9, -0.12).lerp(Vector3(-cl, 0.55, -0.42), k3)
+				dr = Vector3(0.72, 0.9, -0.12).lerp(Vector3(cl, 0.55, -0.42), k3)
+		"cheer":
+			var w := sin(t * 8.0) * 0.1
+			dl = Vector3(-0.5 - w, 1.05 + w, -0.1)
+			dr = Vector3(0.5 + w, 1.05 - w, -0.1)
+	return [dl, dr]
+
+
+func _podium_body(delta: float) -> void:
+	var pt := podium_t
+	if podium_t >= 0.0:
+		podium_t += delta
+	var t := podium_t + podium_phase
+	var hop := 0.0
+	var lean := 0.0
+	var twist := 0.0
+	var head_pitch := 0.0
+	match podium_kind:
+		"cup":
+			if pt > 1.9:
+				hop = absf(sin((pt - 1.9) * 2.6)) * 0.16
+				lean = -0.14
+				twist = sin((pt - 1.9) * 1.3) * 0.4
+				head_pitch = 0.5
+			elif pt > 0.0:
+				head_pitch = -0.2 + clampf((pt - 0.9) / 1.0, 0.0, 1.0) * 0.7
+		"silver":
+			if pt > 0.9:
+				var cyc := fmod(pt - 0.9, 3.6)
+				head_pitch = -0.35 if cyc < 1.2 else 0.0
+				if cyc > 2.3:
+					hop = absf(sin((cyc - 2.3) * 7.0)) * 0.1
+				twist = sin(cyc * 1.7) * 0.18
+			elif pt > 0.0:
+				head_pitch = -0.4
+		"bronze":
+			if pt > 0.8:
+				var c2 := fmod(pt - 0.8, 4.2)
+				head_pitch = -0.4 if c2 < 1.2 else (0.35 if c2 < 2.6 else 0.0)
+				if c2 > 1.2 and c2 < 2.6:
+					hop = absf(sin((c2 - 1.2) * 5.0)) * 0.12
+				elif c2 >= 2.6:
+					hop = absf(sin((c2 - 2.6) * 8.0)) * 0.05
+			elif pt > 0.0:
+				head_pitch = -0.4
+		"cheer":
+			if pt >= 0.0:
+				hop = absf(sin(t * 5.5)) * 0.14
+				twist = sin(t * 2.0) * 0.25
+	_hop = lerpf(_hop, hop, clampf(delta * 18.0, 0.0, 1.0))
+	position.y = podium_base_y + _hop
+	rotation.x = lerpf(rotation.x, lean, clampf(delta * 6.0, 0.0, 1.0))
+	rotation.y = lerpf(rotation.y, PI + twist, clampf(delta * 6.0, 0.0, 1.0))
+	look_pitch = lerpf(look_pitch, head_pitch, clampf(delta * 8.0, 0.0, 1.0))
+	# the cup stays glued between the hands (and spins a little for the shine)
+	if _cup and is_instance_valid(_cup):
+		var hl: Vector3 = _limbs["L"]["hand"].position
+		var hr: Vector3 = _limbs["R"]["hand"].position
+		_cup.position = (hl + hr) * 0.5 + Vector3(0, 0.16, 0)

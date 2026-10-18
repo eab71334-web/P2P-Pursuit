@@ -64,7 +64,7 @@ static func beam(parent: Node, a: Vector3, b: Vector3, th: float, m: Material) -
 ## wheel with tyre, rim and spokes. The axle is the local X axis.
 static func make_wheel(parent: Node, rim_col: Color, model: String) -> void:
 	var width := 0.34
-	if model == "buggy" or model == "muscle" or model == "hyper":
+	if model in ["buggy","muscle","hyper","gt3","charger","m4"]:
 		width = 0.42
 	if model == "pickup":
 		width = 0.38
@@ -88,6 +88,51 @@ static func make_wheel(parent: Node, rim_col: Color, model: String) -> void:
 			box(gear, Vector3(0.1, width * 0.96, 0.06), Vector3(cos(a) * 0.4, 0.0, sin(a) * 0.4), tyre_m, Vector3(0, -rad_to_deg(a), 0))
 
 
+# cabin shape per model: windshield top z, rear window base z / top z, roof half width (smaller = more tumblehome)
+const GREENHOUSE := {
+	"hatch": {"zf1": -0.7, "zr0": 1.4, "zr1": 1.25, "hwt": 0.84},
+	"buggy": {"zf1": -0.65, "zr0": 1.4, "zr1": 1.3, "hwt": 0.88},
+	"muscle": {"zf1": -0.4, "zr0": 1.4, "zr1": 0.95, "hwt": 0.8},
+	"sierra": {"zf1": -0.55, "zr0": 1.4, "zr1": 1.0, "hwt": 0.84},
+	"pickup": {"zf1": -0.6, "zr0": 1.1, "zr1": 1.0, "hwt": 0.86},
+	"charger": {"zf1": -0.45, "zr0": 1.4, "zr1": 1.05, "hwt": 0.82},
+	"m4": {"zf1": -0.3, "zr0": 1.4, "zr1": 0.85, "hwt": 0.78},
+	"coupe": {"zf1": -0.3, "zr0": 1.4, "zr1": 0.9, "hwt": 0.78},
+	"gt3": {"zf1": -0.2, "zr0": 1.4, "zr1": 0.8, "hwt": 0.74},
+	"hyper": {"zf1": -0.15, "zr0": 1.4, "zr1": 0.85, "hwt": 0.72},
+}
+
+
+## flat 4-point face. out = rough outward direction (fixes the winding). shrink < 1 insets it around its centre.
+static func quad(parent: Node, pts: Array, m: Material, out: Vector3, two_sided := false, shrink := 1.0, lift := 0.0) -> MeshInstance3D:
+	var c := Vector3.ZERO
+	for p in pts:
+		c += p
+	c /= 4.0
+	var v: Array = []
+	for p in pts:
+		v.append(c + (p - c) * shrink)
+	var n := ((v[1] - v[0]) as Vector3).cross((v[2] - v[0]) as Vector3).normalized()
+	if n.dot(out) > 0.0:
+		v = [v[0], v[3], v[2], v[1]]            # Godot front faces are clockwise
+		n = -n
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_normal(-n)
+	var off := -n * lift
+	for i in [0, 1, 2, 0, 2, 3]:
+		st.add_vertex((v[i] as Vector3) + off)
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	var mm := m
+	if two_sided:
+		mm = m.duplicate()
+		(mm as BaseMaterial3D).cull_mode = BaseMaterial3D.CULL_DISABLED
+	mi.material_override = mm
+	parent.add_child(mi)
+	return mi
+
+
 static func decorate(car: Node3D, model: String, lo: Dictionary, body_mat: StandardMaterial3D, team_col: Color) -> void:
 	var dark := mat(CARBON, 0.3, 0.5)
 	var chrome := mat(CHROME, 0.95, 0.15)
@@ -98,15 +143,36 @@ static func decorate(car: Node3D, model: String, lo: Dictionary, body_mat: Stand
 	var accent_col: Color = Catalog.STRIPES.get(lo.get("stripe", "none"), Catalog.STRIPES["none"])["c"]
 	var hood: Node3D = car.get("_hood_pivot")
 
-	# --- glass: slanted windshield, rear window, side windows
-	box(car, Vector3(1.74, 0.03, 0.9), Vector3(0, 1.58, -0.9), glass, Vector3(-33.7, 0, 0))
-	box(car, Vector3(1.74, 0.02, 0.62), Vector3(0, 1.64, 1.38), glass, Vector3(80, 0, 0))
-	for sx in [-0.93, 0.93]:
-		box(car, Vector3(0.02, 0.5, 1.9), Vector3(sx, 1.58, 0.35), glass)
-	# slanted A pillars + C pillars (body colour)
-	for sx in [-0.9, 0.9]:
-		beam(car, Vector3(sx, 1.2, -1.15), Vector3(sx, 1.95, -0.65), 0.12, body_mat)
-		beam(car, Vector3(sx, 1.33, 1.4), Vector3(sx, 1.95, 1.3), 0.14, body_mat)
+	# --- greenhouse: raked windshield, tapered sides (tumblehome), roof and rear window - every model has its own cabin shape
+	var d: float = float(car.get("drop"))
+	var gh: Dictionary = GREENHOUSE.get(model, GREENHOUSE["hatch"])
+	var rt := 1.95 - d
+	var zf1: float = gh["zf1"] - d * 0.3
+	var zr1: float = gh["zr1"] + d * 0.2
+	var zr0: float = gh["zr0"]
+	var hwt: float = gh["hwt"]
+	var rcz := (zf1 + zr1) * 0.5
+	var rlen := zr1 - zf1
+	var fbl := Vector3(-0.93, 1.2, -1.15)
+	var fbr := Vector3(0.93, 1.2, -1.15)
+	var rbl := Vector3(-0.93, 1.33, zr0)
+	var rbr := Vector3(0.93, 1.33, zr0)
+	var ftl := Vector3(-hwt, rt, zf1)
+	var ftr := Vector3(hwt, rt, zf1)
+	var rtl := Vector3(-hwt, rt, zr1)
+	var rtr := Vector3(hwt, rt, zr1)
+	var solid := mat(body_mat.albedo_color, body_mat.metallic, body_mat.roughness)
+	quad(car, [fbl, fbr, ftr, ftl], glass, Vector3(0, 0.6, -0.8), false, 1.0, 0.0)
+	quad(car, [rbr, rbl, rtl, rtr], glass, Vector3(0, 0.6, 0.8), false, 1.0, 0.0)
+	quad(car, [ftl, ftr, rtr, rtl], solid, Vector3.UP, true)
+	for sx in [-1.0, 1.0]:
+		var f0 := Vector3(sx * 0.93, 1.2, -1.15)
+		var r0 := Vector3(sx * 0.93, 1.33, zr0)
+		var f1 := Vector3(sx * hwt, rt, zf1)
+		var r1 := Vector3(sx * hwt, rt, zr1)
+		quad(car, [f0, r0, r1, f1], glass, Vector3(sx, 0.4, 0), false, 1.0, 0.0)
+		for pr in [[f0, f1, 0.12], [r0, r1, 0.14], [f1, r1, 0.08], [f0, r0, 0.06]]:
+			beam(car, pr[0], pr[1], pr[2], body_mat)
 	# --- lights, grille, handles, mirrors, exhaust
 	for sx in [-0.68, 0.68]:
 		box(car, Vector3(0.4, 0.17, 0.07), Vector3(sx, 0.95, -2.06), head)
@@ -115,13 +181,11 @@ static func decorate(car: Node3D, model: String, lo: Dictionary, body_mat: Stand
 	box(car, Vector3(0.75, 0.025, 0.07), Vector3(0, 0.9, -2.07), chrome)
 	for sx in [-1.0, 1.0]:
 		box(car, Vector3(0.06, 0.06, 0.28), Vector3(sx * 0.98, 1.2, 0.2), chrome)               # door handles
-		box(car, Vector3(0.1, 0.12, 0.2), Vector3(sx * 1.08, 1.5, -0.7), body_mat)               # mirrors
-		box(car, Vector3(0.14, 0.03, 0.03), Vector3(sx * 1.0, 1.45, -0.7), dark)
 		cyl(car, 0.07, 0.3, Vector3(sx * 0.5, 0.4, 2.15), chrome, Vector3(90, 0, 0))                 # exhaust
-		box(car, Vector3(0.05, 0.22, 2.2 if model != "coupe" and model != "hyper" else 2.4), Vector3(sx * 0.98, 0.42, 0.0), dark)   # side skirt
+		box(car, Vector3(0.05, 0.22, 2.2 if not (model in ["coupe","hyper","gt3","m4"]) else 2.4), Vector3(sx * 0.98, 0.42, 0.0), dark)   # side skirt
 	# team plate on the roof and doors (the paint can be anything, the team stays recognisable)
 	var tm := mat(team_col, 0.0, 0.6, 0.6)
-	box(car, Vector3(0.9, 0.012, 0.9), Vector3(0, 1.962, 0.35), tm)
+	box(car, Vector3(minf(0.9, rlen - 0.1), 0.012, minf(0.9, rlen - 0.1)), Vector3(0, rt + 0.012, rcz), tm)
 	for sx in [-1.0, 1.0]:
 		box(car, Vector3(0.03, 0.34, 0.34), Vector3(sx * 1.01, 1.1, 0.4), tm)
 	# --- stripes
@@ -148,7 +212,7 @@ static func decorate(car: Node3D, model: String, lo: Dictionary, body_mat: Stand
 	# --- model specific parts
 	match model:
 		"hatch":
-			box(car, Vector3(0.4, 0.1, 0.5), Vector3(0, 2.03, -0.25), dark)                          # roof intake
+			box(car, Vector3(0.4, 0.1, 0.5), Vector3(0, 2.03 - d, -0.25), dark)                          # roof intake
 			for sx in [-0.7, 0.7]:
 				box(car, Vector3(0.08, 0.5, 0.1), Vector3(sx, 1.15, 1.9), dark)
 			box(car, Vector3(1.9, 0.06, 0.5), Vector3(0, 1.45, 1.92), body_mat)                      # rally wing
@@ -171,24 +235,87 @@ static func decorate(car: Node3D, model: String, lo: Dictionary, body_mat: Stand
 				for sz in [-1.3, 1.3]:
 					box(car, Vector3(0.2, 0.1, 1.0), Vector3(sx, 0.9, sz), body_mat)
 			box(car, Vector3(1.9, 0.14, 0.3), Vector3(0, 0.45, -2.25), dark)                        # skid plate
-		"muscle":
+		"muscle":   # Camaro-style: long hood, black twin stripes, split grille, wide haunches
 			if hood:
-				box(hood, Vector3(0.6, 0.14, 0.55), Vector3(0, 0.1, -0.45), dark)
+				box(hood, Vector3(0.5, 0.1, 0.5), Vector3(0, 0.08, -0.5), dark)
+				for sx in [-0.45, 0.45]:
+					box(hood, Vector3(0.22, 0.03, 0.55), Vector3(sx, 0.07, -0.5), dark)
 				for k in 4:
-					box(hood, Vector3(0.5, 0.02, 0.04), Vector3(0, 0.18, -0.3 - k * 0.1), chrome)
-			box(car, Vector3(1.95, 0.22, 0.14), Vector3(0, 0.5, -2.13), chrome)                      # chrome bumpers
-			box(car, Vector3(1.95, 0.22, 0.14), Vector3(0, 0.5, 2.13), chrome)
-			box(car, Vector3(1.7, 0.1, 0.4), Vector3(0, 0.97, 1.9), body_mat)                        # ducktail
+					box(hood, Vector3(0.44, 0.02, 0.03), Vector3(0, 0.14, -0.35 - k * 0.1), chrome)
+			box(car, Vector3(1.5, 0.2, 0.06), Vector3(0, 0.62, -2.08), dark)                         # lower intake
+			box(car, Vector3(1.95, 0.08, 0.5), Vector3(0, 0.36, -2.15), dark)                        # chin splitter
+			box(car, Vector3(0.05, 0.16, 0.07), Vector3(0, 0.9, -2.1), chrome)
+			box(car, Vector3(1.7, 0.1, 0.42), Vector3(0, 0.99, 1.9), body_mat)                       # ducktail
+			box(car, Vector3(1.9, 0.07, 0.07), Vector3(0, 0.84, 2.08), tail)                         # full-width tail bar
 			for sx in [-1.06, 1.06]:
 				for sz in [-1.3, 1.3]:
 					box(car, Vector3(0.16, 0.1, 0.95), Vector3(sx, 0.86, sz), body_mat)
-				cyl(car, 0.06, 1.0, Vector3(sx * 1.0, 0.3, 0.5), chrome, Vector3(90, 0, 0))          # side pipes
+			if lo.get("stripe", "none") == "none":
+				for sx in [-0.16, 0.16]:
+					box(car, Vector3(0.2, 0.012, rlen), Vector3(sx, rt + 0.017, rcz), dark)
+					box(car, Vector3(0.2, 0.012, 0.6), Vector3(sx, 0.885, 1.7), dark)
+					if hood:
+						box(hood, Vector3(0.2, 0.012, 0.98), Vector3(sx, 0.014, -0.49), dark)
+		"gt3":   # McLaren-GT3-style: huge wing, splitter, race number, scoop
+			for sx in [-1.1, 1.1]:
+				for sz in [-1.3, 1.3]:
+					box(car, Vector3(0.24, 0.12, 1.1), Vector3(sx, 0.85, sz), body_mat)
+			box(car, Vector3(2.1, 0.06, 0.5), Vector3(0, 0.34, -2.2), dark)                          # splitter
+			box(car, Vector3(1.8, 0.2, 0.06), Vector3(0, 0.62, -2.08), dark)                         # big intake
+			for sx in [-0.8, 0.8]:
+				box(car, Vector3(0.07, 0.62, 0.12), Vector3(sx, 1.2, 1.95), dark)                    # wing stands
+			box(car, Vector3(2.1, 0.07, 0.7), Vector3(0, 1.56, 1.98), dark)                          # GT wing
+			box(car, Vector3(2.1, 0.04, 0.2), Vector3(0, 1.62, 1.78), body_mat)
+			for sx in [-1.05, 1.05]:
+				box(car, Vector3(0.04, 0.38, 0.8), Vector3(sx, 1.56, 1.98), body_mat)
+			box(car, Vector3(0.4, 0.14, 0.5), Vector3(0, 2.05 - d, -0.1), dark)                          # roof scoop
+			for sx in [-1.0, 1.0]:
+				box(car, Vector3(0.03, 0.14, 2.6), Vector3(sx * 0.97, 0.7, 0.2), mat(Color(0.97, 0.97, 0.98), 0.0, 0.5))   # sponsor strip
+				box(car, Vector3(0.12, 0.12, 0.5), Vector3(sx * 1.14, 0.8, 0.0), dark)               # side air outlets
+				_number(car, "59", Vector3(sx * 1.012, 1.12, 0.4), Color.WHITE, 90.0 * sx, 0.3)
+			if hood:
+				box(hood, Vector3(0.9, 0.02, 0.5), Vector3(0, 0.07, -0.5), dark)
+				_number(hood, "59", Vector3(0, 0.12, -0.5), Color.WHITE, 0.0, 0.34, true)
+			cyl(car, 0.06, 0.1, Vector3(0, 0.9, 2.1), dark, Vector3(90, 0, 0))                       # centre exit exhaust
+		"charger":   # Dodge-Charger-style: wide scoop, long slab sides, red tail bar, blacked grille
+			if hood:
+				box(hood, Vector3(0.8, 0.14, 0.6), Vector3(0, 0.1, -0.4), dark)
+				box(hood, Vector3(0.7, 0.04, 0.5), Vector3(0, 0.19, -0.4), mat(Color(0.12, 0.12, 0.14), 0.3, 0.4))
+			box(car, Vector3(1.8, 0.2, 0.06), Vector3(0, 0.62, -2.08), dark)
+			box(car, Vector3(1.95, 0.07, 0.4), Vector3(0, 0.37, -2.16), dark)
+			box(car, Vector3(1.4, 0.05, 0.08), Vector3(0, 0.92, -2.09), mat(Color(1.0, 0.1, 0.1), 0.0, 0.3, 3.0))   # light bar front
+			box(car, Vector3(1.8, 0.07, 0.07), Vector3(0, 0.86, 2.07), tail)                          # full tail bar
+			box(car, Vector3(1.8, 0.06, 0.4), Vector3(0, 1.0, 1.92), body_mat)                       # spoiler lip
+			for sx in [-0.7, 0.7]:
+				box(car, Vector3(0.06, 0.08, 0.3), Vector3(sx, 0.97, 1.94), body_mat)
+			for sx in [-1.04, 1.04]:
+				for sz in [-1.3, 1.3]:
+					box(car, Vector3(0.14, 0.1, 0.95), Vector3(sx, 0.88, sz), body_mat)
+			for sx in [-1.0, 1.0]:
+				box(car, Vector3(0.03, 0.04, 3.4), Vector3(sx * 0.96, 0.92, 0.0), dark)               # shoulder line
+			box(car, Vector3(1.0, 0.02, 0.1), Vector3(0, 1.0, -2.08), chrome)
+		"sierra":   # Sierra-Cosworth-style: whale-tail wing, box arches, side skirts, square lamps
+			for sx in [-0.62, 0.62]:
+				box(car, Vector3(0.62, 0.2, 0.05), Vector3(sx, 0.98, -2.065), head)                  # big square lamps
+			box(car, Vector3(0.12, 0.22, 0.05), Vector3(0, 0.95, -2.07), dark)
+			for sx in [-1.04, 1.04]:
+				for sz in [-1.3, 1.3]:
+					box(car, Vector3(0.14, 0.14, 1.0), Vector3(sx, 0.86, sz), body_mat)
+			box(car, Vector3(1.4, 0.18, 0.06), Vector3(0, 0.64, -2.08), dark)
+			for sx in [-0.65, 0.65]:
+				box(car, Vector3(0.08, 0.55, 0.12), Vector3(sx, 1.2, 1.95), dark)
+			box(car, Vector3(2.0, 0.06, 0.85), Vector3(0, 1.45, 1.98), body_mat)                    # whale tail
+			box(car, Vector3(2.0, 0.14, 0.06), Vector3(0, 1.52, 2.38), body_mat)
+			box(car, Vector3(1.9, 0.1, 0.4), Vector3(0, 0.5, -2.16), dark)                           # deep front valance
+			for sx in [-0.45, 0.45]:
+				cyl(car, 0.1, 0.08, Vector3(sx, 0.64, -2.1), head, Vector3(90, 0, 0))
+			box(car, Vector3(1.6, 0.04, 0.5), Vector3(0, 0.92, 2.04), mat(Color(0.7, 0.05, 0.05), 0.0, 0.5, 1.0))
 		"pickup":
 			for sx in [-0.55, 0.55]:
 				box(car, Vector3(0.08, 0.6, 0.08), Vector3(sx, 0.85, -2.2), chrome)
 			box(car, Vector3(1.5, 0.08, 0.08), Vector3(0, 1.1, -2.2), chrome)                        # bull bar
 			box(car, Vector3(1.5, 0.08, 0.08), Vector3(0, 0.62, -2.2), chrome)
-			box(car, Vector3(1.4, 0.1, 0.14), Vector3(0, 2.05, -0.5), mat(Color(1, 1, 0.9), 0.0, 0.3, 3.0))   # roof lights
+			box(car, Vector3(1.4, 0.1, 0.14), Vector3(0, 2.05 - d, -0.5), mat(Color(1, 1, 0.9), 0.0, 0.3, 3.0))   # roof lights
 			for sx in [-0.92, 0.92]:
 				box(car, Vector3(0.07, 0.3, 0.65), Vector3(sx, 1.05, 1.7), body_mat)                 # bed rails
 				box(car, Vector3(0.12, 0.06, 0.05), Vector3(sx, 1.2, 1.45), dark)
@@ -198,36 +325,161 @@ static func decorate(car: Node3D, model: String, lo: Dictionary, body_mat: Stand
 			for sx in [-1.04, 1.04]:
 				for sz in [-1.3, 1.3]:
 					box(car, Vector3(0.14, 0.1, 0.95), Vector3(sx, 0.9, sz), dark)
-		"coupe":
+		"m4":   # twin kidney grille, hood power dome, three-colour side stripes, quad pipes, carbon roof, trunk lip
+			var blk := mat(Color(0.03, 0.03, 0.04), 0.4, 0.4)
+			for sx in [-0.2, 0.2]:
+				box(car, Vector3(0.32, 0.24, 0.07), Vector3(sx, 0.94, -2.075), blk)                  # kidney grilles
+				box(car, Vector3(0.34, 0.025, 0.075), Vector3(sx, 1.065, -2.08), chrome)
+				box(car, Vector3(0.34, 0.025, 0.075), Vector3(sx, 0.815, -2.08), chrome)
+				for k in 4:
+					box(car, Vector3(0.025, 0.2, 0.075), Vector3(sx - 0.12 + k * 0.08, 0.94, -2.082), chrome)
+			for sx in [-0.78, 0.78]:                                                                  # slim headlights with DRL ring
+				box(car, Vector3(0.42, 0.11, 0.07), Vector3(sx, 0.98, -2.065), head)
+				box(car, Vector3(0.42, 0.02, 0.075), Vector3(sx, 1.05, -2.07), mat(Color(0.5, 0.8, 1.0), 0.0, 0.3, 3.0))
+			box(car, Vector3(1.95, 0.05, 0.4), Vector3(0, 0.36, -2.18), dark)
+			box(car, Vector3(0.9, 0.2, 0.06), Vector3(0, 0.62, -2.08), dark)                         # centre intake
+			for sx in [-0.8, 0.8]:
+				box(car, Vector3(0.3, 0.14, 0.06), Vector3(sx, 0.6, -2.08), dark)
+			box(car, Vector3(1.9, 0.05, 0.4), Vector3(0, 0.38, 2.18), dark)                          # diffuser
+			for sx in [-0.6, -0.3, 0, 0.3, 0.6]:
+				box(car, Vector3(0.03, 0.2, 0.4), Vector3(sx, 0.45, 2.18), dark)
+			for sx in [-0.62, -0.42, 0.42, 0.62]:
+				cyl(car, 0.065, 0.14, Vector3(sx, 0.5, 2.22), chrome, Vector3(90, 0, 0))             # quad pipes
+			box(car, Vector3(1.7, 0.05, 0.28), Vector3(0, 1.0, 1.94), dark)                          # trunk lip
+			box(car, Vector3(hwt * 2.0 - 0.1, 0.02, rlen), Vector3(0, rt + 0.012, rcz), mat(CARBON, 0.6, 0.3))   # carbon roof
+			for sx in [-1.0, 1.0]:
+				box(car, Vector3(0.03, 0.12, 0.35), Vector3(sx * 0.99, 0.86, -1.05), blk)             # gills
+				for k in 3:                                                                           # three-colour sport stripe
+					var sc: Color = [Color(0.45, 0.75, 1.0), Color(0.12, 0.2, 0.7), Color(0.85, 0.1, 0.12)][k]
+					box(car, Vector3(0.025, 0.035, 3.3), Vector3(sx * 0.965, 0.58 + k * 0.045, 0.0), mat(sc, 0.3, 0.4, 0.2))
+			for sx in [-0.62, 0.62]:                                                                  # L-shaped tail lights
+				box(car, Vector3(0.5, 0.07, 0.06), Vector3(sx, 0.95, 2.06), tail)
+				box(car, Vector3(0.07, 0.2, 0.06), Vector3(sx + (0.2 if sx > 0 else -0.2), 0.88, 2.06), tail)
+			if hood:
+				box(hood, Vector3(0.6, 0.06, 0.55), Vector3(0, 0.07, -0.55), body_mat)               # power dome
+				for sx in [-0.28, 0.28]:
+					box(hood, Vector3(0.04, 0.02, 0.6), Vector3(sx, 0.11, -0.55), dark)
+		"coupe":   # wide-grille sport coupe, carbon roof, quad pipes
+			var blk := mat(Color(0.03, 0.03, 0.04), 0.4, 0.4)
+			box(car, Vector3(1.1, 0.16, 0.07), Vector3(0, 0.92, -2.075), blk)                           # wide grille
+			box(car, Vector3(1.1, 0.02, 0.075), Vector3(0, 1.0, -2.08), chrome)
 			box(car, Vector3(1.95, 0.05, 0.4), Vector3(0, 0.36, -2.18), dark)                        # splitter
 			box(car, Vector3(1.9, 0.05, 0.4), Vector3(0, 0.38, 2.18), dark)                          # diffuser
 			for sx in [-0.6, -0.3, 0, 0.3, 0.6]:
 				box(car, Vector3(0.03, 0.2, 0.4), Vector3(sx, 0.45, 2.18), dark)
-			for sx in [-0.7, 0.7]:
-				box(car, Vector3(0.07, 0.45, 0.1), Vector3(sx, 1.12, 1.9), body_mat)
-			box(car, Vector3(1.9, 0.05, 0.5), Vector3(0, 1.38, 1.95), dark)                          # GT wing
-			for sx in [-0.95, 0.95]:
-				box(car, Vector3(0.05, 0.2, 0.5), Vector3(sx, 1.42, 1.95), dark)
-			box(car, Vector3(1.8, 0.02, 2.0), Vector3(0, 1.975, 0.35), mat(CARBON, 0.6, 0.3))        # carbon roof
+			for sx in [-0.62, -0.42, 0.42, 0.62]:
+				cyl(car, 0.06, 0.12, Vector3(sx, 0.5, 2.2), chrome, Vector3(90, 0, 0))               # quad pipes
+			box(car, Vector3(1.7, 0.05, 0.3), Vector3(0, 1.0, 1.94), dark)                           # duck-tail spoiler
+			box(car, Vector3(hwt * 2.0 - 0.1, 0.02, rlen), Vector3(0, rt + 0.012, rcz), mat(CARBON, 0.6, 0.3))        # carbon roof
+			for sx in [-1.0, 1.0]:
+				box(car, Vector3(0.03, 0.12, 0.35), Vector3(sx * 0.99, 0.86, -1.05), blk)             # gill vents
 			if hood:
-				for k in 3:
-					box(hood, Vector3(0.35, 0.02, 0.05), Vector3(sx_of(k), 0.06, -0.6), dark)
-		"hyper":
+				for sx in [-0.3, 0.3]:
+					box(hood, Vector3(0.3, 0.02, 0.5), Vector3(sx, 0.06, -0.55), dark)
+					box(hood, Vector3(0.3, 0.02, 0.05), Vector3(sx, 0.07, -0.3), body_mat)
+		"hyper":   # Chiron-style: black body with orange accent C-line, horseshoe grille, huge wing
+			var org := mat(Color(1.0, 0.45, 0.05), 0.3, 0.4, 0.2)
 			for sx in [-1.08, 1.08]:
 				for sz in [-1.3, 1.3]:
-					box(car, Vector3(0.22, 0.12, 1.05), Vector3(sx, 0.85, sz), mat(CARBON, 0.5, 0.3))   # wide-body
-			box(car, Vector3(0.05, 0.3, 1.2), Vector3(0, 2.1, 0.8), body_mat)                       # shark fin
+					box(car, Vector3(0.22, 0.12, 1.05), Vector3(sx, 0.85, sz), mat(CARBON, 0.5, 0.3))
+			box(car, Vector3(0.5, 0.26, 0.07), Vector3(0, 0.9, -2.075), dark)                        # horseshoe grille
+			box(car, Vector3(0.56, 0.03, 0.075), Vector3(0, 1.04, -2.08), chrome)
+			for sx in [-0.28, 0.28]:
+				box(car, Vector3(0.04, 0.26, 0.075), Vector3(sx, 0.9, -2.08), chrome)
+			for sx in [-1.0, 1.0]:
+				box(car, Vector3(0.03, 0.12, 2.0), Vector3(sx * 0.97, 1.0, 0.0), org)                # C-line accent
+				box(car, Vector3(0.03, 0.4, 0.1), Vector3(sx * 0.97, 1.2, 0.9), org)
+				box(car, Vector3(0.04, 0.3, 0.7), Vector3(sx, 1.55, 1.95), mat(CARBON, 0.5, 0.3))     # end plates
+				box(car, Vector3(0.05, 0.05, 0.7), Vector3(sx, 1.7, 1.95), org)
+				box(car, Vector3(0.35, 0.04, 0.25), Vector3(sx * 0.85, 0.5, -2.25), org)             # canards
+			box(car, Vector3(0.05, 0.16, 1.0), Vector3(0, 2.04 - d, 0.8), org)                             # centre fin
 			for sx in [-0.7, 0.7]:
 				box(car, Vector3(0.08, 0.6, 0.1), Vector3(sx, 1.2, 1.95), dark)
-			box(car, Vector3(2.0, 0.06, 0.65), Vector3(0, 1.55, 1.95), mat(CARBON, 0.6, 0.3))       # big wing
-			for sx in [-1.0, 1.0]:
-				box(car, Vector3(0.04, 0.35, 0.7), Vector3(sx, 1.55, 1.95), body_mat)               # end plates
-				box(car, Vector3(0.35, 0.04, 0.25), Vector3(sx * 0.85, 0.5, -2.25), dark)          # canards
+			box(car, Vector3(2.0, 0.06, 0.65), Vector3(0, 1.55, 1.95), mat(CARBON, 0.6, 0.3))        # big wing
 			box(car, Vector3(1.95, 0.05, 0.45), Vector3(0, 0.36, -2.22), mat(CARBON, 0.6, 0.3))
-			box(car, Vector3(0.03, 0.02, 3.6), Vector3(0, 1.975, 0.0), mat(Color(1.0, 0.8, 0.2), 0.9, 0.2))   # gold line
+			box(car, Vector3(0.3, 0.02, rlen), Vector3(0, rt + 0.02, rcz), org)                          # orange roof band
+			box(car, Vector3(1.3, 0.03, 0.05), Vector3(0, 0.82, 2.08), tail)
+			for sx in [-0.4, 0.4]:
+				cyl(car, 0.09, 0.1, Vector3(sx, 0.5, 2.2), chrome, Vector3(90, 0, 0))
 			if hood:
-				for k in 3:
-					box(hood, Vector3(0.3, 0.02, 0.06), Vector3(-0.5 + k * 0.5 - 0.0, 0.06, -0.55), dark)
+				box(hood, Vector3(0.2, 0.02, 0.9), Vector3(0, 0.02, -0.49), org)
+
+	_fitted_parts(car, lo.get("up", {}), body_mat, hood, d)
+
+
+## visible bolt-on parts (turbo scoop, exhaust tips, aero, suspension flares, armor)
+static func _fitted_parts(car: Node3D, up: Dictionary, body_mat: StandardMaterial3D, hood: Node3D, d: float) -> void:
+	var dark := mat(CARBON, 0.4, 0.4)
+	var carbon := mat(CARBON, 0.6, 0.3)
+	var tu := int(up.get("fit_turbo", 0))
+	if tu > 0:
+		if hood:
+			box(hood, Vector3(0.5, 0.08 + 0.04 * tu, 0.4), Vector3(0, 0.1, -0.35), body_mat)         # power bulge
+			box(hood, Vector3(0.42, 0.03, 0.3), Vector3(0, 0.15 + 0.04 * tu, -0.3), dark)           # intake
+		var glow := mat(Color(1.0, 0.4, 0.05), 0.5, 0.3, 1.5 if tu >= 3 else 0.0)
+		cyl(car, 0.11, 0.2, Vector3(0.45, 1.05, -1.5), mat(Color(0.6, 0.62, 0.68), 0.9, 0.3), Vector3(0, 0, 90))   # turbo snail in the bay
+		cyl(car, 0.07, 0.24, Vector3(0.45, 1.05, -1.5), glow, Vector3(0, 0, 90))
+	var ex := int(up.get("fit_exhaust", 0))
+	if ex > 0:
+		var ec: Color = [Color(0.75, 0.78, 0.85), Color(0.9, 0.92, 0.98), Color(0.35, 0.5, 0.95)][ex - 1]
+		var em := mat(ec, 0.95, 0.2, 0.4 if ex == 3 else 0.0)
+		for sx in [-0.3, 0.3]:
+			cyl(car, 0.09 + 0.02 * ex, 0.3, Vector3(sx, 0.42, 2.25), em, Vector3(90, 0, 0))
+			cyl(car, 0.06 + 0.015 * ex, 0.32, Vector3(sx, 0.42, 2.26), dark, Vector3(90, 0, 0))
+	var ae := int(up.get("fit_aero", 0))
+	if ae > 0:
+		box(car, Vector3(2.0, 0.06, 0.35), Vector3(0, 0.34, -2.28), carbon)                           # front lip
+		if ae >= 2:
+			box(car, Vector3(1.9, 0.05, 0.45), Vector3(0, 1.02, 2.0), carbon)                        # spoiler
+			for sx in [-0.8, 0.8]:
+				box(car, Vector3(0.05, 0.14, 0.4), Vector3(sx, 0.95, 2.0), carbon)
+		if ae >= 3:
+			for sx in [-0.75, 0.75]:
+				box(car, Vector3(0.07, 0.7, 0.1), Vector3(sx, 1.25, 2.0), carbon)
+			box(car, Vector3(2.1, 0.07, 0.6), Vector3(0, 1.62, 2.02), carbon)                        # tall wing
+			for sx in [-1.05, 1.05]:
+				box(car, Vector3(0.04, 0.3, 0.65), Vector3(sx, 1.62, 2.02), body_mat)
+	var su := int(up.get("fit_susp", 0))
+	if su > 0:
+		var gold := mat(Color(1.0, 0.75, 0.15), 0.8, 0.3)
+		for sx in [-0.97, 0.97]:
+			for sz in [-1.3, 1.3]:
+				box(car, Vector3(0.05, 0.05, 0.4), Vector3(sx, 0.62, sz), gold)                      # coilover glimpse above the wheels
+		if su >= 2:
+			for sx in [-1.0, 1.0]:
+				box(car, Vector3(0.06, 0.1, 2.0), Vector3(sx * 0.99, 0.5, 0.0), carbon)             # side skirts
+		if su >= 3:
+			for sx in [-1.1, 1.1]:
+				for sz in [-1.3, 1.3]:
+					box(car, Vector3(0.14, 0.12, 1.0), Vector3(sx, 0.88, sz), body_mat)               # fender flares
+	var kt := int(up.get("fit_kit", 0))
+	if kt > 0:
+		box(car, Vector3(1.8, 0.06, 1.4), Vector3(0, 0.34, -1.4), mat(Color(0.5, 0.52, 0.56), 0.8, 0.4))   # skid plate
+		if kt >= 2:
+			var tube := mat(Color(0.12, 0.12, 0.14), 0.7, 0.35)
+			for sx in [-0.7, 0.7]:
+				beam(car, Vector3(sx, 1.0, 1.0), Vector3(sx, 1.8 - d, 0.2), 0.06, tube)               # visible roll hoops
+		if kt >= 3:
+			for sx in [-0.6, 0.6]:
+				box(car, Vector3(0.07, 0.55, 0.08), Vector3(sx, 0.85, -2.22), mat(CHROME, 0.9, 0.2))   # bull bar
+			box(car, Vector3(1.4, 0.07, 0.08), Vector3(0, 1.12, -2.22), mat(CHROME, 0.9, 0.2))
+
+
+## race number as Label3D; rot_y turns it to face the side, flat lays it on a horizontal surface
+static func _number(parent: Node, txt: String, pos: Vector3, col: Color, rot_y := 0.0, size := 0.3, flat := false) -> void:
+	var lab := Label3D.new()
+	lab.text = txt
+	lab.font_size = 96
+	lab.pixel_size = size / 70.0
+	lab.modulate = col
+	lab.outline_size = 0
+	lab.double_sided = true
+	lab.position = pos
+	if flat:
+		lab.rotation_degrees = Vector3(-90, 0, 0)
+	else:
+		lab.rotation_degrees = Vector3(0, rot_y, 0)
+	parent.add_child(lab)
 
 
 static func sx_of(k: int) -> float:

@@ -95,6 +95,16 @@ var race_time := 0.0
 var countdown_left := 3.5
 var ready_peers := {}
 var results: Array[int] = []       # team indices in finishing order
+var final_order: Array = []        # all teams: finishers first, then the rest by progress
+var final_pcts: Array = []
+var grace_left := -1.0             # server: seconds until the race is closed after the first finisher
+var grace_show := -1.0             # clients: the same countdown, for the HUD
+var grace_label: Label
+var skip_wait_btn: Button
+var ceremony: Ceremony
+var _rewarded := false
+var my_reward_line := ""
+const PTS := [12, 9, 7, 5, 4, 3, 2, 1]     # team race: points per place
 var net_tick := 0
 var last_punch := {}
 var look_yaw := 0.0
@@ -113,6 +123,7 @@ var zone_touch := {}
 var zones := {}
 var tap_zones := {}
 var show_touch := false
+var _map_tick := 0.0
 var msg_timer := 0.0
 
 var hud: CanvasLayer
@@ -146,7 +157,7 @@ func _ready() -> void:
 	my_role = Net.roles.get(my_id, "driver")
 	my_team = Net.team_of.get(my_id, 0)
 	solo = Net.players.size() == 1 or Net.ffa
-	show_touch = DisplayServer.is_touchscreen_available() and my_role == "driver"
+	show_touch = (DisplayServer.is_touchscreen_available() or OS.get_environment("FORCE_TOUCH") != "") and my_role == "driver"
 	if Net.stage.is_empty():
 		Net.stage = {"seed": Net.track_seed}
 	track = Track.from_stage(Net.stage)
@@ -160,6 +171,7 @@ func _ready() -> void:
 	_build_teams()
 	_build_hud()
 	Net.peer_left.connect(_on_peer_left)
+	Radio.start_race()
 	get_viewport().size_changed.connect(_update_layout)
 	_update_layout()
 	if L.tutorial_off:
@@ -226,6 +238,7 @@ func begin_countdown() -> void:
 
 @rpc("authority", "call_local", "reliable")
 func race_started() -> void:
+	Gfx.racing = true
 	state = State.RUNNING
 	race_time = 0.0
 
@@ -251,12 +264,25 @@ func team_dnf(team: int) -> void:
 
 
 @rpc("authority", "call_local", "reliable")
-func all_done() -> void:
+func all_done(order: Array, pcts: Array) -> void:
+	Gfx.racing = false
 	state = State.ENDED
 	Net.race_over = true
+	final_order = order
+	final_pcts = pcts
+	grace_show = -1.0
+	flash_message(UI.tx("RACE OVER!", "انتهى السباق!"))
+	# players who did not cross the line still get paid for their place
+	var my := teams[my_team]
+	if not my.finished and not _rewarded:
+		var place := order.find(my_team) + 1
+		var rw := Profile.race_reward(place, Net.team_count, -1, track.theme == "mountain")
+		_rewarded = true
+		my_reward_line = _reward_line(rw)
 	if rematch_btn:
 		rematch_btn.text = UI.tx("Rematch", "إعادة المباراة") if Net.required_players > 1 else UI.tx("Race again", "سباق جديد")
 	_update_result_buttons()
+	get_tree().create_timer(2.6).timeout.connect(_start_ceremony)
 
 
 @rpc("authority", "call_local", "reliable")
@@ -398,7 +424,8 @@ func hit_fx(victim: int) -> void:
 	if victim == my_id:
 		shake = 1.0
 		flash = 0.55
-		Input.vibrate_handheld(250)
+		if Gfx.haptics:
+			Input.vibrate_handheld(250)
 		for d in Input.get_connected_joypads():
 			Input.start_joy_vibration(d, 0.8, 1.0, 0.3)
 
@@ -444,12 +471,61 @@ func _on_peer_left(id: int) -> void:
 
 
 func _check_all_done() -> void:
-	if state == State.ENDED:
+	if state == State.ENDED or not multiplayer.is_server():
 		return
+	var open := 0
 	for ts in teams:
 		if not ts.finished and not ts.dnf:
+			open += 1
+	# the race is over when everybody is done, or when the podium (top 3) is complete
+	if open == 0 or results.size() >= mini(3, teams.size()):
+		_end_race()
+		return
+	if results.size() >= 1 and grace_left < 0.0 and teams.size() > 1:
+		grace_left = 45.0
+		grace_start.rpc(45.0)
+
+
+@rpc("authority", "call_local", "reliable")
+func grace_start(sec: float) -> void:
+	grace_show = sec
+
+
+## a player who already finished can skip the waiting time (ends the race for everybody)
+@rpc("any_peer", "call_local", "reliable")
+func request_skip() -> void:
+	if not multiplayer.is_server() or state != State.RUNNING:
+		return
+	var who := multiplayer.get_remote_sender_id()
+	if who == 0:
+		who = 1
+	for ts in teams:
+		if (ts.driver_id == who or ts.nav_id == who) and ts.finished:
+			_end_race()
 			return
-	all_done.rpc()
+
+
+## server: close the race. Finishers keep their finishing order, the rest is ranked by progress along the road.
+func _end_race() -> void:
+	if state == State.ENDED:
+		return
+	var rest: Array = []
+	for ts in teams:
+		if not results.has(ts.idx):
+			rest.append(ts)
+	rest.sort_custom(func(a, b):
+		if a.dnf != b.dnf:
+			return b.dnf
+		return a.prog > b.prog)
+	var order: Array = results.duplicate()
+	var pcts: Array = []
+	pcts.resize(teams.size())
+	for ts in rest:
+		order.append(ts.idx)
+	for ts in teams:
+		pcts[ts.idx] = int(100.0 * float(ts.prog) / float(maxi(1, track.points.size() - 1)))
+	grace_left = -1.0
+	all_done.rpc(order, pcts)
 
 
 # ====================================================================== server simulation
@@ -461,6 +537,10 @@ func _physics_process(delta: float) -> void:
 		race_started.rpc()
 	if state == State.RUNNING:
 		race_time += delta
+		if grace_left > 0.0:
+			grace_left -= delta
+			if grace_left <= 0.0:
+				_end_race()
 	for ts in teams:
 		var inp := Vector3.ZERO
 		if ts.phase == 4:
@@ -781,6 +861,10 @@ func _server_reset(peer: int) -> void:
 # ====================================================================== local frame loop
 
 func _process(delta: float) -> void:
+	_map_tick += delta
+	if ipad_vp != null and Gfx.map_fps < 60 and _map_tick >= 1.0 / float(Gfx.map_fps):
+		_map_tick = 0.0
+		ipad_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 	if state == State.RUNNING and not fast_done and teams[my_team].speed > 140.0 and my_role == "driver":
 		fast_done = true
 		Profile.event("speed140")
@@ -1038,6 +1122,12 @@ func _input(event: InputEvent) -> void:
 		_map_size()
 	elif event.is_action_pressed("map_near"):
 		_map_near()
+	elif event.is_action_pressed("radio_next"):
+		Radio.next()
+	elif event.is_action_pressed("radio_prev"):
+		Radio.prev()
+	elif event.is_action_pressed("radio_toggle"):
+		Radio.toggle()
 
 
 func _touch_press(index: int, pos: Vector2) -> void:
@@ -1102,7 +1192,7 @@ func _build_environment() -> void:
 		env.ambient_light_energy = 0.22
 		env.fog_enabled = true
 		env.fog_light_color = Color.BLACK
-		env.fog_density = 0.011
+		env.fog_density = 0.011 * Gfx.fog_mul()
 		sun.light_energy = 0.12
 	else:
 		env.background_mode = Environment.BG_SKY
@@ -1118,7 +1208,7 @@ func _build_environment() -> void:
 		env.ambient_light_energy = 0.9
 		env.fog_enabled = true
 		env.fog_light_color = th["hor"]
-		env.fog_density = th["fog"]
+		env.fog_density = th["fog"] * Gfx.fog_mul()
 		sun.light_energy = 1.0
 	var we := WorldEnvironment.new()
 	we.environment = env
@@ -1366,7 +1456,7 @@ func _build_trees() -> void:
 		if mountain and track.is_open(i):
 			continue
 		for side in [-1.0, 1.0]:
-			if rng.randf() > (0.55 if mountain else 0.8):
+			if rng.randf() > (0.55 if mountain else 0.8) * Gfx.trees:
 				continue
 			var left := Track.left_of(track.headings[i])
 			var off := Track.ROAD_WIDTH * 0.5 + 6.0 + rng.randf_range(0.0, 30.0)
@@ -1458,7 +1548,9 @@ func _build_teams() -> void:
 	for t in Net.team_count:
 		var ts := TeamState.new()
 		ts.idx = t
-		ts.color = TEAM_COLORS[t]
+		ts.color = TEAM_COLORS[t % TEAM_COLORS.size()]
+		if Net.squads > 0:
+			ts.color = TEAM_COLORS[t % Net.squads]
 		for id in Net.roles:
 			if Net.team_of.get(id, -1) == t:
 				if Net.roles[id] == "driver":
@@ -1473,6 +1565,9 @@ func _build_teams() -> void:
 		if Net.blind and not solo:
 			car.add_lights()
 		ts.car = car
+		if t == my_team:
+			car.enable_mirrors(my_role)
+			car.bind_radio()
 		car.set_plate_text(str(Net.players.get(ts.driver_id, char(65 + t))))
 		ts.target = car.transform
 		teams.append(ts)
@@ -1558,7 +1653,7 @@ func _make_zone(zone_name: String, text: String, ax: float, ay: float, o_l: floa
 	sb.set_border_width_all(3)
 	p.add_theme_stylebox_override("panel", sb)
 	var l := Label.new()
-	l.text = text
+	l.text = text.split("\n")[0] if fs <= 16 else text
 	l.set_anchors_preset(Control.PRESET_FULL_RECT)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -1596,6 +1691,8 @@ func _build_hud() -> void:
 	role_label.text = tname + L.t("DRIVER" if my_role == "driver" else "CODRIVER")
 	if Net.ffa:
 		role_label.text = _tname(my_team)
+		if Net.squads > 0:
+			role_label.text = (L.t("TEAMX") % char(65 + my_team % Net.squads)) + "  -  " + role_label.text
 	_style_label(role_label, 22)
 	hud_root.add_child(role_label)
 	speed_label = Label.new()
@@ -1607,39 +1704,79 @@ func _build_hud() -> void:
 	_style_label(rank_label, 20)
 	hud_root.add_child(rank_label)
 
+	grace_label = _full_label(132, 40, 26)
+	grace_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
+	skip_wait_btn = Button.new()
+	skip_wait_btn.text = UI.tx("Skip", "تخطي")
+	skip_wait_btn.add_theme_font_size_override("font_size", 22)
+	for st in ["normal", "hover", "pressed", "focus"]:
+		skip_wait_btn.add_theme_stylebox_override(st, UI.sb(Color(0, 0, 0, 0.6), 10, UI.ACCENT, 2))
+	skip_wait_btn.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	skip_wait_btn.offset_left = -70
+	skip_wait_btn.offset_right = 70
+	skip_wait_btn.offset_top = 176
+	skip_wait_btn.offset_bottom = 226
+	skip_wait_btn.visible = false
+	skip_wait_btn.pressed.connect(func(): request_skip.rpc_id(1))
+	hud_root.add_child(skip_wait_btn)
 	repair_label = _full_label(0, 70, 26, 0.74)
 	repair_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
 	_make_zone("act", "", 0.0, 0.5, 20, -110, 210, -20, 22, _repair_action)
 	_make_zone("spray", L.t("z_spray"), 0.0, 0.5, 20, 0, 210, 90, 22)
 	zones["act"].visible = false
 	zones["spray"].visible = false
-	_make_zone("emote", L.t("z_emote"), 1.0, 0.5, -140, 55, -14, 120, 20, _do_emote)
-	_make_zone("reset", L.t("z_reset"), 1.0, 0.0, -150, 14, -14, 64, 22, _request_reset)
+	# right column (top): reset / emote / punch - never collides with the bottom controls
+	_make_zone("reset", L.t("z_reset"), 1.0, 0.0, -150, 14, -14, 60, 20, _request_reset)
+	_make_zone("emote", L.t("z_emote"), 1.0, 0.0, -150, 70, -14, 116, 20, _do_emote)
 	if not solo:
-		_make_zone("punch", L.t("z_punch"), 1.0, 0.5, -140, -45, -14, 45, 22, _do_punch)
+		_make_zone("punch", L.t("z_punch"), 1.0, 0.0, -150, 126, -14, 172, 20, _do_punch)
+	# radio (bottom centre): < station >   (tap the name to switch it off / on)
+	_make_zone("radio_prev", "<", 0.5, 1.0, -142, -60, -92, -14, 22, Radio.prev)
+	_make_zone("radio_name", Radio.label(), 0.5, 1.0, -86, -60, 86, -14, 16, Radio.toggle)
+	_make_zone("radio_next", ">", 0.5, 1.0, 92, -60, 142, -14, 22, Radio.next)
+	Radio.changed.connect(_update_radio_hud)
 	if show_touch:
 		_make_zone("left", "<", 0.0, 1.0, 20, -170, 160, -40, 40)
 		_make_zone("right", ">", 0.0, 1.0, 180, -170, 320, -40, 40)
-		_make_zone("gas", "GAS", 1.0, 1.0, -170, -190, -20, -40)
+		_make_zone("gas", "GAS", 1.0, 1.0, -170, -170, -20, -40)
 		_make_zone("brake", "BRAKE", 1.0, 1.0, -340, -170, -190, -40)
 	if my_role == "navigator" or solo:
-		var by := -130.0 - (140.0 if show_touch else 0.0)
+		# gestures: bottom-left row (navigator only, no steering buttons there)
 		if my_role == "navigator":
-			_make_zone("g_left", L.t("z_left"), 0.0, 1.0, 20, by, 120, by + 90, 18, _set_gesture.bind(1))
-			_make_zone("g_fwd", L.t("z_fwd"), 0.0, 1.0, 130, by, 230, by + 90, 18, _set_gesture.bind(2))
-			_make_zone("g_right", L.t("z_right"), 0.0, 1.0, 240, by, 340, by + 90, 18, _set_gesture.bind(3))
-			_make_zone("g_stop", L.t("z_stop"), 0.0, 1.0, 350, by, 450, by + 90, 18, _set_gesture.bind(4))
+			var gy := -100.0
+			_make_zone("g_left", L.t("z_left"), 0.0, 1.0, 20, gy, 112, gy + 70, 18, _set_gesture.bind(1))
+			_make_zone("g_fwd", L.t("z_fwd"), 0.0, 1.0, 120, gy, 212, gy + 70, 18, _set_gesture.bind(2))
+			_make_zone("g_right", L.t("z_right"), 0.0, 1.0, 220, gy, 312, gy + 70, 18, _set_gesture.bind(3))
+			_make_zone("g_stop", L.t("z_stop"), 0.0, 1.0, 320, gy, 412, gy + 70, 18, _set_gesture.bind(4))
+		# map / signal cluster: bottom-right (above GAS/BRAKE when touch driving)
+		var cy := -222.0 if show_touch else -100.0
+		var bw := 80.0 if show_touch else 110.0
+		var n_btn := 3 if Net.ffa else 4
+		var gap := 6.0
+		var x := -20.0 - (bw * n_btn + gap * (n_btn - 1))
+		var ch := 46.0 if show_touch else 70.0
+		_make_zone("msize", UI.tx("SIZE", "الحجم"), 1.0, 1.0, x, cy, x + bw, cy + ch, 16, _map_size)
+		x += bw + gap
+		_make_zone("mnear", UI.tx("NEAR", "قرّب"), 1.0, 1.0, x, cy, x + bw, cy + ch, 16, _map_near)
+		x += bw + gap
+		_make_zone("map", L.t("z_map"), 1.0, 1.0, x, cy, x + bw, cy + ch, 16, _toggle_map)
 		if not Net.ffa:
-			_make_zone("beacon", L.t("z_signal"), 1.0, 1.0, -330, by, -180, by + 90, 20, _do_beacon)
-		_make_zone("map", L.t("z_map"), 1.0, 1.0, -170, by, -20, by + 90, 20, _toggle_map)
-		_make_zone("msize", UI.tx("SIZE", "الحجم"), 1.0, 1.0, -170, by - 62, -95, by - 8, 16, _map_size)
-		_make_zone("mnear", UI.tx("NEAR", "قرّب"), 1.0, 1.0, -90, by - 62, -20, by - 8, 16, _map_near)
+			x += bw + gap
+			_make_zone("beacon", L.t("z_signal"), 1.0, 1.0, x, cy, x + bw, cy + ch, 16, _do_beacon)
 		if ipad_vp == null:
 			clipboard = Clipboard.new()
 			clipboard.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			clipboard.my_color = teams[my_team].color
 			clipboard.set_track(track)
 			hud_root.add_child(clipboard)
+
+
+func _update_radio_hud() -> void:
+	if not zones.has("radio_name"):
+		return
+	var l := (zones["radio_name"] as Control).get_child(0) as Label
+	l.text = Radio.label()
+	l.modulate = Color.WHITE if Radio.on else Color(1, 1, 1, 0.55)
 
 
 func _update_layout() -> void:
@@ -1663,7 +1800,7 @@ func _update_layout() -> void:
 func _build_ipad() -> void:
 	ipad_vp = SubViewport.new()
 	ipad_vp.size = Vector2i(640, 440)
-	ipad_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	ipad_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS if Gfx.map_fps >= 60 else SubViewport.UPDATE_DISABLED
 	ipad_vp.gui_disable_input = true
 	add_child(ipad_vp)
 	clipboard = Clipboard.new()
@@ -1811,6 +1948,13 @@ func _update_repair_ui(delta: float) -> void:
 
 func _update_hud() -> void:
 	var my := teams[my_team]
+	if grace_show > 0.0 and state == State.RUNNING:
+		grace_show -= get_process_delta_time()
+		grace_label.text = UI.tx("Race ends in %d s", "السباق ينتهي بعد %d ث") % ceili(maxf(grace_show, 0.0))
+	else:
+		grace_label.text = ""
+	if skip_wait_btn:
+		skip_wait_btn.visible = grace_show > 0.0 and state == State.RUNNING and my.finished
 	var shown_time := my.finish_time if my.finished else maxf(race_time, 0.0)
 	timer_label.text = _fmt(shown_time)
 	var spd := my.car.speed_kmh if multiplayer.is_server() else my.speed
@@ -1901,6 +2045,8 @@ func _show_result(place: int, t: float) -> void:
 			mi = i
 			break
 	var rw := Profile.race_reward(place, Net.team_count, mi, track.theme == "mountain")
+	_rewarded = true
+	my_reward_line = _reward_line(rw)
 	result_panel = PanelContainer.new()
 	result_panel.set_anchors_preset(Control.PRESET_CENTER)
 	result_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -1962,6 +2108,85 @@ func _show_result(place: int, t: float) -> void:
 	hud_root.add_child(result_panel)
 
 
+func _reward_line(rw: Dictionary) -> String:
+	var s := "+%d %s    +%d XP" % [int(rw["coins"]), UI.tx("coins", "عملة"), int(rw["xp"])]
+	if rw["chest"] != "":
+		s += "    +1 " + UI.tx("chest", "صندوق")
+	if rw["level_up"]:
+		s += "    " + UI.tx("LEVEL UP!  Level %d", "ارتقيت! المستوى %d") % Profile.level
+	return s
+
+
+## team race: points per place, summed per team (best individual place breaks a tie)
+func _squad_rows() -> Array:
+	var rows: Array = []
+	if Net.squads <= 0:
+		return rows
+	var pts := {}
+	var best := {}
+	var names := {}
+	for i in final_order.size():
+		var ts := teams[final_order[i]]
+		var sq: int = ts.idx % Net.squads
+		pts[sq] = int(pts.get(sq, 0)) + int(PTS[mini(i, PTS.size() - 1)])
+		if not best.has(sq):
+			best[sq] = i
+		if not names.has(sq):
+			names[sq] = []
+		(names[sq] as Array).append(_tname(ts.idx))
+	for sq in pts:
+		rows.append({"name": L.t("TEAMX") % char(65 + sq), "pts": pts[sq], "color": TEAM_COLORS[sq % TEAM_COLORS.size()], "best": best[sq], "members": names[sq]})
+	rows.sort_custom(func(a, b):
+		if a["pts"] != b["pts"]:
+			return a["pts"] > b["pts"]
+		return a["best"] < b["best"])
+	return rows
+
+
+func _start_ceremony() -> void:
+	if ceremony != null or not is_inside_tree() or final_order.is_empty():
+		return
+	if result_panel and is_instance_valid(result_panel):
+		result_panel.queue_free()
+	result_panel = null
+	rematch_btn = null
+	room_btn = null
+	hud.visible = false
+	Radio.duck(true)
+	var entries: Array = []
+	for i in final_order.size():
+		var ts := teams[final_order[i]]
+		var plist: Array = []
+		for id in [ts.driver_id, ts.nav_id]:
+			if id != 0:
+				plist.append({"name": str(Net.players.get(id, "?")), "outfit": (Net.loadouts.get(id, {}) as Dictionary).get("outfit", {}), "role": Net.roles.get(id, "driver")})
+		entries.append({
+			"rank": i + 1, "name": _tname(ts.idx), "plate": str(Net.players.get(ts.driver_id, char(65 + ts.idx))),
+			"players": plist, "lo": Net.loadouts.get(ts.driver_id, {}), "time": ts.finish_time, "fin": ts.finished, "dnf": ts.dnf,
+			"pct": int(final_pcts[ts.idx]) if ts.idx < final_pcts.size() else 0, "color": ts.color, "place": _place(i), "mine": ts.idx == my_team})
+	var solo_room := Net.required_players <= 1
+	var c := Ceremony.new()
+	c.entries = entries
+	c.squad_rows = _squad_rows()
+	c.info_line = my_reward_line
+	c.stage_name = track.stage_name
+	c.again_text = UI.tx("Race again", "سباق جديد") if solo_room else UI.tx("Rematch", "إعادة المباراة")
+	c.exit_text = UI.tx("Main menu", "القائمة الرئيسية") if solo_room else UI.tx("Back to room", "الرجوع للغرفة")
+	c.on_again = func():
+		if solo_room:
+			Net.start_now()
+		else:
+			Net.return_to_room(true)
+	c.on_exit = func():
+		if solo_room:
+			Net.return_to_menu()
+		else:
+			Net.return_to_room(false)
+	c.position = Vector3(0, 1800, 0)
+	ceremony = c
+	add_child(c)
+
+
 ## the host runs the physics: he may only leave when everybody has finished
 func _update_result_buttons() -> void:
 	if rematch_btn == null:
@@ -1971,3 +2196,10 @@ func _update_result_buttons() -> void:
 	room_btn.disabled = wait
 	if wait:
 		rematch_btn.text = UI.tx("Waiting for the others...", "ننتظر باقي اللاعبين...")
+
+
+func _exit_tree() -> void:
+	Gfx.racing = false
+	Radio.stop_race()
+	if Radio.changed.is_connected(_update_radio_hud):
+		Radio.changed.disconnect(_update_radio_hud)

@@ -19,6 +19,7 @@ var gem_label: Label
 var toast: Label
 var preview: Preview3D
 var name_edit: LineEdit
+var ws_tab := "parts"
 var g_car := "hatch"           # car being looked at in the garage
 var browser_slot := ""
 var browser_id := ""
@@ -114,6 +115,11 @@ class NavItem extends Button:
 				for k in 3:
 					draw_rect(Rect2(c.x - 11, c.y - 9 + k * 8, 4, 4), col)
 					draw_rect(Rect2(c.x - 4, c.y - 8 + k * 8, 15, 2.5), col)
+			"settings":
+				for k in 3:
+					draw_rect(Rect2(c.x - 11, c.y - 8 + k * 8, 22, 2.5), col)
+					draw_circle(Vector2(c.x - 5 + k * 5, c.y - 7 + k * 8), 3.2, UI.BG)
+					draw_arc(Vector2(c.x - 5 + k * 5, c.y - 7 + k * 8), 3.2, 0, TAU, 10, col, 2.0)
 			"chests":
 				draw_rect(Rect2(c.x - 11, c.y - 2, 22, 12), col)
 				draw_rect(Rect2(c.x - 11, c.y - 9, 22, 7), col.darkened(0.25))
@@ -161,7 +167,7 @@ func _build() -> void:
 	sp0.custom_minimum_size = Vector2(0, 10)
 	sv.add_child(sp0)
 	var names := {"play": ["PLAY", "العب"], "garage": ["GARAGE", "الكراج"], "workshop": ["WORKSHOP", "الورشة"], "character": ["CHARACTER", "الشخصية"],
-		"shop": ["SHOP", "المتجر"], "quests": ["QUESTS", "المهام"], "chests": ["CHESTS", "الصناديق"]}
+		"shop": ["SHOP", "المتجر"], "quests": ["QUESTS", "المهام"], "chests": ["CHESTS", "الصناديق"], "settings": ["SETTINGS", "الإعدادات"]}
 	for id in tab_ids:
 		var b := NavItem.new(id)
 		b.text = UI.tx(names[id][0], names[id][1])
@@ -320,6 +326,8 @@ func select(id: String) -> void:
 			p = _tab_quests()
 		"chests":
 			p = _tab_chests()
+		"settings":
+			p = SettingsUI.new()
 	content.add_child(p)
 	p.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	p.modulate.a = 0.0
@@ -359,10 +367,11 @@ func _bar(parent: Node, text: String, frac: float, col: Color, extra := 0.0) -> 
 func _stats(parent: Node, car_id: String) -> void:
 	var m: Dictionary = Catalog.CARS[car_id]
 	var up: Dictionary = Profile.up.get(car_id, {})
-	var power := float(m["power"]) * (1.0 + 0.06 * int(up.get("engine", 0)))
-	var top := float(m["top"]) * (1.0 + 0.03 * int(up.get("engine", 0)))
-	var grip := float(m["grip"]) * (1.0 + 0.05 * int(up.get("tires", 0)))
-	var tough := 1.0 / (float(m["armor"]) * (1.0 - 0.08 * int(up.get("armor", 0))))
+	var fm := Catalog.fit_mods(up)
+	var power := float(m["power"]) * (1.0 + 0.06 * int(up.get("engine", 0))) * float(fm["power"])
+	var top := float(m["top"]) * (1.0 + 0.03 * int(up.get("engine", 0))) * float(fm["top"])
+	var grip := float(m["grip"]) * (1.0 + 0.05 * int(up.get("tires", 0))) * float(fm["grip"])
+	var tough := 1.0 / (float(m["armor"]) * (1.0 - 0.08 * int(up.get("armor", 0))) * float(fm["armor"]))
 	var heat := float(m["top"]) * 0.88 + 6.0 * int(up.get("cooling", 0))
 	var g := GridContainer.new()
 	g.columns = 2
@@ -402,7 +411,7 @@ func _browser(slots: Array, on_pick: Callable) -> Control:
 	vb.add_child(tsc)
 	var grid_sc := _scroll(vb)
 	var grid := GridContainer.new()
-	grid.columns = 3
+	grid.columns = 4 if slots[0] in Catalog.CAR_SLOTS else 3
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 8)
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -477,7 +486,21 @@ func _item_cell(slot: String, id: String, equipped: String, on_pick: Callable, g
 	var kind := slot
 	if slot == "skin":
 		kind = "shirt"
-	vb.add_child(UI.Glyph.new(kind, col))
+	if Catalog.CAR_SLOTS.has(slot):
+		var sw := HubArt.SwatchArt.new()
+		sw.slot = slot
+		sw.col = col
+		sw.none = id == "none"
+		sw.metal = float(e.get("m", 0.0))
+		sw.rough = float(e.get("ro", 0.5))
+		sw.base = Catalog.PAINTS[Profile.car_set(g_car if cur == "garage" else Profile.car)["paint"]]["c"]
+		sw.custom_minimum_size = Vector2(0, 54)
+		sw.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sw.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		sw.selected = id == equipped
+		vb.add_child(sw)
+	else:
+		vb.add_child(UI.Glyph.new(kind, col))
 	var nm := UI.lbl(vb, Catalog.nm(e), 14, rc.lightened(0.3), true)
 	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	if id == equipped:
@@ -636,6 +659,10 @@ func _tab_garage() -> Control:
 	var br := _browser(["paint", "stripe", "rim", "glow"], func(slot: String, id: String):
 		preview.show_car(_lo_for(g_car, {slot: id})))
 	right.add_child(br)
+	# purchase area sits at the bottom: selected car strip (name / buy) above the dock of cars
+	right.move_child(info, right.get_child_count() - 1)
+	right.move_child(csc, right.get_child_count() - 1)
+	csc.custom_minimum_size = Vector2(0, 160)
 	_stats(stat_box, g_car)
 	preview.ready.connect(func(): preview.show_car(_lo_for(g_car)))
 	return h
@@ -645,26 +672,61 @@ func _car_card(id: String, cb: Callable) -> Control:
 	var m: Dictionary = Catalog.CARS[id]
 	var rc: Color = Catalog.RARITY_COLOR[int(m["r"])]
 	var owned := Profile.cars.has(id)
+	var cur_car := id == Profile.car
 	var b := Button.new()
-	b.custom_minimum_size = Vector2(124, 108)
-	var n := UI.sb(UI.CARD, 16, rc if id == Profile.car else rc.darkened(0.4), 4 if id == Profile.car else 2)
+	b.custom_minimum_size = Vector2(176, 150)
+	var n := UI.sb(UI.CARD, 12, UI.ACCENT if cur_car else Color(1, 1, 1, 0.08), 3 if cur_car else 1)
 	b.add_theme_stylebox_override("normal", n)
-	b.add_theme_stylebox_override("hover", UI.sb(UI.CARD2, 16, rc, 4))
-	b.add_theme_stylebox_override("pressed", UI.sb(UI.CARD2, 16, rc, 4))
+	b.add_theme_stylebox_override("hover", UI.sb(UI.CARD2, 12, UI.ACCENT, 2))
+	b.add_theme_stylebox_override("pressed", UI.sb(UI.CARD2, 12, UI.ACCENT, 3))
 	b.add_theme_stylebox_override("focus", n)
 	b.pressed.connect(cb)
-	UI.pop(b, 1.05)
+	UI.pop(b, 1.03)
 	var vb := VBoxContainer.new()
 	vb.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.offset_left = 8
+	vb.offset_right = -8
+	vb.offset_top = 6
+	vb.offset_bottom = -6
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_theme_constant_override("separation", 1)
 	b.add_child(vb)
 	var cs: Dictionary = Profile.car_set(id)
-	vb.add_child(UI.Glyph.new("paint", Catalog.PAINTS[cs["paint"]]["c"] if owned else Color(0.35, 0.37, 0.45)))
-	var t := UI.lbl(vb, Catalog.nm(m), 15, rc.lightened(0.3), true)
+	var art := HubArt.CarArt.new()
+	art.model = id
+	art.paint = Catalog.PAINTS[cs["paint"]]["c"]
+	art.rim = Catalog.RIMS[cs["rim"]]["c"]
+	art.locked = not owned
+	art.custom_minimum_size = Vector2(0, 68)
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_child(art)
+	var t := UI.lbl(vb, Catalog.nm(m), 15, UI.TXT, false)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var s := UI.lbl(vb, UI.tx("OWNED", "مملوكة") if owned else (UI.tx("Lv ", "م ") + str(m["lvl"])), 14, UI.TXT2 if owned else Color(1.0, 0.7, 0.5), false)
-	s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	t.clip_text = true
+	# mini power / speed bars
+	for spec in [[float(m["power"]) / 1.5, UI.ACCENT], [float(m["top"]) / 230.0, Color(0.55, 0.62, 0.78)]]:
+		var bar := ProgressBar.new()
+		bar.custom_minimum_size = Vector2(0, 5)
+		bar.show_percentage = false
+		bar.max_value = 1.0
+		bar.value = clampf(float(spec[0]), 0.0, 1.0)
+		bar.add_theme_stylebox_override("background", UI.sb(Color(1, 1, 1, 0.08), 3))
+		bar.add_theme_stylebox_override("fill", UI.sb(spec[1] if owned else Color(0.4, 0.43, 0.5), 3))
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vb.add_child(bar)
+	var foot := HBoxContainer.new()
+	foot.alignment = BoxContainer.ALIGNMENT_CENTER
+	foot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_child(foot)
+	var dot := ColorRect.new()
+	dot.color = rc
+	dot.custom_minimum_size = Vector2(8, 8)
+	dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	foot.add_child(dot)
+	var st := UI.tx("OWNED", "مملوكة") if owned else (UI.tx("Lv ", "م ") + str(m["lvl"]) + "  ·  " + str(m["price"]))
+	var sl := UI.lbl(foot, "  " + st, 13, UI.TXT2 if owned or Profile.level >= int(m["lvl"]) else Color(1.0, 0.6, 0.45), false)
+	sl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return b
 
 
@@ -692,7 +754,90 @@ func _tab_workshop() -> Control:
 	right.add_theme_constant_override("separation", 8)
 	h.add_child(right)
 	UI.lbl(right, "%s  -  %s" % [UI.tx("Upgrade your", "طوّر"), Catalog.nm(Catalog.CARS[Profile.car])], 26, UI.GOLD, false)
-	var sc := _scroll(right)
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 6)
+	right.add_child(tabs)
+	var body := VBoxContainer.new()
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.add_child(body)
+	var show_tab := func(which: String) -> void:
+		ws_tab = which
+		for c in body.get_children():
+			c.queue_free()
+		for tb in tabs.get_children():
+			(tb as Button).add_theme_stylebox_override("normal", UI.sb(UI.ACCENT if tb.get_meta("k") == which else UI.CARD2, 6))
+		if which == "parts":
+			_workshop_parts(body)
+		else:
+			_workshop_levels(body)
+	for k in ["parts", "levels"]:
+		var tb := UI.btn(tabs, UI.tx("Parts", "قطع التعديل") if k == "parts" else UI.tx("Tuning levels", "مستويات الأداء"), UI.CARD2, func(): show_tab.call(k), 20, Vector2(0, 46))
+		tb.set_meta("k", k)
+	show_tab.call(ws_tab)
+	return h
+
+
+func _workshop_parts(host: Control) -> void:
+	var sc := _scroll(host)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.add_theme_constant_override("separation", 8)
+	sc.add_child(list)
+	var up: Dictionary = Profile.up.get(Profile.car, {})
+	for slot in Catalog.PART_SLOTS:
+		var pd: Dictionary = Catalog.PARTS[slot]
+		var fitted := int(up.get("fit_" + slot, 0))
+		var row := UI.panel(list, UI.CARD, 12)
+		var v := VBoxContainer.new()
+		v.add_theme_constant_override("separation", 6)
+		row.add_child(v)
+		var head := HBoxContainer.new()
+		v.add_child(head)
+		var t := UI.lbl(head, Catalog.txt(pd["n"]) + "  -  " + Catalog.txt(pd["d"]), 20, UI.TXT, false)
+		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		UI.lbl(head, UI.tx("Not fitted", "غير مركّب") if fitted == 0 else UI.tx("Fitted: ", "مركّب: ") + Catalog.txt(pd["tiers"][fitted - 1]), 16, UI.TXT2 if fitted == 0 else UI.OK, false)
+		var tr := HBoxContainer.new()
+		tr.add_theme_constant_override("separation", 8)
+		v.add_child(tr)
+		for ti in 3:
+			var tier := ti + 1
+			var cell := UI.panel(tr, UI.CARD2, 10)
+			cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			var cv := VBoxContainer.new()
+			cv.add_theme_constant_override("separation", 3)
+			cell.add_child(cv)
+			UI.lbl(cv, Catalog.txt(pd["tiers"][ti]), 15, UI.TXT, false)
+			var pct := int(round(float(pd["v"][ti]) * 100.0))
+			UI.lbl(cv, ("-%d%% " + UI.tx("damage", "ضرر")) % pct if pd["stat"] == "armor" else "+%d%%" % pct, 17, UI.ACCENT, false)
+			if fitted == tier:
+				var b := UI.btn(cv, UI.tx("Remove", "إزالة"), UI.BLUE, func():
+					Profile.install_part(Profile.car, slot, 0)
+					Sfx.play("click")
+					select("workshop"), 17, Vector2(0, 40))
+			elif Profile.part_owned(slot, tier):
+				UI.btn(cv, UI.tx("Install", "تركيب"), UI.GREEN, func():
+					Profile.install_part(Profile.car, slot, tier)
+					Sfx.play("success", -4.0)
+					say(UI.tx("Installed!", "تم التركيب!"))
+					select("workshop"), 17, Vector2(0, 40))
+			else:
+				var price := int(pd["price"][ti])
+				var b := UI.btn(cv, "", UI.GOLD.darkened(0.35), func():
+					if Profile.buy_part(slot, tier):
+						Sfx.play("success", -2.0)
+						say(UI.tx("Bought and installed!", "تم الشراء والتركيب!"))
+						select("workshop")
+					else:
+						say(UI.tx("Not enough coins", "العملات لا تكفي")), 17, Vector2(0, 40))
+				b.disabled = Profile.coins < price
+				var ph := UI.price_row(null, price, false, 17)
+				ph.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+				b.add_child(ph)
+
+
+func _workshop_levels(host: Control) -> void:
+	var sc := _scroll(host)
 	var list := VBoxContainer.new()
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list.add_theme_constant_override("separation", 8)
@@ -734,7 +879,6 @@ func _tab_workshop() -> Control:
 			var ph := UI.price_row(null, cost, false, 22)
 			ph.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 			b.add_child(ph)
-	return h
 
 
 # ====================================================================== CHARACTER
@@ -814,9 +958,9 @@ func _tab_shop() -> Control:
 		p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var v := VBoxContainer.new()
 		p.add_child(v)
-		var cv := ChestArt.new()
-		cv.col = cd["c"]
-		cv.custom_minimum_size = Vector2(0, 90)
+		var cv := HubArt.ChestBox.new()
+		cv.tier = cd["c"]
+		cv.custom_minimum_size = Vector2(0, 100)
 		v.add_child(cv)
 		var nm := UI.lbl(v, Catalog.txt(cd["n"]), 20, cd["c"], false)
 		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -836,30 +980,6 @@ func _tab_shop() -> Control:
 		b.add_child(ph)
 	UI.lbl(vb, UI.tx("Rarity odds: common / rare / epic / legendary", "نسب الندرة: عادي / نادر / ملحمي / أسطوري"), 14, UI.TXT2)
 	return sc
-
-
-class ChestArt extends Control:
-	var col := Color(0.8, 0.5, 0.25)
-	var t := 0.0
-	var shake := 0.0
-	var open := 0.0
-
-	func _process(d: float) -> void:
-		t += d
-		queue_redraw()
-
-	func _draw() -> void:
-		var c := size * 0.5 + Vector2(sin(t * 40.0) * shake * 6.0, 0)
-		var w := 84.0
-		var h := 46.0
-		draw_rect(Rect2(c.x - w * 0.5, c.y - 2, w, h * 0.6), col.darkened(0.35))
-		draw_rect(Rect2(c.x - w * 0.5, c.y - 2, w, h * 0.6), col, false, 3.0)
-		var lid_y := c.y - 2 - h * 0.5 - open * 26.0
-		draw_rect(Rect2(c.x - w * 0.5 - 2, lid_y, w + 4, h * 0.5), col.lightened(0.1))
-		draw_rect(Rect2(c.x - 6, c.y - 8, 12, 16), Color(1, 0.9, 0.5))
-		if open > 0.0:
-			draw_circle(c + Vector2(0, -8), 20.0 + open * 30.0, Color(1, 0.95, 0.6, 0.35 * (1.0 - open * 0.5)))
-		draw_circle(c + Vector2(0, -8), 10.0 + sin(t * 3.0) * 2.0, Color(1, 1, 0.8, 0.25))
 
 
 # ====================================================================== QUESTS
@@ -952,9 +1072,9 @@ func _tab_chests() -> Control:
 		p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var v := VBoxContainer.new()
 		p.add_child(v)
-		var art := ChestArt.new()
-		art.col = cd["c"]
-		art.custom_minimum_size = Vector2(0, 120)
+		var art := HubArt.ChestBox.new()
+		art.tier = cd["c"]
+		art.custom_minimum_size = Vector2(0, 130)
 		v.add_child(art)
 		UI.lbl(v, "%s  x%d" % [Catalog.txt(cd["n"]), n], 22, cd["c"], false).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		var b := UI.btn(v, UI.tx("OPEN", "افتح"), UI.GREEN, func(): _open_chest(kind, art), 24, Vector2(0, 54))
@@ -965,61 +1085,92 @@ func _tab_chests() -> Control:
 	return vb
 
 
-func _open_chest(kind: String, art: ChestArt) -> void:
+func _open_chest(kind: String, art: Control) -> void:
 	var res := Profile.open_chest(kind)
 	if res.is_empty():
 		return
-	var ov := ColorRect.new()
-	ov.color = Color(0, 0, 0, 0.8)
-	ov.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	ov.z_index = 30
-	add_child(ov)
-	var cc := CenterContainer.new()
-	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	ov.add_child(cc)
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 10)
-	v.alignment = BoxContainer.ALIGNMENT_CENTER
-	cc.add_child(v)
-	var big := ChestArt.new()
-	big.col = Catalog.CHESTS[kind]["c"]
-	big.custom_minimum_size = Vector2(300, 220)
-	v.add_child(big)
-	var tw := create_tween()
-	tw.tween_property(big, "shake", 1.0, 0.6)
-	tw.tween_callback(func(): Sfx.play("clang", 0.0, 1.3))
-	tw.tween_property(big, "shake", 0.0, 0.05)
-	tw.tween_property(big, "open", 1.0, 0.35)
-	await tw.finished
-	Sfx.play("success", 3.0)
 	var rar := 0
 	if res.has("item"):
 		rar = int(res["item"]["rar"])
 	var rc: Color = Catalog.RARITY_COLOR[rar]
-	var title := UI.lbl(v, "", 40, rc, false)
+	var ov := ColorRect.new()
+	ov.color = Color(0.02, 0.025, 0.035, 0.0)
+	ov.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	ov.z_index = 30
+	add_child(ov)
+	create_tween().tween_property(ov, "color:a", 0.92, 0.25)
+	var cc := CenterContainer.new()
+	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	ov.add_child(cc)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	cc.add_child(v)
+	var big := HubArt.ChestBox.new()
+	big.tier = Catalog.CHESTS[kind]["c"]
+	big.burst = rc.lightened(0.25)
+	big.idle = false
+	big.custom_minimum_size = Vector2(320, 210)
+	v.add_child(big)
+	# 1) the chest charges up and shakes harder and harder
+	var tw := create_tween()
+	tw.tween_property(big, "shake", 0.4, 0.5)
+	tw.parallel().tween_property(big, "charge", 0.6, 0.5)
+	tw.tween_callback(func(): Sfx.play("clang", -2.0, 0.8))
+	tw.tween_property(big, "shake", 1.0, 0.5)
+	tw.parallel().tween_property(big, "charge", 1.0, 0.5)
+	tw.tween_callback(func(): Sfx.play("clang", 0.0, 1.3))
+	tw.tween_property(big, "shake", 0.0, 0.08)
+	# 2) the lid snaps open with a flash
+	tw.tween_property(big, "open", 1.0, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	await tw.finished
+	Sfx.play("success", 3.0)
+	var fl := ColorRect.new()
+	fl.color = Color(rc.r, rc.g, rc.b, 0.5 + 0.12 * rar)
+	fl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ov.add_child(fl)
+	create_tween().tween_property(fl, "color:a", 0.0, 0.6)
+	# 3) reward card slides up
+	var card := UI.panel(null, UI.CARD, 14)
+	card.custom_minimum_size = Vector2(380, 0)
+	card.add_theme_stylebox_override("panel", UI.sb(UI.CARD, 14, rc, 2))
+	v.add_child(card)
+	var cv := VBoxContainer.new()
+	cv.add_theme_constant_override("separation", 6)
+	card.add_child(cv)
+	var tag := UI.lbl(cv, Catalog.rar_name(rar).to_upper(), 16, rc, false)
+	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var title := UI.lbl(cv, UI.tx("Bonus", "مكافأة"), 30, UI.TXT, false)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	if res.has("item"):
 		var it: Dictionary = res["item"]
 		var e := Catalog.entry(it["slot"], it["id"])
-		title.text = "%s!  %s" % [Catalog.rar_name(rar), Catalog.nm(e)]
+		title.text = Catalog.nm(e)
 		var col: Color = e["c"] if e.has("c") and e["c"] != Color.TRANSPARENT else rc
-		var g := UI.Glyph.new(it["slot"], col)
-		g.custom_minimum_size = Vector2(0, 90)
-		v.add_child(g)
-		UI.lbl(v, Catalog.txt(Catalog.SLOT_NAME[it["slot"]]), 20, UI.TXT2, false).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	else:
-		title.text = UI.tx("Bonus!", "مكافأة!")
+		if Catalog.CAR_SLOTS.has(it["slot"]):
+			var sw := HubArt.SwatchArt.new()
+			sw.slot = it["slot"]
+			sw.col = col
+			sw.metal = float(e.get("m", 0.0))
+			sw.rough = float(e.get("ro", 0.5))
+			sw.base = Catalog.PAINTS[Profile.car_set()["paint"]]["c"]
+			sw.custom_minimum_size = Vector2(0, 80)
+			cv.add_child(sw)
+		else:
+			var g := UI.Glyph.new(it["slot"], col)
+			g.custom_minimum_size = Vector2(0, 80)
+			cv.add_child(g)
+		UI.lbl(cv, Catalog.txt(Catalog.SLOT_NAME[it["slot"]]), 16, UI.TXT2, false).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var ex := "+%d %s" % [int(res["coins"]), UI.tx("coins", "عملة")]
 	if int(res["gems"]) > 0:
 		ex += "     +%d %s" % [int(res["gems"]), UI.tx("gems", "جوهرة")]
-	UI.lbl(v, ex, 26, Color.WHITE, false).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	if rar >= 3:
-		var fl := ColorRect.new()
-		fl.color = Color(1, 0.9, 0.5, 0.7)
-		fl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		fl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		ov.add_child(fl)
-		create_tween().tween_property(fl, "color:a", 0.0, 0.8)
+	UI.lbl(cv, ex, 22, UI.TXT, false).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	UI.btn(v, UI.tx("Collect", "استلم"), UI.GREEN, func():
 		ov.queue_free()
-		select("chests"), 26, Vector2(260, 60))
+		select("chests"), 24, Vector2(0, 56))
+	card.modulate.a = 0.0
+	create_tween().tween_property(card, "modulate:a", 1.0, 0.35)
+	card.pivot_offset = Vector2(190, 80)
+	card.scale = Vector2(0.85, 0.85)
+	create_tween().tween_property(card, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)

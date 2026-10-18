@@ -13,15 +13,23 @@ const CARS := {
 	"buggy": {"n": ["Dune Buggy", "بقي الكثبان"], "r": 1, "price": 2500, "lvl": 3, "power": 0.95, "top": 150.0, "grip": 1.25, "armor": 0.9,
 		"d": ["Grips like glue off-road", "تمسك الأرض بقوة"]},
 	"muscle": {"n": ["Muscle GT", "ماسل GT"], "r": 1, "price": 6000, "lvl": 5, "power": 1.2, "top": 180.0, "grip": 0.88, "armor": 1.0,
-		"d": ["Huge power, hard to tame", "قوة هائلة وصعبة الترويض"]},
+		"d": ["Huge power, hard to tame", "قوة هائلة وصعبة الترويض"], "drop": 0.2, "paint": "yellow", "stripe": "black", "rim": "black"},
+	"sierra": {"n": ["Cosworth RS", "كوزورث RS"], "r": 1, "price": 8000, "lvl": 6, "power": 1.15, "top": 178.0, "grip": 1.0, "armor": 1.0,
+		"d": ["Homologation legend", "أسطورة الرالي الكلاسيكية"], "drop": 0.14, "paint": "black", "stripe": "none", "rim": "steel"},
+	"charger": {"n": ["Charger R/T", "تشارجر R/T"], "r": 2, "price": 12500, "lvl": 8, "power": 1.3, "top": 186.0, "grip": 0.95, "armor": 1.15,
+		"d": ["Heavy, loud and fast", "ثقيلة وصاخبة وسريعة"], "drop": 0.18, "paint": "granite", "stripe": "none", "rim": "black"},
 	"pickup": {"n": ["Trail 4x4", "تريل 4x4"], "r": 2, "price": 9500, "lvl": 7, "power": 1.05, "top": 160.0, "grip": 1.1, "armor": 1.35,
 		"d": ["Tough as a tank", "قوية كالدبابة"]},
 	"coupe": {"n": ["Apex Coupe", "أبكس كوبيه"], "r": 2, "price": 20000, "lvl": 10, "power": 1.25, "top": 195.0, "grip": 1.12, "armor": 0.95,
-		"d": ["Track-bred speed", "سرعة سباقات حقيقية"]},
+		"d": ["Track-bred speed", "سرعة سباقات حقيقية"], "drop": 0.26, "paint": "white", "stripe": "none", "rim": "black"},
+	"m4": {"n": ["M4 Competition", "إم 4 كومبيتشن"], "r": 2, "price": 26000, "lvl": 11, "power": 1.35, "top": 205.0, "grip": 1.15, "armor": 1.0,
+		"d": ["German sport coupe, twin kidney grille", "كوبيه ألماني رياضي بشبك مزدوج"], "drop": 0.26, "paint": "estoril", "stripe": "none", "rim": "black"},
+	"gt3": {"n": ["GT3 Racer", "جي تي 3 ريسر"], "r": 3, "price": 32000, "lvl": 12, "power": 1.4, "top": 210.0, "grip": 1.3, "armor": 1.0,
+		"d": ["Full-blown race machine", "سيارة سباق متكاملة"], "drop": 0.32, "paint": "papaya", "stripe": "none", "rim": "black"},
 	"hyper": {"n": ["Phantom Hyper", "فانتوم هايبر"], "r": 3, "price": 50000, "lvl": 15, "power": 1.5, "top": 225.0, "grip": 1.2, "armor": 1.05,
-		"d": ["The ultimate machine", "الوحش الأخير"]},
+		"d": ["The ultimate machine", "الوحش الأخير"], "drop": 0.3, "paint": "black", "stripe": "none", "rim": "black"},
 }
-const CAR_ORDER := ["hatch", "buggy", "muscle", "pickup", "coupe", "hyper"]
+const CAR_ORDER := ["hatch", "buggy", "muscle", "sierra", "pickup", "charger", "coupe", "m4", "gt3", "hyper"]
 
 # metal / rough control the paint finish
 const PAINTS := {
@@ -31,6 +39,9 @@ const PAINTS := {
 	"black": {"n": ["Night Black", "أسود ليلي"], "r": 0, "price": 400, "c": Color(0.06, 0.06, 0.08), "m": 0.5, "ro": 0.3},
 	"yellow": {"n": ["Sunny Yellow", "أصفر شمسي"], "r": 0, "price": 400, "c": Color(0.98, 0.78, 0.1), "m": 0.3, "ro": 0.4},
 	"green": {"n": ["Forest Green", "أخضر الغابة"], "r": 0, "price": 400, "c": Color(0.1, 0.5, 0.2), "m": 0.35, "ro": 0.4},
+	"estoril": {"n": ["Estoril Blue", "أزرق إستوريل"], "r": 1, "price": 1500, "c": Color(0.1, 0.25, 0.75), "m": 0.5, "ro": 0.3},
+	"papaya": {"n": ["Papaya Orange", "برتقالي بابايا"], "r": 2, "price": 2200, "c": Color(1.0, 0.45, 0.02), "m": 0.5, "ro": 0.3},
+	"granite": {"n": ["Granite Grey", "رمادي جرانيت"], "r": 1, "price": 1400, "c": Color(0.36, 0.38, 0.42), "m": 0.45, "ro": 0.4},
 	"orange": {"n": ["Lava Orange", "برتقالي الحمم"], "r": 1, "price": 900, "c": Color(1.0, 0.4, 0.05), "m": 0.5, "ro": 0.3},
 	"purple": {"n": ["Violet Pearl", "بنفسجي لؤلؤي"], "r": 1, "price": 1200, "c": Color(0.5, 0.15, 0.8), "m": 0.6, "ro": 0.25},
 	"matte": {"n": ["Stealth Matte", "رمادي مطفي"], "r": 2, "price": 2500, "c": Color(0.22, 0.24, 0.27), "m": 0.1, "ro": 0.9},
@@ -38,7 +49,7 @@ const PAINTS := {
 	"gold": {"n": ["Liquid Gold", "ذهب سائل"], "r": 3, "price": 0, "gem": 120, "c": Color(1.0, 0.75, 0.15), "m": 0.95, "ro": 0.18},
 	"chrome": {"n": ["Mirror Chrome", "كروم مرآة"], "r": 3, "price": 0, "gem": 150, "c": Color(0.85, 0.88, 0.95), "m": 1.0, "ro": 0.08},
 }
-const PAINT_ORDER := ["red", "blue", "white", "black", "yellow", "green", "orange", "purple", "matte", "candy", "gold", "chrome"]
+const PAINT_ORDER := ["red", "blue", "white", "black", "yellow", "green", "orange", "purple", "estoril", "papaya", "granite", "matte", "candy", "gold", "chrome"]
 
 const STRIPES := {
 	"none": {"n": ["No stripes", "بدون خطوط"], "r": 0, "price": 0, "c": Color.WHITE},
@@ -157,6 +168,36 @@ const UPGRADES := {
 }
 const UPGRADE_ORDER := ["engine", "tires", "armor", "cooling", "extinguisher"]
 const MAX_UP := 5
+
+# ---- fitted parts: bought once, installed on one car at a time (stored as up["fit_<slot>"] = tier)
+const PART_SLOTS := ["turbo", "exhaust", "aero", "susp", "kit"]
+const PARTS := {
+	"turbo": {"n": ["Turbo", "تيربو"], "d": ["More power", "قوة أكبر"], "stat": "power", "v": [0.06, 0.12, 0.20],
+		"tiers": [["Stage 1 turbo", "تيربو مرحلة 1"], ["Twin-scroll turbo", "تيربو مزدوج"], ["Race turbo", "تيربو سباق"]], "price": [900, 2600, 6500]},
+	"exhaust": {"n": ["Exhaust", "العادم"], "d": ["Higher top speed", "سرعة قصوى أعلى"], "stat": "top", "v": [0.03, 0.06, 0.10],
+		"tiers": [["Sport exhaust", "عادم رياضي"], ["Race exhaust", "عادم سباق"], ["Titanium exhaust", "عادم تيتانيوم"]], "price": [700, 2000, 5200]},
+	"aero": {"n": ["Aero kit", "طقم الايرو"], "d": ["More grip at speed", "ثبات أعلى بالسرعة"], "stat": "grip", "v": [0.04, 0.08, 0.13],
+		"tiers": [["Front lip", "شفة أمامية"], ["Spoiler kit", "طقم سبويلر"], ["GT wing kit", "جناح GT كامل"]], "price": [800, 2300, 6000]},
+	"susp": {"n": ["Suspension", "التعليق"], "d": ["Better handling off-road", "تحكم أفضل خارج الطريق"], "stat": "grip", "v": [0.05, 0.10, 0.16],
+		"tiers": [["Sport springs", "سوست رياضي"], ["Rally coilovers", "مساعدات رالي"], ["Race coilovers", "مساعدات سباق"]], "price": [850, 2400, 6200]},
+	"kit": {"n": ["Armor kit", "طقم الحماية"], "d": ["Crashes hurt less", "الاصطدام يضر أقل"], "stat": "armor", "v": [0.08, 0.16, 0.25],
+		"tiers": [["Skid plate", "حماية سفلية"], ["Roll cage", "قفص أمان"], ["Full armor", "حماية كاملة"]], "price": [800, 2200, 5800]},
+}
+
+
+## multipliers from the fitted parts of a car's upgrade dict
+static func fit_mods(up: Dictionary) -> Dictionary:
+	var r := {"power": 1.0, "top": 1.0, "grip": 1.0, "armor": 1.0}
+	for slot in PART_SLOTS:
+		var t := int(up.get("fit_" + slot, 0))
+		if t > 0:
+			var p: Dictionary = PARTS[slot]
+			var v: float = p["v"][t - 1]
+			if p["stat"] == "armor":
+				r["armor"] = float(r["armor"]) * (1.0 - v)
+			else:
+				r[p["stat"]] = float(r[p["stat"]]) * (1.0 + v)
+	return r
 
 
 static func upgrade_cost(key: String, lvl: int) -> int:

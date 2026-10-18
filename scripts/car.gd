@@ -35,6 +35,8 @@ var impact_acc := 0.0
 var team_color := Color(0.78, 0.08, 0.08)
 var lo := {}                 # loadout: car model, paint, stripe, rim, glow, upgrades
 var model := "hatch"
+var drop := 0.0     # how much lower the roof sits than the standard cabin (sleek cars)
+var sd := 0.0       # matching seat drop
 var preview := false         # garage preview: no sound, no physics
 var power_mult := 1.0
 var top_speed := TOP_SPEED_KMH
@@ -68,6 +70,9 @@ var _last_pos := Vector3.ZERO
 var _vel_est := Vector3.ZERO
 var _wheel_pivot: Node3D
 var _wheel_mesh: Node3D
+var _mirror_nodes := {}          # "rear" / "left" / "right" -> Node3D (housing, glass child "glass")
+var _mirror_vps: Array[SubViewport] = []
+var _mirror_t := 0.0
 
 
 func setup(p_team: int, color: Color, remote: bool, p_lo := {}, p_preview := false) -> void:
@@ -81,12 +86,15 @@ func setup(p_team: int, color: Color, remote: bool, p_lo := {}, p_preview := fal
 	if not Catalog.CARS.has(model):
 		model = "hatch"
 	var m: Dictionary = Catalog.CARS[model]
+	drop = float(m.get("drop", 0.0))
+	sd = drop * 0.85
 	var up: Dictionary = lo.get("up", {})
 	var eng := int(up.get("engine", 0))
-	power_mult = float(m["power"]) * (1.0 + 0.06 * eng)
-	top_speed = float(m["top"]) * (1.0 + 0.03 * eng)
-	grip_base = float(m["grip"]) * (1.0 + 0.05 * int(up.get("tires", 0)))
-	armor = float(m["armor"]) * (1.0 - 0.08 * int(up.get("armor", 0)))
+	var fm := Catalog.fit_mods(up)
+	power_mult = float(m["power"]) * (1.0 + 0.06 * eng) * float(fm["power"])
+	top_speed = float(m["top"]) * (1.0 + 0.03 * eng) * float(fm["top"])
+	grip_base = float(m["grip"]) * (1.0 + 0.05 * int(up.get("tires", 0))) * float(fm["grip"])
+	armor = float(m["armor"]) * (1.0 - 0.08 * int(up.get("armor", 0))) * float(fm["armor"])
 	overheat_kmh = float(m["top"]) * 0.88 + 6.0 * int(up.get("cooling", 0))
 	burn_time = 45.0 + 5.0 * int(up.get("cooling", 0))
 	ext_mult = 1.0 + 0.15 * int(up.get("extinguisher", 0))
@@ -95,7 +103,7 @@ func setup(p_team: int, color: Color, remote: bool, p_lo := {}, p_preview := fal
 
 
 func seat_origin(role: String) -> Vector3:
-	return Vector3(-0.45, 1.0, 0.3) if role == "driver" else Vector3(0.45, 1.0, 0.3)
+	return Vector3(-0.45, 1.0 - sd, 0.3) if role == "driver" else Vector3(0.45, 1.0 - sd, 0.3)
 
 
 func _ready() -> void:
@@ -196,7 +204,7 @@ func add_lights() -> void:
 		sp.light_color = Color(1.0, 0.95, 0.8)
 		add_child(sp)
 	var cab := OmniLight3D.new()
-	cab.position = Vector3(0, 1.7, 0.2)
+	cab.position = Vector3(0, 1.7 - drop, 0.2)
 	cab.omni_range = 3.2
 	cab.light_energy = 0.7
 	cab.light_color = Color(1.0, 0.85, 0.6)
@@ -249,25 +257,25 @@ func _build_visuals() -> void:
 		body_mat.clearcoat = 0.6
 	_box(self, Vector3(1.9, 0.5, 4.0), Vector3(0, 0.62, 0), c)                  # body
 	_box(self, Vector3(1.8, 0.08, 3.8), Vector3(0, 0.88, 0.0), NAVY)            # floor
-	_box(self, Vector3(1.9, 0.12, 2.0), Vector3(0, 1.95, 0.35), c)              # roof
 	_box(self, Vector3(0.1, 0.42, 2.0), Vector3(-0.95, 1.12, 0.35), c)          # doors
 	_box(self, Vector3(0.1, 0.42, 2.0), Vector3(0.95, 1.12, 0.35), c)
 	_box(self, Vector3(1.9, 0.42, 0.1), Vector3(0, 1.12, 1.35), c)              # rear wall
-	_box(self, Vector3(1.9, 0.14, 0.14), Vector3(0, 1.9, -0.65), c)             # windshield top
 	_box(self, Vector3(1.9, 0.3, 0.9), Vector3(0, 1.0, -1.2), DARK.lightened(0.15))  # dashboard
-	_box(self, Vector3(0.35, 0.08, 0.06), Vector3(0, 1.78, -0.6), DARK)         # rear-view mirror
+	_build_mirrors()
+	_build_radio_unit()
+	_build_cluster()
 	_build_engine_bay(c)
 	CarStyle.decorate(self, model, lo, body_mat, team_color)
 	_box(self, Vector3(1.9, 0.3, 0.2), Vector3(0, 0.5, -2.05), DARK)            # bumpers
 	_box(self, Vector3(1.9, 0.3, 0.2), Vector3(0, 0.5, 2.05), DARK)
 	for x in [-0.45, 0.45]:                                                     # front seats
-		_box(self, Vector3(0.5, 0.12, 0.55), Vector3(x, 0.98, 0.3), DARK)
-		_box(self, Vector3(0.5, 0.75, 0.12), Vector3(x, 1.3, 0.66), DARK)
-	_box(self, Vector3(1.6, 0.12, 0.55), Vector3(0, 0.98, 1.0), DARK)           # back seat
-	_box(self, Vector3(1.8, 0.06, 0.06), Vector3(0, 1.8, 0.2), DARK)            # roll-cage bar
+		_box(self, Vector3(0.5, 0.12, 0.55), Vector3(x, 0.98 - sd, 0.3), DARK)
+		_box(self, Vector3(0.5, 0.75, 0.12), Vector3(x, 1.3 - sd, 0.66), DARK)
+	_box(self, Vector3(1.6, 0.12, 0.55), Vector3(0, 0.98 - sd, 1.0), DARK)           # back seat
+	_box(self, Vector3(1.8, 0.06, 0.06), Vector3(0, 1.8 - drop, 0.2), DARK)            # roll-cage bar
 
 	# team letter on the roof and on the back
-	for spec in [[Vector3(0, 2.03, 0.35), Vector3(-90, 0, 0)], [Vector3(0, 1.3, 1.42), Vector3(0, 0, 0)]]:
+	for spec in [[Vector3(0, 2.0 - drop, (float(CarStyle.GREENHOUSE.get(model, CarStyle.GREENHOUSE["hatch"])["zf1"]) + float(CarStyle.GREENHOUSE.get(model, CarStyle.GREENHOUSE["hatch"])["zr1"])) * 0.5), Vector3(-90, 0, 0)], [Vector3(0, 1.3, 1.42), Vector3(0, 0, 0)]]:
 		var lab := Label3D.new()
 		plate_labels.append(lab)
 		lab.text = char(65 + team)
@@ -284,7 +292,7 @@ func _build_visuals() -> void:
 
 	# steering wheel (driver side)
 	_wheel_pivot = Node3D.new()
-	_wheel_pivot.position = Vector3(-0.45, 1.3, -0.42)
+	_wheel_pivot.position = Vector3(-0.45, 1.3 - sd * 0.8, -0.42)
 	_wheel_pivot.rotation.x = deg_to_rad(62.0)
 	add_child(_wheel_pivot)
 	_wheel_mesh = Node3D.new()
@@ -352,7 +360,7 @@ func _quad_mat(additive: bool) -> StandardMaterial3D:
 func _particles(pos: Vector3, amount: int, life: float, size: float, additive: bool, ramp: Gradient) -> CPUParticles3D:
 	var p := CPUParticles3D.new()
 	p.position = pos
-	p.amount = amount
+	p.amount = Gfx.particles(amount)
 	p.lifetime = life
 	p.emitting = false
 	var q := QuadMesh.new()
@@ -485,6 +493,8 @@ func _process(delta: float) -> void:
 		driver_avatar.set_wheel_hands(left_hand, right_hand)
 	_update_motion_audio(delta)
 	_update_damage_fx(delta)
+	_tick_mirrors(delta)
+	_update_cluster(delta)
 
 
 func _update_motion_audio(delta: float) -> void:
@@ -666,3 +676,310 @@ func set_plate_text(txt: String) -> void:
 		lab.text = txt
 		lab.font_size = 150 if n <= 1 else int(clampf(190.0 - 16.0 * n, 40.0, 120.0))
 		lab.width = 900.0
+
+
+# ------------------------------------------------------------------ mirrors
+## Rear-view mirror (top of the windshield) + two wing mirrors. Everybody sees the mirror bodies; only the car of
+## the local player renders real reflections (enable_mirrors) - see Gfx.mirrors for the quality setting.
+
+func _mirror_glass_mat() -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_color = Color(0.2, 0.26, 0.33)
+	return m
+
+
+func _build_mirrors() -> void:
+	var shell := body_mat if body_mat != null else _mat(body_color)
+	var dark := CarStyle.mat(Color(0.05, 0.05, 0.07), 0.2, 0.5)
+	# rear-view: hangs from the roof edge above the windshield
+	var rv := Node3D.new()
+	rv.position = Vector3(0.0, 1.76 - drop, -0.66 - drop * 0.35)
+	add_child(rv)
+	CarStyle.box(rv, Vector3(0.05, 0.09, 0.05), Vector3(0, 0.1, -0.02), dark)
+	CarStyle.box(rv, Vector3(0.5, 0.15, 0.06), Vector3.ZERO, dark)
+	_mirror_quad(rv, Vector2(0.45, 0.115), Vector3(0, 0, 0.034))
+	_mirror_nodes["rear"] = rv
+	# wing mirrors (stalk + housing in body colour, glass faces back and inwards)
+	for side in ["left", "right"]:
+		var sx := -1.0 if side == "left" else 1.0
+		var wm := Node3D.new()
+		wm.position = Vector3(sx * 1.13, 1.44 - drop * 0.3, -0.8)
+		wm.rotation_degrees.y = -sx * 24.0
+		add_child(wm)
+		CarStyle.box(wm, Vector3(0.2, 0.05, 0.05), Vector3(-sx * 0.12, -0.04, -0.02), dark)
+		CarStyle.box(wm, Vector3(0.24, 0.17, 0.09), Vector3.ZERO, shell)
+		_mirror_quad(wm, Vector2(0.2, 0.135), Vector3(0, 0, 0.047))
+		_mirror_nodes[side] = wm
+
+
+func _mirror_quad(parent: Node3D, sz: Vector2, pos: Vector3) -> void:
+	var g := MeshInstance3D.new()
+	g.name = "glass"
+	var q := QuadMesh.new()
+	q.size = sz
+	g.mesh = q
+	g.material_override = _mirror_glass_mat()
+	g.position = pos
+	parent.add_child(g)
+
+
+## local player's car only: turn the glass into live cameras. role = "driver" | "navigator"
+func enable_mirrors(role: String) -> void:
+	if preview or Gfx.mirrors <= 0 or not _mirror_vps.is_empty():
+		return
+	var rv: Node3D = _mirror_nodes["rear"]
+	rv.rotation_degrees.y = (-15.0 if role == "driver" else 15.0)
+	rv.rotation_degrees.x = 4.0
+	# rear view: camera at the tail looking back
+	_mirror_cam("rear", Vector3(0, 1.55, 2.0), Vector3(0, 0, 0), 62.0, Vector2i(288, 76), true)
+	if Gfx.mirrors >= 2:
+		_mirror_cam("left", Vector3(-1.2, 1.44, -0.7), Vector3(0, -12.0, 0), 58.0, Vector2i(140, 96), false)
+		_mirror_cam("right", Vector3(1.2, 1.44, -0.7), Vector3(0, 12.0, 0), 58.0, Vector2i(140, 96), false)
+
+
+func _mirror_cam(which: String, pos: Vector3, rot_deg: Vector3, fov: float, px: Vector2i, wide_rear: bool) -> void:
+	var vp := SubViewport.new()
+	vp.size = px
+	vp.msaa_3d = Viewport.MSAA_DISABLED
+	vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	vp.gui_disable_input = true
+	vp.audio_listener_enable_3d = false
+	add_child(vp)
+	var cam := Camera3D.new()
+	cam.fov = fov
+	cam.near = 0.15
+	cam.far = clampf(Gfx.far_clip() * 0.45, 120.0, 700.0)
+	vp.add_child(cam)
+	# the camera copies a marker that rides on the car
+	var mark := RemoteTransform3D.new()
+	mark.position = pos
+	# a camera looks down -Z: turn it round to look backwards (+Z)
+	mark.rotation_degrees = Vector3(rot_deg.x, 180.0 + rot_deg.y, rot_deg.z)
+	mark.use_global_coordinates = true
+	add_child(mark)
+	mark.remote_path = mark.get_path_to(cam)
+	_mirror_vps.append(vp)
+	var glass := (_mirror_nodes[which] as Node3D).get_node("glass") as MeshInstance3D
+	var m := glass.material_override as StandardMaterial3D
+	m.albedo_color = Color(0.95, 0.97, 1.0)
+	m.albedo_texture = vp.get_texture()
+	m.uv1_scale = Vector3(-1, 1, 1)      # a mirror image is flipped left <-> right
+	m.uv1_offset = Vector3(1, 0, 0)
+
+
+func _tick_mirrors(delta: float) -> void:
+	if _mirror_vps.is_empty():
+		return
+	_mirror_t += delta
+	var step := 1.0 / float(maxi(Gfx.mirror_fps, 5))
+	if _mirror_t >= step:
+		_mirror_t = 0.0
+		for vp in _mirror_vps:
+			vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+
+
+# ------------------------------------------------------------------ dashboard radio unit
+var _radio_label: Label3D
+var _radio_sub: Label3D
+
+
+func _build_radio_unit() -> void:
+	var dark := CarStyle.mat(Color(0.04, 0.04, 0.05), 0.4, 0.4)
+	var u := Node3D.new()
+	u.position = Vector3(0.0, 1.0, -0.3)
+	u.rotation_degrees.x = -25.0
+	add_child(u)
+	CarStyle.box(u, Vector3(0.24, 0.07, 0.13), Vector3.ZERO, dark)
+	CarStyle.box(u, Vector3(0.2, 0.004, 0.06), Vector3(0, 0.037, -0.02), CarStyle.mat(Color(0.02, 0.05, 0.03), 0.0, 0.3))
+	for sx in [-0.085, 0.085]:                                   # two knobs
+		CarStyle.cyl(u, 0.018, 0.02, Vector3(sx, 0.04, 0.045), CarStyle.mat(Color(0.7, 0.72, 0.78), 0.9, 0.3))
+	_radio_label = Label3D.new()
+	_radio_label.text = "FM"
+	_radio_label.font_size = 44
+	_radio_label.pixel_size = 0.0021
+	_radio_label.modulate = Color(1.0, 0.55, 0.12)
+	_radio_label.shaded = false
+	_radio_label.no_depth_test = false
+	_radio_label.rotation_degrees.x = -90.0
+	_radio_label.position = Vector3(0, 0.041, -0.03)
+	u.add_child(_radio_label)
+	_radio_sub = Label3D.new()
+	_radio_sub.text = ""
+	_radio_sub.font_size = 28
+	_radio_sub.pixel_size = 0.0016
+	_radio_sub.modulate = Color(0.9, 0.8, 0.6)
+	_radio_sub.shaded = false
+	_radio_sub.rotation_degrees.x = -90.0
+	_radio_sub.position = Vector3(0, 0.041, -0.003)
+	u.add_child(_radio_sub)
+
+
+## local player's car: show the live station on the unit
+func bind_radio() -> void:
+	if _radio_label == null:
+		return
+	if not Radio.changed.is_connected(_update_radio_unit):
+		Radio.changed.connect(_update_radio_unit)
+	_update_radio_unit()
+
+
+func _update_radio_unit() -> void:
+	if _radio_label == null or not is_instance_valid(_radio_label):
+		return
+	_radio_label.text = Radio.label()
+	_radio_label.modulate = Color(1.0, 0.55, 0.12) if Radio.on else Color(0.5, 0.3, 0.15)
+	_radio_sub.text = Radio.sub_label()
+
+
+func _exit_tree() -> void:
+	if Radio.changed.is_connected(_update_radio_unit):
+		Radio.changed.disconnect(_update_radio_unit)
+
+
+# ------------------------------------------------------------------ instrument cluster (every model has its own)
+# style: "classic" = two round dials, "single" = one big dial + small gauges, "digital" = LCD + rev bar,
+#        "race" = shift-light bar + big digital gear/speed (GT3), "hyper" = round central speedo + arc of LEDs
+const CLUSTERS := {
+	"hatch": {"style": "classic", "face": Color(0.93, 0.93, 0.9), "ink": Color(0.08, 0.08, 0.1), "needle": Color(1.0, 0.3, 0.1), "ring": Color(0.1, 0.1, 0.12), "max": 220},
+	"buggy": {"style": "single", "face": Color(0.12, 0.13, 0.1), "ink": Color(0.9, 0.95, 0.8), "needle": Color(1.0, 0.8, 0.1), "ring": Color(0.55, 0.55, 0.5), "max": 200},
+	"muscle": {"style": "classic", "face": Color(0.05, 0.05, 0.06), "ink": Color(0.95, 0.95, 0.95), "needle": Color(1.0, 0.45, 0.05), "ring": Color(0.85, 0.87, 0.9), "max": 260},
+	"sierra": {"style": "classic", "face": Color(0.12, 0.12, 0.14), "ink": Color(0.95, 0.9, 0.7), "needle": Color(0.95, 0.9, 0.7), "ring": Color(0.04, 0.04, 0.05), "max": 240},
+	"pickup": {"style": "single", "face": Color(0.9, 0.88, 0.8), "ink": Color(0.1, 0.1, 0.1), "needle": Color(0.85, 0.15, 0.1), "ring": Color(0.25, 0.25, 0.27), "max": 200},
+	"charger": {"style": "single", "face": Color(0.03, 0.03, 0.04), "ink": Color(1.0, 1.0, 1.0), "needle": Color(1.0, 0.1, 0.1), "ring": Color(0.5, 0.52, 0.56), "max": 280},
+	"m4": {"style": "digital", "face": Color(0.02, 0.03, 0.06), "ink": Color(0.9, 0.95, 1.0), "needle": Color(0.3, 0.55, 1.0), "ring": Color(0.05, 0.05, 0.07), "max": 300},
+	"coupe": {"style": "digital", "face": Color(0.02, 0.03, 0.05), "ink": Color(0.55, 0.8, 1.0), "needle": Color(0.2, 0.6, 1.0), "ring": Color(0.05, 0.05, 0.07), "max": 300},
+	"gt3": {"style": "race", "face": Color(0.01, 0.01, 0.02), "ink": Color(1.0, 0.75, 0.1), "needle": Color(0.1, 1.0, 0.3), "ring": Color(0.05, 0.05, 0.07), "max": 320},
+	"hyper": {"style": "hyper", "face": Color(0.02, 0.02, 0.03), "ink": Color(1.0, 0.55, 0.1), "needle": Color(1.0, 0.5, 0.05), "ring": Color(0.9, 0.75, 0.3), "max": 440},
+}
+var _cl_needles: Array = []      # [{node, kind}]
+var _cl_text: Label3D
+var _cl_gear: Label3D
+var _cl_leds: Array = []
+var _cl_spec: Dictionary = {}
+var _cl_gear_now := 1
+var _cl_rpm := 0.2
+
+
+func _cl_mat(c: Color, emit := 0.0) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = c
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	if emit > 0.0:
+		m.albedo_color = c * emit
+	return m
+
+
+func _cl_dial(parent: Node3D, pos: Vector3, r: float, spec: Dictionary, kind: String, ticks: int, labels: bool) -> void:
+	var holder := Node3D.new()
+	holder.position = pos
+	parent.add_child(holder)
+	var axis := Vector3(90, 0, 0)
+	CarStyle.cyl(holder, r * 1.1, 0.012, Vector3(0, 0, -0.004), CarStyle.mat(spec["ring"], 0.8, 0.3), axis)
+	CarStyle.cyl(holder, r, 0.014, Vector3.ZERO, _cl_mat(spec["face"]), axis)
+	var ink: Color = spec["ink"]
+	for k in ticks + 1:
+		var a := deg_to_rad(-135.0 + 270.0 * k / float(ticks))
+		var major := k % 2 == 0
+		var tk := CarStyle.box(holder, Vector3(0.006, r * (0.16 if major else 0.09), 0.004), Vector3(sin(a) * r * 0.84, cos(a) * r * 0.84, 0.009), _cl_mat(ink))
+		tk.rotation.z = -a
+		if labels and major and r > 0.06:
+			var lab := Label3D.new()
+			lab.text = str(int(float(spec["max"]) * (1.0 if kind == "speed" else 0.04) * k / float(ticks)))
+			lab.pixel_size = 0.00045
+			lab.font_size = 44
+			lab.modulate = ink
+			lab.shaded = false
+			lab.position = Vector3(sin(a) * r * 0.62, cos(a) * r * 0.62, 0.011)
+			holder.add_child(lab)
+	var piv := Node3D.new()
+	piv.position = Vector3(0, 0, 0.014)
+	holder.add_child(piv)
+	var nd := CarStyle.box(piv, Vector3(0.007, r * 0.85, 0.004), Vector3(0, r * 0.3, 0), _cl_mat(spec["needle"]))
+	CarStyle.cyl(holder, r * 0.12, 0.012, Vector3(0, 0, 0.016), _cl_mat(Color(0.05, 0.05, 0.06)), axis)
+	_cl_needles.append({"node": piv, "kind": kind})
+	nd.name = "needle"
+
+
+func _build_cluster() -> void:
+	_cl_spec = CLUSTERS.get(model, CLUSTERS["hatch"])
+	var style: String = _cl_spec["style"]
+	var root := Node3D.new()
+	root.position = Vector3(-0.45, 1.36 - sd * 0.2, -0.98)
+	root.scale = Vector3(1.6, 1.6, 1.6)
+	root.rotation_degrees.x = -24.0
+	add_child(root)
+	# hood / binnacle
+	CarStyle.box(root, Vector3(0.5, 0.2, 0.02), Vector3(0, 0, -0.016), CarStyle.mat(Color(0.03, 0.03, 0.04), 0.2, 0.6))
+	var vis := not preview or true
+	match style:
+		"classic":
+			_cl_dial(root, Vector3(-0.1, 0, 0), 0.085, _cl_spec, "speed", 11, true)
+			_cl_dial(root, Vector3(0.1, 0, 0), 0.085, _cl_spec, "rpm", 8, true)
+		"single":
+			_cl_dial(root, Vector3(-0.04, 0, 0), 0.098, _cl_spec, "speed", 10, true)
+			_cl_dial(root, Vector3(0.17, 0.045, 0), 0.04, _cl_spec, "rpm", 8, false)
+			_cl_dial(root, Vector3(0.17, -0.055, 0), 0.04, _cl_spec, "fuel", 4, false)
+		"digital", "race", "hyper":
+			CarStyle.box(root, Vector3(0.44, 0.15, 0.006), Vector3(0, 0, 0.004), _cl_mat(_cl_spec["face"]))
+			_cl_text = Label3D.new()
+			_cl_text.pixel_size = 0.0009 if style != "hyper" else 0.0011
+			_cl_text.font_size = 60
+			_cl_text.modulate = _cl_spec["ink"]
+			_cl_text.shaded = false
+			_cl_text.position = Vector3(-0.02, -0.01, 0.01)
+			root.add_child(_cl_text)
+			_cl_gear = Label3D.new()
+			_cl_gear.pixel_size = 0.0016
+			_cl_gear.font_size = 60
+			_cl_gear.modulate = Color(1, 1, 1)
+			_cl_gear.shaded = false
+			_cl_gear.position = Vector3(0.16, -0.01, 0.01)
+			root.add_child(_cl_gear)
+			var n := 14 if style == "digital" else 18
+			for i in n:
+				var x := lerpf(-0.2, 0.2, i / float(n - 1))
+				var c: Color = _cl_spec["needle"]
+				if i > n * 0.7:
+					c = Color(1.0, 0.7, 0.1)
+				if i > n * 0.88:
+					c = Color(1.0, 0.1, 0.1)
+				var y := 0.065 if style != "hyper" else 0.065 + sin(PI * i / float(n - 1)) * 0.02
+				var led := CarStyle.box(root, Vector3(0.016, 0.012, 0.004), Vector3(x, y, 0.009), _cl_mat(c * 0.15))
+				_cl_leds.append({"mesh": led, "col": c})
+			if style == "hyper":
+				_cl_dial(root, Vector3(-0.14, -0.01, 0.01), 0.055, _cl_spec, "speed", 8, false)
+			if style == "race":
+				CarStyle.box(root, Vector3(0.44, 0.012, 0.006), Vector3(0, 0.09, 0.006), _cl_mat(Color(0.9, 0.1, 0.1)))
+
+
+func _update_cluster(delta: float) -> void:
+	if _cl_spec.is_empty():
+		return
+	var mx: float = float(_cl_spec["max"])
+	var spd := speed_kmh
+	# simulated gearbox: 6 gears spread over the top speed
+	var span := maxf(top_speed, 100.0) / 6.0
+	var g := clampi(int(spd / span) + 1, 1, 6)
+	var in_gear := clampf((spd - (g - 1) * span) / span, 0.0, 1.0)
+	var target := 0.22 + in_gear * 0.72 if spd > 2.0 else 0.18 + throttle_in * 0.5
+	_cl_rpm = lerpf(_cl_rpm, clampf(target, 0.1, 1.0), clampf(delta * 8.0, 0.0, 1.0))
+	_cl_gear_now = g
+	for n in _cl_needles:
+		var f := 0.0
+		match n["kind"]:
+			"speed":
+				f = clampf(spd / mx, 0.0, 1.0)
+			"rpm":
+				f = _cl_rpm
+			_:
+				f = 0.7
+		(n["node"] as Node3D).rotation.z = deg_to_rad(135.0 - 270.0 * f)
+	if _cl_text:
+		_cl_text.text = "%03d" % int(spd) + (" km/h" if _cl_spec["style"] == "digital" else "")
+	if _cl_gear:
+		_cl_gear.text = str(g) if spd > 1.0 else "N"
+	var lit := int(_cl_rpm * _cl_leds.size())
+	for i in _cl_leds.size():
+		var d: Dictionary = _cl_leds[i]
+		((d["mesh"] as MeshInstance3D).material_override as StandardMaterial3D).albedo_color = (d["col"] as Color) * (1.0 if i < lit else 0.12)
