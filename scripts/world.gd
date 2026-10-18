@@ -1598,7 +1598,7 @@ func _make_avatar(ts: TeamState, id: int) -> void:
 		# solo / FFA: the map is a screen on the dashboard of your own car
 		map_screen = MapScreen.new()
 		map_screen.tex = ipad_vp.get_texture()
-		map_screen.position = Vector3(0.12, 1.14, -0.95)
+		map_screen.position = Vector3(0.12, 1.22, -0.95)
 		map_screen.open_angle = -22.0
 		map_screen.closed_angle = 88.0
 		map_screen.near_offset = Vector3(-0.35, 0.12, 0.45)

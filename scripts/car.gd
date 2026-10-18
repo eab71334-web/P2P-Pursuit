@@ -256,7 +256,7 @@ func _build_visuals() -> void:
 		body_mat.clearcoat_enabled = true
 		body_mat.clearcoat = 0.6
 	_box(self, Vector3(1.9, 0.5, 4.0), Vector3(0, 0.62, 0), c)                  # body
-	_box(self, Vector3(1.8, 0.08, 3.8), Vector3(0, 0.88, 0.0), NAVY)            # floor
+	_box(self, Vector3(1.8, 0.08, 3.8), Vector3(0, 0.88, 0.0), CarInterior.theme(model)["carpet"])            # floor
 	_box(self, Vector3(0.1, 0.42, 2.0), Vector3(-0.95, 1.12, 0.35), c)          # doors
 	_box(self, Vector3(0.1, 0.42, 2.0), Vector3(0.95, 1.12, 0.35), c)
 	_box(self, Vector3(1.9, 0.42, 0.1), Vector3(0, 1.12, 1.35), c)              # rear wall
@@ -268,11 +268,7 @@ func _build_visuals() -> void:
 	CarStyle.decorate(self, model, lo, body_mat, team_color)
 	_box(self, Vector3(1.9, 0.3, 0.2), Vector3(0, 0.5, -2.05), DARK)            # bumpers
 	_box(self, Vector3(1.9, 0.3, 0.2), Vector3(0, 0.5, 2.05), DARK)
-	for x in [-0.45, 0.45]:                                                     # front seats
-		_box(self, Vector3(0.5, 0.12, 0.55), Vector3(x, 0.98 - sd, 0.3), DARK)
-		_box(self, Vector3(0.5, 0.75, 0.12), Vector3(x, 1.3 - sd, 0.66), DARK)
-	_box(self, Vector3(1.6, 0.12, 0.55), Vector3(0, 0.98 - sd, 1.0), DARK)           # back seat
-	_box(self, Vector3(1.8, 0.06, 0.06), Vector3(0, 1.8 - drop, 0.2), DARK)            # roll-cage bar
+	CarInterior.build(self, model, sd, drop)                                   # dash, console, seats, door cards, liner
 
 	# team letter on the roof and on the back
 	for spec in [[Vector3(0, 2.0 - drop, (float(CarStyle.GREENHOUSE.get(model, CarStyle.GREENHOUSE["hatch"])["zf1"]) + float(CarStyle.GREENHOUSE.get(model, CarStyle.GREENHOUSE["hatch"])["zr1"])) * 0.5), Vector3(-90, 0, 0)], [Vector3(0, 1.3, 1.42), Vector3(0, 0, 0)]]:
@@ -308,6 +304,7 @@ func _build_visuals() -> void:
 	_wheel_mesh.add_child(ring)
 	_box(_wheel_mesh, Vector3(0.3, 0.04, 0.05), Vector3.ZERO, Color(0.03, 0.03, 0.04))
 	_box(_wheel_mesh, Vector3(0.05, 0.04, 0.3), Vector3.ZERO, Color(0.03, 0.03, 0.04))
+	CarInterior.wheel(_wheel_mesh, model)
 
 
 
@@ -785,34 +782,9 @@ var _radio_sub: Label3D
 
 
 func _build_radio_unit() -> void:
-	var dark := CarStyle.mat(Color(0.04, 0.04, 0.05), 0.4, 0.4)
-	var u := Node3D.new()
-	u.position = Vector3(0.0, 1.0, -0.3)
-	u.rotation_degrees.x = -25.0
-	add_child(u)
-	CarStyle.box(u, Vector3(0.24, 0.07, 0.13), Vector3.ZERO, dark)
-	CarStyle.box(u, Vector3(0.2, 0.004, 0.06), Vector3(0, 0.037, -0.02), CarStyle.mat(Color(0.02, 0.05, 0.03), 0.0, 0.3))
-	for sx in [-0.085, 0.085]:                                   # two knobs
-		CarStyle.cyl(u, 0.018, 0.02, Vector3(sx, 0.04, 0.045), CarStyle.mat(Color(0.7, 0.72, 0.78), 0.9, 0.3))
-	_radio_label = Label3D.new()
-	_radio_label.text = "FM"
-	_radio_label.font_size = 44
-	_radio_label.pixel_size = 0.0021
-	_radio_label.modulate = Color(1.0, 0.55, 0.12)
-	_radio_label.shaded = false
-	_radio_label.no_depth_test = false
-	_radio_label.rotation_degrees.x = -90.0
-	_radio_label.position = Vector3(0, 0.041, -0.03)
-	u.add_child(_radio_label)
-	_radio_sub = Label3D.new()
-	_radio_sub.text = ""
-	_radio_sub.font_size = 28
-	_radio_sub.pixel_size = 0.0016
-	_radio_sub.modulate = Color(0.9, 0.8, 0.6)
-	_radio_sub.shaded = false
-	_radio_sub.rotation_degrees.x = -90.0
-	_radio_sub.position = Vector3(0, 0.041, -0.003)
-	u.add_child(_radio_sub)
+	var labs := CarInterior.radio(self, model)
+	_radio_label = labs[0]
+	_radio_sub = labs[1]
 
 
 ## local player's car: show the live station on the unit
