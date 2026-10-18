@@ -11,9 +11,11 @@ config/icon="res://icon.svg"
 [autoload]
 
 L="*res://scripts/i18n.gd"
+Gfx="*res://scripts/gfx.gd"
 Sfx="*res://scripts/sfx.gd"
 Net="*res://scripts/net.gd"
 Profile="*res://scripts/profile.gd"
+Radio="*res://scripts/radio.gd"
 
 [display]
 
