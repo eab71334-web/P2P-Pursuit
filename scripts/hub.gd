@@ -388,7 +388,7 @@ func _stats(parent: Node, car_id: String) -> void:
 
 func _lo_for(car_id: String, over := {}) -> Dictionary:
 	var cs: Dictionary = Profile.car_set(car_id)
-	var lo := {"car": car_id, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"], "up": Profile.up.get(car_id, {}), "outfit": Profile.outfit}
+	var lo := {"car": car_id, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"], "spoiler": cs["spoiler"], "front": cs["front"], "hood": cs["hood"], "skirts": cs["skirts"], "up": Profile.up.get(car_id, {}), "outfit": Profile.outfit}
 	for k in over:
 		lo[k] = over[k]
 	return lo
@@ -490,6 +490,7 @@ func _item_cell(slot: String, id: String, equipped: String, on_pick: Callable, g
 		var sw := HubArt.SwatchArt.new()
 		sw.slot = slot
 		sw.model = g_car
+		sw.kit_id = id
 		sw.col = col
 		sw.none = id == "none"
 		sw.metal = float(e.get("m", 0.0))
@@ -600,10 +601,11 @@ func _rerender() -> void:
 
 # ====================================================================== GARAGE
 const DOCK_H := 188
-const MOD_SECTIONS := ["paint", "mods", "wheels", "engine"]
-const MOD_SUBS := {"paint": ["paint", "stripe", "decal", "glow"], "mods": ["aero", "susp", "kit", "armor"], "wheels": ["rim", "tires"], "engine": ["engine", "turbo", "exhaust", "cooling"]}
-const MOD_NAMES := {"paint": ["Colour", "اللون"], "stripe": ["Stripes", "الخطوط"], "decal": ["Stickers", "الملصقات"], "glow": ["Underglow", "الإضاءة السفلية"], "rim": ["Rims", "الجنوط"]}
-const SEC_NAMES := {"paint": ["PAINT", "الطلاء"], "mods": ["MODS", "التعديلات"], "wheels": ["WHEELS", "العجلات"], "engine": ["ENGINE", "المحرك"]}
+const MOD_SECTIONS := ["paint", "body", "mods", "wheels", "engine"]
+const MOD_SUBS := {"paint": ["paint", "stripe", "decal", "glow"], "body": ["spoiler", "front", "hood", "skirts"], "mods": ["aero", "susp", "kit", "armor"], "wheels": ["rim", "tires"], "engine": ["engine", "turbo", "exhaust", "cooling"]}
+const MOD_NAMES := {"paint": ["Colour", "اللون"], "stripe": ["Stripes", "الخطوط"], "decal": ["Stickers", "الملصقات"], "glow": ["Underglow", "الإضاءة السفلية"], "rim": ["Rims", "الجنوط"],
+	"spoiler": ["Rear wing", "المؤخرة"], "front": ["Front", "المقدمة"], "hood": ["Hood", "الغطاء"], "skirts": ["Sides", "الجوانب"]}
+const SEC_NAMES := {"paint": ["PAINT", "الطلاء"], "body": ["BODY", "الشكل"], "mods": ["MODS", "التعديلات"], "wheels": ["WHEELS", "العجلات"], "engine": ["ENGINE", "المحرك"]}
 var mod_section := "paint"
 var mod_sub := {}
 var _mod_chips: HBoxContainer
@@ -824,6 +826,8 @@ func _mod_fill() -> void:
 		for st in ["normal", "hover", "pressed", "focus"]:
 			(tb as Button).add_theme_stylebox_override(st, UI.sb(UI.ACCENT if on else UI.CARD2, 8))
 	var subs: Array = MOD_SUBS[mod_section]
+	if mod_section == "body":
+		subs = subs.filter(func(x): return Catalog.body_opts(g_car, x).size() > 1)
 	var cs: String = mod_sub.get(mod_section, subs[0])
 	if not subs.has(cs):
 		cs = subs[0]
@@ -846,7 +850,10 @@ func _mod_cosmetics(slot: String) -> void:
 	var eq := _equipped(slot)
 	browser_slot = slot
 	browser_id = eq
-	for id in Catalog.CAR_SLOT_ORDER[slot]:
+	var ids: Array = Catalog.CAR_SLOT_ORDER[slot]
+	if Catalog.BODY_SLOTS.has(slot):
+		ids = Catalog.body_opts(g_car, slot)
+	for id in ids:
 		var cell := _item_cell(slot, id, eq, func(sl: String, i: String):
 			preview.show_car(_lo_for(g_car, {sl: i})), _mod_strip)
 		cell.size_flags_horizontal = Control.SIZE_FILL
@@ -1280,6 +1287,7 @@ func _open_chest(kind: String, art: Control) -> void:
 			var sw := HubArt.SwatchArt.new()
 			sw.slot = it["slot"]
 			sw.model = Profile.car
+			sw.kit_id = it["id"]
 			sw.col = col
 			sw.metal = float(e.get("m", 0.0))
 			sw.rough = float(e.get("ro", 0.5))

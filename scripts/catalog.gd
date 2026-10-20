@@ -92,8 +92,56 @@ const DECALS := {
 }
 const DECAL_ORDER := ["none", "n07", "n44", "rs", "gt", "v8", "x"]
 
-const CAR_SLOTS := {"paint": PAINTS, "stripe": STRIPES, "rim": RIMS, "glow": GLOWS, "decal": DECALS}
-const CAR_SLOT_ORDER := {"paint": PAINT_ORDER, "stripe": STRIPE_ORDER, "rim": RIM_ORDER, "glow": GLOW_ORDER, "decal": DECAL_ORDER}
+# ---- body kit (shape changes). Every car has its own list of options per slot (BODY_OPTS).
+const BODY_SLOTS := ["spoiler", "front", "hood", "skirts"]
+const SPOILERS := {
+	"none": {"n": ["Stock rear", "المؤخرة الأصلية"], "r": 0, "price": 0},
+	"lip": {"n": ["Lip spoiler", "سبويلر شفة"], "r": 1, "price": 400},
+	"duck": {"n": ["Ducktail", "ذيل البطة"], "r": 1, "price": 900},
+	"gt": {"n": ["GT wing", "جناح GT"], "r": 2, "price": 2200},
+	"twin": {"n": ["Twin-deck wing", "جناح مزدوج"], "r": 3, "price": 3500},
+}
+const FRONTS := {
+	"none": {"n": ["Stock front", "المقدمة الأصلية"], "r": 0, "price": 0},
+	"splitter": {"n": ["Carbon splitter", "سبليتر كربون"], "r": 1, "price": 700},
+	"canards": {"n": ["Canard fins", "زعانف أمامية"], "r": 2, "price": 1400},
+	"bullbar": {"n": ["Bull bar", "حديد حماية أمامي"], "r": 1, "price": 800},
+}
+const HOODS := {
+	"none": {"n": ["Stock hood", "الغطاء الأصلي"], "r": 0, "price": 0},
+	"scoop": {"n": ["Hood scoop", "مدخل هواء"], "r": 1, "price": 800},
+	"vents": {"n": ["Louvred vents", "فتحات تهوية"], "r": 1, "price": 700},
+	"carbon": {"n": ["Carbon hood", "غطاء كربون"], "r": 2, "price": 1800},
+}
+const SKIRTS := {
+	"none": {"n": ["Stock sides", "الجوانب الأصلية"], "r": 0, "price": 0},
+	"skirts": {"n": ["Side skirts", "عتبات جانبية"], "r": 1, "price": 600},
+	"wide": {"n": ["Widebody kit", "طقم عريض"], "r": 3, "price": 3200},
+}
+const BODY_OPTS := {
+	"hatch": {"spoiler": ["none", "lip", "duck", "gt"], "front": ["none", "splitter", "canards"], "hood": ["none", "scoop", "vents"], "skirts": ["none", "skirts"]},
+	"buggy": {"spoiler": ["none", "twin"], "front": ["none", "bullbar", "splitter"], "hood": ["none", "scoop"], "skirts": ["none", "skirts"]},
+	"muscle": {"spoiler": ["none", "lip", "duck"], "front": ["none", "splitter"], "hood": ["none", "scoop", "vents", "carbon"], "skirts": ["none", "skirts"]},
+	"sierra": {"spoiler": ["none", "lip", "duck", "twin"], "front": ["none", "splitter"], "hood": ["none", "vents"], "skirts": ["none", "skirts"]},
+	"pickup": {"spoiler": ["none", "lip"], "front": ["none", "bullbar", "splitter"], "hood": ["none", "scoop", "vents"], "skirts": ["none", "skirts"]},
+	"charger": {"spoiler": ["none", "lip", "duck"], "front": ["none", "splitter", "canards"], "hood": ["none", "scoop", "vents", "carbon"], "skirts": ["none", "skirts", "wide"]},
+	"coupe": {"spoiler": ["none", "lip", "gt"], "front": ["none", "splitter", "canards"], "hood": ["none", "vents", "carbon"], "skirts": ["none", "skirts", "wide"]},
+	"m4": {"spoiler": ["none", "lip", "gt"], "front": ["none", "splitter", "canards"], "hood": ["none", "vents", "carbon"], "skirts": ["none", "skirts", "wide"]},
+	"gt3": {"spoiler": ["none", "gt", "twin"], "front": ["none", "splitter", "canards"], "hood": ["none", "vents", "carbon"], "skirts": ["none", "skirts", "wide"]},
+	"hyper": {"spoiler": ["none", "gt", "twin"], "front": ["none", "splitter", "canards"], "hood": ["none", "vents", "carbon"], "skirts": ["none", "skirts", "wide"]},
+}
+
+
+## the body options a car can take for a slot (always starts with "none")
+static func body_opts(car_id: String, slot: String) -> Array:
+	var d: Dictionary = BODY_OPTS.get(car_id, BODY_OPTS["hatch"])
+	return d.get(slot, ["none"])
+
+
+const CAR_SLOTS := {"paint": PAINTS, "stripe": STRIPES, "rim": RIMS, "glow": GLOWS, "decal": DECALS,
+	"spoiler": SPOILERS, "front": FRONTS, "hood": HOODS, "skirts": SKIRTS}
+const CAR_SLOT_ORDER := {"paint": PAINT_ORDER, "stripe": STRIPE_ORDER, "rim": RIM_ORDER, "glow": GLOW_ORDER, "decal": DECAL_ORDER,
+	"spoiler": ["none", "lip", "duck", "gt", "twin"], "front": ["none", "splitter", "canards", "bullbar"], "hood": ["none", "scoop", "vents", "carbon"], "skirts": ["none", "skirts", "wide"]}
 
 # ---------------------------------------------------------------- character
 const SKINS := {
@@ -152,7 +200,7 @@ const GLASSES := {
 const OUTFIT_SLOTS := {"skin": SKINS, "shirt": SHIRTS, "pants": PANTS, "shoes": SHOES, "hat": HATS, "glasses": GLASSES}
 const OUTFIT_ORDER := ["skin", "hat", "glasses", "shirt", "pants", "shoes"]
 const SLOT_NAME := {
-	"paint": ["Paint", "الطلاء"], "stripe": ["Stripes", "الخطوط"], "rim": ["Rims", "الجنوط"], "glow": ["Underglow", "إضاءة سفلية"], "decal": ["Stickers", "ملصقات"],
+	"paint": ["Paint", "الطلاء"], "stripe": ["Stripes", "الخطوط"], "rim": ["Rims", "الجنوط"], "glow": ["Underglow", "إضاءة سفلية"], "decal": ["Stickers", "ملصقات"], "spoiler": ["Rear", "المؤخرة"], "front": ["Front", "المقدمة"], "hood": ["Hood", "الغطاء"], "skirts": ["Sides", "الجوانب"],
 	"skin": ["Skin", "البشرة"], "hat": ["Hat", "القبعة"], "glasses": ["Glasses", "النظارة"], "shirt": ["T-shirt", "التيشيرت"],
 	"pants": ["Pants", "السروال"], "shoes": ["Shoes", "الحذاء"], "emote": ["Emote", "الحركة"],
 }

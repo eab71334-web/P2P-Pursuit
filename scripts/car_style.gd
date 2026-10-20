@@ -412,6 +412,7 @@ static func decorate(car: Node3D, model: String, lo: Dictionary, body_mat: Stand
 			if hood:
 				box(hood, Vector3(0.2, 0.02, 0.9), Vector3(0, 0.02, -0.49), org)
 
+	_body_kit(car, model, lo, body_mat, hood, d)
 	_fitted_parts(car, lo.get("up", {}), body_mat, hood, d)
 
 
@@ -492,3 +493,80 @@ static func _number(parent: Node, txt: String, pos: Vector3, col: Color, rot_y :
 
 static func sx_of(k: int) -> float:
 	return -0.5 + k * 0.5
+
+
+## shape changes picked in the garage (spoiler / front / hood / sides). Each car only accepts its own options.
+static func _body_kit(car: Node3D, model: String, lo: Dictionary, body_mat: StandardMaterial3D, hood: Node3D, d: float) -> void:
+	var carbon := mat(CARBON, 0.55, 0.3)
+	var dark := mat(Color(0.03, 0.03, 0.04), 0.3, 0.6)
+	var chrome := mat(CHROME, 0.95, 0.15)
+	var acc := mat(Color(0.9, 0.12, 0.1), 0.0, 0.5, 0.3)
+	var sp := str(lo.get("spoiler", "none"))
+	if sp != "none" and Catalog.body_opts(model, "spoiler").has(sp):
+		var ry := 1.12 - d * 0.35
+		match sp:
+			"lip":
+				box(car, Vector3(1.7, 0.035, 0.14), Vector3(0, ry - 0.04, 2.0), carbon)
+			"duck":
+				box(car, Vector3(1.8, 0.05, 0.38), Vector3(0, ry, 1.93), carbon, Vector3(-14, 0, 0))
+				for sx in [-0.9, 0.9]:
+					box(car, Vector3(0.04, 0.12, 0.38), Vector3(sx, ry + 0.02, 1.93), carbon)
+			"gt":
+				for sx in [-0.7, 0.7]:
+					box(car, Vector3(0.06, 0.55, 0.09), Vector3(sx, ry + 0.25, 2.02), carbon)
+				box(car, Vector3(2.0, 0.06, 0.5), Vector3(0, ry + 0.55, 2.04), carbon, Vector3(-6, 0, 0))
+				for sx in [-1.0, 1.0]:
+					box(car, Vector3(0.04, 0.26, 0.55), Vector3(sx, ry + 0.55, 2.04), body_mat)
+			"twin":
+				for sx in [-0.7, 0.7]:
+					box(car, Vector3(0.06, 0.62, 0.09), Vector3(sx, ry + 0.28, 2.02), carbon)
+				box(car, Vector3(2.0, 0.05, 0.42), Vector3(0, ry + 0.62, 2.04), carbon, Vector3(-6, 0, 0))
+				box(car, Vector3(1.9, 0.05, 0.34), Vector3(0, ry + 0.36, 2.0), carbon, Vector3(-4, 0, 0))
+				for sx in [-1.0, 1.0]:
+					box(car, Vector3(0.04, 0.36, 0.5), Vector3(sx, ry + 0.5, 2.03), body_mat)
+	var fr := str(lo.get("front", "none"))
+	if fr != "none" and Catalog.body_opts(model, "front").has(fr):
+		match fr:
+			"splitter":
+				box(car, Vector3(2.0, 0.04, 0.42), Vector3(0, 0.32, -2.2), carbon)
+				for sx in [-0.8, 0.8]:
+					box(car, Vector3(0.03, 0.1, 0.3), Vector3(sx, 0.36, -2.25), carbon)
+			"canards":
+				box(car, Vector3(2.0, 0.04, 0.4), Vector3(0, 0.32, -2.2), carbon)
+				for sx in [-1.0, 1.0]:
+					box(car, Vector3(0.28, 0.03, 0.2), Vector3(sx * 0.95, 0.58, -2.0), carbon, Vector3(0, -sx * 20.0, sx * 12.0))
+					box(car, Vector3(0.22, 0.03, 0.16), Vector3(sx * 0.95, 0.74, -1.95), carbon, Vector3(0, -sx * 20.0, sx * 12.0))
+			"bullbar":
+				for sx in [-0.62, 0.62]:
+					cyl(car, 0.04, 0.62, Vector3(sx, 0.62, -2.18), chrome)
+				cyl(car, 0.045, 1.35, Vector3(0, 0.95, -2.18), chrome, Vector3(0, 0, 90))
+				cyl(car, 0.04, 1.35, Vector3(0, 0.45, -2.18), chrome, Vector3(0, 0, 90))
+				for sx in [-0.3, 0.3]:
+					cyl(car, 0.03, 0.5, Vector3(sx, 0.7, -2.18), chrome)
+	var hd := str(lo.get("hood", "none"))
+	if hd != "none" and Catalog.body_opts(model, "hood").has(hd) and hood:
+		match hd:
+			"scoop":
+				box(hood, Vector3(0.55, 0.13, 0.5), Vector3(0, 0.13, -0.5), body_mat)
+				box(hood, Vector3(0.45, 0.09, 0.02), Vector3(0, 0.14, -0.76), dark)
+			"vents":
+				for sx in [-0.3, 0.3]:
+					for k in 5:
+						box(hood, Vector3(0.32, 0.015, 0.03), Vector3(sx, 0.075 + k * 0.0, -0.4 - k * 0.07), dark)
+					box(hood, Vector3(0.34, 0.02, 0.4), Vector3(sx, 0.07, -0.55), dark)
+			"carbon":
+				box(hood, Vector3(0.96, 0.02, 0.96), Vector3(0, 0.085, -0.49), carbon)
+				for sx in [-0.4, 0.4]:
+					for sz in [-0.1, -0.88]:
+						cyl(hood, 0.025, 0.03, Vector3(sx, 0.105, sz), chrome)
+	var sk := str(lo.get("skirts", "none"))
+	if sk != "none" and Catalog.body_opts(model, "skirts").has(sk):
+		for sx in [-1.0, 1.0]:
+			box(car, Vector3(0.1, 0.13, 2.3), Vector3(sx * 1.0, 0.3, 0.0), carbon)
+			box(car, Vector3(0.02, 0.025, 2.3), Vector3(sx * 1.055, 0.34, 0.0), acc)
+			if sk == "wide":
+				for sz in [-1.35, 1.25]:
+					box(car, Vector3(0.16, 0.34, 0.95), Vector3(sx * 1.0, 0.62, sz), body_mat)
+					box(car, Vector3(0.05, 0.05, 0.95), Vector3(sx * 1.1, 0.48, sz), carbon)
+					for rz in [-0.38, 0.38]:
+						cyl(car, 0.02, 0.02, Vector3(sx * 1.09, 0.7, sz + rz), chrome, Vector3(0, 0, 90))

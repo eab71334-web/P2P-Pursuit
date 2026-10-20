@@ -111,6 +111,12 @@ var look_yaw := 0.0
 var look_pitch := 0.0
 var look_idle := 0.0
 var look_touch := -1
+var steer_mode := "buttons"
+var wheel_ui: SteerUI.Wheel
+var wheel_angle := 0.0
+var wheel_touch := -1
+var wheel_last := 0.0
+var _picker: Control
 var look_send_ms := 0
 var shake := 0.0
 var flash := 0.0
@@ -174,6 +180,22 @@ func _ready() -> void:
 	Radio.start_race()
 	get_viewport().size_changed.connect(_update_layout)
 	_update_layout()
+	if show_touch and Profile.steer_mode == "":
+		_picker = SteerUI.Picker.new()
+		hud_root.add_child(_picker)
+		_picker.z_index = 120
+		(_picker as SteerUI.Picker).picked.connect(func(m: String):
+			Profile.steer_mode = m
+			Profile.save()
+			_picker.queue_free()
+			_picker = null
+			_apply_steer_mode()
+			_after_steer())
+	else:
+		_after_steer()
+
+
+func _after_steer() -> void:
 	if L.tutorial_off:
 		_im_ready()
 	else:
@@ -913,10 +935,19 @@ func _read_driving_input() -> void:
 	var thr := Input.get_action_strength("accel")
 	var brk := Input.get_action_strength("brake")
 	if show_touch:
-		if _zone_pressed("left"):
-			steer -= 1.0
-		if _zone_pressed("right"):
-			steer += 1.0
+		if steer_mode == "buttons":
+			if _zone_pressed("left"):
+				steer -= 1.0
+			if _zone_pressed("right"):
+				steer += 1.0
+		else:
+			var lk: float = SteerUI.LOCK[steer_mode]
+			if wheel_touch == -1:
+				wheel_angle = move_toward(wheel_angle, 0.0, get_process_delta_time() * 5.0)   # self-centring
+			steer += clampf(wheel_angle / lk, -1.0, 1.0)
+			if wheel_ui:
+				wheel_ui.angle = wheel_angle
+				wheel_ui.queue_redraw()
 		if _zone_pressed("gas"):
 			thr = 1.0
 		if _zone_pressed("brake"):
@@ -1074,16 +1105,26 @@ func _map_near() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if _picker != null and is_instance_valid(_picker):
+		return
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			_touch_press(event.index, event.position)
 		else:
 			touches.erase(event.index)
 			zone_touch.erase(event.index)
+			if event.index == wheel_touch:
+				wheel_touch = -1
 			if event.index == look_touch:
 				look_touch = -1
 	elif event is InputEventScreenDrag:
 		touches[event.index] = event.position
+		if event.index == wheel_touch and wheel_ui:
+			var a: float = (event.position - _wheel_rect().get_center()).angle()
+			var lk: float = SteerUI.LOCK[steer_mode]
+			wheel_angle = clampf(wheel_angle + wrapf(a - wheel_last, -PI, PI), -lk, lk)
+			wheel_last = a
+			return
 		var mt := teams[my_team]
 		if mt.phase == 2 and mt.repairer == my_id:
 			lift_swipe += -event.relative.y
@@ -1130,8 +1171,47 @@ func _input(event: InputEvent) -> void:
 		Radio.toggle()
 
 
+func _apply_steer_mode() -> void:
+	steer_mode = Profile.steer_mode if Profile.steer_mode != "" else "buttons"
+	for zn in ["left", "right"]:
+		if zones.has(zn):
+			(zones[zn] as Control).queue_free()
+			zones.erase(zn)
+	if wheel_ui:
+		wheel_ui.queue_free()
+		wheel_ui = null
+	wheel_angle = 0.0
+	if steer_mode == "buttons":
+		_make_zone("left", "<", 0.0, 1.0, 20, -170, 160, -40, 40)
+		_make_zone("right", ">", 0.0, 1.0, 180, -170, 320, -40, 40)
+	else:
+		wheel_ui = SteerUI.Wheel.new()
+		wheel_ui.lock = SteerUI.LOCK[steer_mode]
+		wheel_ui.show360 = steer_mode == "wheel360"
+		wheel_ui.anchor_top = 1.0
+		wheel_ui.anchor_bottom = 1.0
+		wheel_ui.offset_left = 16
+		wheel_ui.offset_right = 300
+		wheel_ui.offset_top = -300
+		wheel_ui.offset_bottom = -16
+		hud_root.add_child(wheel_ui)
+	for tm in teams:
+		if tm.car and tm.driver_id == my_id:
+			tm.car.wheel_gain = SteerUI.LOCK[steer_mode]
+
+
+func _wheel_rect() -> Rect2:
+	if wheel_ui == null:
+		return Rect2()
+	return wheel_ui.get_global_rect()
+
+
 func _touch_press(index: int, pos: Vector2) -> void:
 	touches[index] = pos
+	if wheel_ui and wheel_touch == -1 and _wheel_rect().has_point(pos):
+		wheel_touch = index
+		wheel_last = (pos - _wheel_rect().get_center()).angle()
+		return
 	for zn in zones:
 		if (zones[zn] as Control).visible and (zones[zn] as Control).get_global_rect().has_point(pos):
 			zone_touch[index] = zn
@@ -1736,8 +1816,7 @@ func _build_hud() -> void:
 	_make_zone("radio_next", ">", 0.5, 1.0, 92, -60, 142, -14, 22, Radio.next)
 	Radio.changed.connect(_update_radio_hud)
 	if show_touch:
-		_make_zone("left", "<", 0.0, 1.0, 20, -170, 160, -40, 40)
-		_make_zone("right", ">", 0.0, 1.0, 180, -170, 320, -40, 40)
+		_apply_steer_mode()
 		_make_zone("gas", "GAS", 1.0, 1.0, -170, -170, -20, -40)
 		_make_zone("brake", "BRAKE", 1.0, 1.0, -340, -170, -190, -40)
 	if my_role == "navigator" or solo:

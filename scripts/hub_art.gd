@@ -16,6 +16,8 @@ class CarArt extends Control:
 	var decal_col := Color.WHITE
 	var glow_col := Color.TRANSPARENT       # underglow under the car
 	var metal := 0.0
+	var kit_slot := ""                       # body kit preview: spoiler | front | hood | skirts
+	var kit_id := "none"
 	# cab: [front base x, roof front x, roof back x, rear base x, cabin height, belt y]
 	const SHAPES := {
 		"hatch": {"cab": [134, 116, 64, 50, 30, 52], "wing": "small", "nose": 0.0},
@@ -88,6 +90,48 @@ class CarArt extends Control:
 			var fnt := ThemeDB.fallback_font
 			var tsz := fnt.get_string_size(decal_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 11)
 			draw_string(fnt, Vector2(dcx - tsz.x * 0.5, belt + 19), decal_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, decal_col)
+		# body kit (side view)
+		if kit_slot != "" and kit_id != "none":
+			var kc := Color(0.07, 0.075, 0.09)
+			match kit_slot:
+				"spoiler":
+					match kit_id:
+						"lip":
+							draw_rect(Rect2(6, belt - 7, 22, 3), kc)
+						"duck":
+							draw_colored_polygon(PackedVector2Array([Vector2(6, belt - 4), Vector2(30, belt - 2), Vector2(30, belt), Vector2(6, belt - 9)]), kc)
+						"gt":
+							draw_rect(Rect2(10, belt - 15, 2, 14), kc)
+							draw_rect(Rect2(0, belt - 18, 30, 4), kc)
+						"twin":
+							draw_rect(Rect2(10, belt - 15, 2, 14), kc)
+							draw_rect(Rect2(0, belt - 18, 32, 3), kc)
+							draw_rect(Rect2(2, belt - 11, 28, 3), kc)
+				"front":
+					match kit_id:
+						"splitter":
+							draw_rect(Rect2(176, 71, 24, 3), kc)
+						"canards":
+							draw_colored_polygon(PackedVector2Array([Vector2(172, belt + 8), Vector2(188, belt + 12), Vector2(172, belt + 14)]), kc)
+							draw_rect(Rect2(176, 71, 22, 3), kc)
+						"bullbar":
+							draw_rect(Rect2(190, belt - 2, 4, 26), kc)
+							draw_rect(Rect2(184, belt + 2, 10, 3), kc)
+							draw_rect(Rect2(184, belt + 16, 10, 3), kc)
+				"hood":
+					match kit_id:
+						"scoop":
+							draw_colored_polygon(PackedVector2Array([Vector2(cab[0] + 8, belt - 2), Vector2(cab[0] + 12, belt - 8), Vector2(cab[0] + 28, belt - 8), Vector2(cab[0] + 32, belt - 2)]), kc)
+						"vents":
+							for vi in 4:
+								draw_line(Vector2(cab[0] + 8 + vi * 7, belt - 4), Vector2(cab[0] + 12 + vi * 7, belt - 1), kc, 2.0)
+						"carbon":
+							draw_rect(Rect2(cab[0] + 4, belt - 3, 36, 3), kc)
+				"skirts":
+					draw_rect(Rect2(34, 66, 126, 6), kc)
+					if kit_id == "wide":
+						for wx2 in [48.0, 154.0]:
+							draw_arc(Vector2(wx2, 66), 17.0, PI, TAU, 14, body.darkened(0.3), 4.0)
 		# lower sill + bumpers
 		draw_rect(Rect2(28, 69, 144, 4), dark)
 		draw_rect(Rect2(184, belt + 6, 8, 12), dark)
@@ -130,11 +174,15 @@ class SwatchArt extends Control:
 	var txt := ""
 	var bg := Color.BLACK
 	var model := "hatch"
+	var kit_id := "none"
 
 	func _ready() -> void:
-		if not slot in ["paint", "stripe", "decal", "glow"]:
+		if not slot in ["paint", "stripe", "decal", "glow", "spoiler", "front", "hood", "skirts"]:
 			return
 		var ca := CarArt.new()
+		if slot in ["spoiler", "front", "hood", "skirts"]:
+			ca.kit_slot = slot
+			ca.kit_id = kit_id
 		ca.model = model
 		ca.paint = col if slot == "paint" else base
 		ca.metal = metal if slot == "paint" else 0.0
@@ -158,7 +206,7 @@ class SwatchArt extends Control:
 		var r := Rect2(Vector2.ZERO, size)
 		var cx := size.x * 0.5
 		var cy := size.y * 0.5
-		if slot in ["paint", "stripe", "decal", "glow"]:
+		if slot in ["paint", "stripe", "decal", "glow", "spoiler", "front", "hood", "skirts"]:
 			# showroom card: soft vertical gradient + floor light, the car itself is a child
 			var pts := PackedVector2Array([Vector2(0, 0), Vector2(size.x, 0), Vector2(size.x, size.y), Vector2(0, size.y)])
 			var cols := PackedColorArray([Color(0.17, 0.18, 0.22), Color(0.17, 0.18, 0.22), Color(0.06, 0.065, 0.08), Color(0.06, 0.065, 0.08)])

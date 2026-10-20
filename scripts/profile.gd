@@ -7,6 +7,7 @@ signal leveled(level: int, reward: Dictionary)
 const SAVE := "user://profile.json"
 
 var pname := ""
+var steer_mode := ""          # "" = not chosen yet | buttons | wheel | wheel360
 var coins := 1000
 var gems := 20
 var xp := 0
@@ -43,6 +44,7 @@ func _load() -> void:
 	if not (d is Dictionary):
 		return
 	pname = str(d.get("pname", pname))
+	steer_mode = str(d.get("steer_mode", ""))
 	coins = int(d.get("coins", coins))
 	gems = int(d.get("gems", gems))
 	xp = int(d.get("xp", xp))
@@ -68,7 +70,7 @@ func _load() -> void:
 func save() -> void:
 	var f := FileAccess.open(SAVE, FileAccess.WRITE)
 	if f:
-		f.store_string(JSON.stringify({"pname": pname, "coins": coins, "gems": gems, "xp": xp, "level": level, "owned": owned, "cars": cars, "car": car,
+		f.store_string(JSON.stringify({"pname": pname, "steer_mode": steer_mode, "coins": coins, "gems": gems, "xp": xp, "level": level, "owned": owned, "cars": cars, "car": car,
 			"carset": carset, "up": up, "outfit": outfit, "quests": quests, "chests": chests, "login": login, "stats": stats}))
 	changed.emit()
 
@@ -142,7 +144,7 @@ func car_set(id := "") -> Dictionary:
 		id = car
 	var d: Dictionary = carset.get(id, {})
 	var cd: Dictionary = Catalog.CARS.get(id, {})
-	return {"paint": d.get("paint", cd.get("paint", "red")), "stripe": d.get("stripe", cd.get("stripe", "none")), "rim": d.get("rim", cd.get("rim", "steel")), "glow": d.get("glow", "none"), "decal": d.get("decal", "none")}
+	return {"paint": d.get("paint", cd.get("paint", "red")), "stripe": d.get("stripe", cd.get("stripe", "none")), "rim": d.get("rim", cd.get("rim", "steel")), "glow": d.get("glow", "none"), "decal": d.get("decal", "none"), "spoiler": d.get("spoiler", "none"), "front": d.get("front", "none"), "hood": d.get("hood", "none"), "skirts": d.get("skirts", "none")}
 
 
 func equip_car_part(slot: String, id: String) -> void:
@@ -216,7 +218,7 @@ func upgrade(car_id: String, key: String) -> bool:
 ## what is sent to the other players / used by the server physics
 func loadout() -> Dictionary:
 	var cs := car_set()
-	return {"car": car, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"],
+	return {"car": car, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"], "spoiler": cs["spoiler"], "front": cs["front"], "hood": cs["hood"], "skirts": cs["skirts"],
 		"up": (up.get(car, {}) as Dictionary).duplicate(), "outfit": outfit.duplicate()}
 
 

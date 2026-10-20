@@ -25,6 +25,13 @@ func _build() -> void:
 	_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_box.add_theme_constant_override("separation", 10)
 	sc.add_child(_box)
+	# ---- controls
+	_head(UI.tx("CONTROLS", "التحكم"))
+	var sm: Array = []
+	for m in SteerUI.MODES:
+		sm.append([m, SteerUI.mode_name(m)])
+	_row(UI.tx("Steering (touch)", "طريقة التوجيه (اللمس)"), SteerUI.mode_desc(Profile.steer_mode if Profile.steer_mode != "" else "buttons"),
+		_seg(sm, Profile.steer_mode if Profile.steer_mode != "" else "buttons", func(v): Profile.steer_mode = v; Profile.save(); _rebuild()))
 	# ---- performance
 	_head(UI.tx("PERFORMANCE", "الأداء"))
 	var weak := Gfx.preset == "weak"

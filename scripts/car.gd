@@ -16,6 +16,9 @@ var body_color := Color(0.78, 0.08, 0.08)
 var speed_kmh := 0.0
 var steer_target := 0.0
 var steer_visual := 0.0
+var wheel_gain := 1.6          # radians of wheel turn at full steering (the 360 wheel turns a full circle)
+var _grip_l := 0.0
+var _grip_r := 0.0
 var is_remote := false
 var hold := false      # handbrake (before the start / after the finish)
 var driver_avatar: Avatar
@@ -482,13 +485,26 @@ func _process(delta: float) -> void:
 			h.rotation = Vector3(_spin, -steer_visual * 0.4 if h.get_meta("front") else 0.0, 0.0)
 	if not is_remote:
 		steer_visual = move_toward(steer_visual, steer_target, delta * 5.0)
-	var phi := -steer_visual * 1.6
+	var phi := -steer_visual * wheel_gain
 	if _wheel_mesh:
 		_wheel_mesh.rotation.y = phi
 	if driver_avatar and _wheel_pivot:
+		# hand over hand: a hand rides the rim only inside its comfortable arc, then lets go and grips again further back
+		var psi_r := _grip_r + phi
+		if psi_r > 1.05:
+			_grip_r -= 1.9
+		elif psi_r < -1.05:
+			_grip_r += 1.9
+		var psi_l := _grip_l + phi
+		if psi_l > 1.05:
+			_grip_l -= 1.9
+		elif psi_l < -1.05:
+			_grip_l += 1.9
 		var r := 0.15
-		var left_hand := _wheel_pivot.transform * (Vector3(-cos(phi), 0.0, sin(phi)) * r)
-		var right_hand := _wheel_pivot.transform * (Vector3(cos(phi), 0.0, -sin(phi)) * r)
+		var ar := _grip_r + phi
+		var al := PI + _grip_l + phi
+		var left_hand := _wheel_pivot.transform * (Vector3(cos(al), 0.0, -sin(al)) * r)
+		var right_hand := _wheel_pivot.transform * (Vector3(cos(ar), 0.0, -sin(ar)) * r)
 		driver_avatar.set_wheel_hands(left_hand, right_hand)
 	_update_motion_audio(delta)
 	_update_damage_fx(delta)
