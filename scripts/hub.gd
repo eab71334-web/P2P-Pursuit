@@ -489,6 +489,7 @@ func _item_cell(slot: String, id: String, equipped: String, on_pick: Callable, g
 	if Catalog.CAR_SLOTS.has(slot):
 		var sw := HubArt.SwatchArt.new()
 		sw.slot = slot
+		sw.model = g_car
 		sw.col = col
 		sw.none = id == "none"
 		sw.metal = float(e.get("m", 0.0))
@@ -496,7 +497,7 @@ func _item_cell(slot: String, id: String, equipped: String, on_pick: Callable, g
 		sw.txt = str(e.get("t", ""))
 		sw.bg = e.get("bg", Color.BLACK)
 		sw.base = Catalog.PAINTS[Profile.car_set(g_car)["paint"]]["c"]
-		sw.custom_minimum_size = Vector2(0, 54)
+		sw.custom_minimum_size = Vector2(0, 82 if slot != "rim" else 66)
 		sw.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		sw.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		sw.selected = id == equipped
@@ -729,7 +730,7 @@ func _sub_name(sub: String) -> String:
 func _tab_modify() -> Control:
 	g_car = Profile.car
 	var root := Control.new()
-	var bar_h := 262
+	var bar_h := 276
 	preview = Preview3D.new()
 	preview.zoom = 0.74
 	root.add_child(preview)
@@ -787,7 +788,7 @@ func _tab_modify() -> Control:
 	head.add_child(action_box)
 	var ssc := TScroll.new()
 	ssc.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	ssc.custom_minimum_size = Vector2(0, 132)
+	ssc.custom_minimum_size = Vector2(0, 144)
 	bv.add_child(ssc)
 	_mod_strip = HBoxContainer.new()
 	_mod_strip.add_theme_constant_override("separation", 10)
@@ -849,7 +850,7 @@ func _mod_cosmetics(slot: String) -> void:
 		var cell := _item_cell(slot, id, eq, func(sl: String, i: String):
 			preview.show_car(_lo_for(g_car, {sl: i})), _mod_strip)
 		cell.size_flags_horizontal = Control.SIZE_FILL
-		cell.custom_minimum_size = Vector2(136, 120)
+		cell.custom_minimum_size = Vector2(196 if slot != "rim" else 136, 136)
 		_mod_strip.add_child(cell)
 	_action_bar(slot, eq)
 
@@ -1278,6 +1279,7 @@ func _open_chest(kind: String, art: Control) -> void:
 		if Catalog.CAR_SLOTS.has(it["slot"]):
 			var sw := HubArt.SwatchArt.new()
 			sw.slot = it["slot"]
+			sw.model = Profile.car
 			sw.col = col
 			sw.metal = float(e.get("m", 0.0))
 			sw.rough = float(e.get("ro", 0.5))

@@ -104,7 +104,7 @@ func setup(p_team: int, color: Color, remote: bool, p_lo := {}, p_preview := fal
 
 
 func seat_origin(role: String) -> Vector3:
-	return Vector3(-0.45, 0.95 - sd, 0.3) if role == "driver" else Vector3(0.45, 0.95 - sd, 0.3)
+	return Vector3(-0.45, 1.0 - sd, 0.3) if role == "driver" else Vector3(0.45, 1.0 - sd, 0.3)
 
 
 func _ready() -> void:
@@ -696,11 +696,11 @@ func _build_mirrors() -> void:
 	var gh: Dictionary = CarStyle.GREENHOUSE.get(model, CarStyle.GREENHOUSE["hatch"])
 	var roof_y := 1.95 - drop
 	var rv := Node3D.new()
-	rv.position = Vector3(-0.22, roof_y - 0.2, float(gh["zf1"]) - drop * 0.3 + 0.12)
-	rv.scale = Vector3(0.78, 0.78, 0.78)
+	rv.position = Vector3(-0.22, roof_y - 0.13, float(gh["zf1"]) - drop * 0.3 + 0.12)
+	rv.scale = Vector3(0.55, 0.55, 0.55)
 	add_child(rv)
-	CarStyle.box(rv, Vector3(0.14, 0.014, 0.09), Vector3(0, 0.2, -0.01), dark)                 # base plate on the roof
-	CarStyle.box(rv, Vector3(0.035, 0.2, 0.035), Vector3(0, 0.1, -0.02), dark)                 # stalk up to the roof
+	CarStyle.box(rv, Vector3(0.14, 0.014, 0.09), Vector3(0, 0.236, -0.01), dark)                 # base plate on the roof
+	CarStyle.box(rv, Vector3(0.035, 0.236, 0.035), Vector3(0, 0.118, -0.02), dark)                 # stalk up to the roof
 	CarStyle.box(rv, Vector3(0.5, 0.15, 0.06), Vector3.ZERO, dark)
 	_mirror_quad(rv, Vector2(0.45, 0.115), Vector3(0, 0, 0.034))
 	_mirror_nodes["rear"] = rv
@@ -884,8 +884,8 @@ func _build_cluster() -> void:
 	_cl_spec = CLUSTERS.get(model, CLUSTERS["hatch"])
 	var style: String = _cl_spec["style"]
 	var root := Node3D.new()
-	root.position = Vector3(-0.45, 1.3 - sd * 0.8 + 0.115, -0.76)
-	root.scale = Vector3(1.2, 1.2, 1.2)
+	root.position = Vector3(-0.45, 1.3 - sd * 0.8 + 0.1, -0.77)
+	root.scale = Vector3(1.25, 1.25, 1.25)
 	root.rotation_degrees.x = -10.0
 	add_child(root)
 	# hood / binnacle

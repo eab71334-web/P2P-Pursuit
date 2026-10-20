@@ -10,6 +10,12 @@ class CarArt extends Control:
 	var rim := Color(0.7, 0.72, 0.76)
 	var locked := false
 	var accent := Color(1.0, 0.47, 0.1)
+	var stripe_col := Color.TRANSPARENT     # racing stripe along the body (transparent = none)
+	var decal_txt := ""                      # round badge on the door
+	var decal_bg := Color.BLACK
+	var decal_col := Color.WHITE
+	var glow_col := Color.TRANSPARENT       # underglow under the car
+	var metal := 0.0
 	# cab: [front base x, roof front x, roof back x, rear base x, cabin height, belt y]
 	const SHAPES := {
 		"hatch": {"cab": [134, 116, 64, 50, 30, 52], "wing": "small", "nose": 0.0},
@@ -41,8 +47,14 @@ class CarArt extends Control:
 		var nose: float = sh["nose"]
 		var belt: float = cab[5]
 		var ch: float = float(cab[4]) * 1.35
-		# ground shadow
+		# ground shadow (+ underglow)
 		draw_rect(Rect2(14, 78, 172, 3), Color(0, 0, 0, 0.35))
+		if glow_col.a > 0.0:
+			draw_set_transform(off + Vector2(100, 77) * sc, 0.0, Vector2(sc, sc * 0.22))
+			for gi in 7:
+				var gk := 1.0 - gi / 7.0
+				draw_circle(Vector2.ZERO, 98.0 * gk, Color(glow_col.r, glow_col.g, glow_col.b, 0.05 + (1.0 - gk) * 0.16))
+			draw_set_transform(off, 0.0, Vector2(sc, sc))
 		# lower body
 		var low := PackedVector2Array([Vector2(10, belt + 2), Vector2(14, belt - 4), Vector2(cab[0] + 8, belt - 2 + nose * 0.2), Vector2(190, belt + 3 + nose * 0.3),
 			Vector2(192, 70), Vector2(188, 74), Vector2(10, 74), Vector2(8, 70)])
@@ -61,6 +73,21 @@ class CarArt extends Control:
 			draw_rect(Rect2(14, belt - 8, cab[3] - 14 + 4, 6), body.darkened(0.25))
 		# gloss line along the shoulder
 		draw_line(Vector2(16, belt + 3), Vector2(186, belt + 4 + nose * 0.3), Color(1, 1, 1, 0.16), 1.5)
+		# paint finish: metallic shimmer on roof and shoulder
+		if metal > 0.5 and not locked:
+			draw_line(Vector2(cab[1] + 2, belt - ch + 2), Vector2(cab[2] - 2, belt - ch + 2), Color(1, 1, 1, 0.45), 2.0)
+			draw_line(Vector2(20, belt + 6), Vector2(176, belt + 7 + nose * 0.3), Color(1, 1, 1, 0.22), 2.0)
+		# racing stripe along the body side
+		if stripe_col.a > 0.0:
+			draw_rect(Rect2(16, belt + 9, 170, 5), stripe_col)
+			draw_rect(Rect2(16, belt + 16, 170, 2), stripe_col)
+		# door badge
+		if decal_txt != "":
+			var dcx := (float(cab[1]) + float(cab[2])) * 0.5 + 4.0
+			draw_circle(Vector2(dcx, belt + 15), 9.5, decal_bg)
+			var fnt := ThemeDB.fallback_font
+			var tsz := fnt.get_string_size(decal_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 11)
+			draw_string(fnt, Vector2(dcx - tsz.x * 0.5, belt + 19), decal_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, decal_col)
 		# lower sill + bumpers
 		draw_rect(Rect2(28, 69, 144, 4), dark)
 		draw_rect(Rect2(184, belt + 6, 8, 12), dark)
@@ -102,11 +129,44 @@ class SwatchArt extends Control:
 	var selected := false
 	var txt := ""
 	var bg := Color.BLACK
+	var model := "hatch"
+
+	func _ready() -> void:
+		if not slot in ["paint", "stripe", "decal", "glow"]:
+			return
+		var ca := CarArt.new()
+		ca.model = model
+		ca.paint = col if slot == "paint" else base
+		ca.metal = metal if slot == "paint" else 0.0
+		if slot == "stripe" and not none:
+			ca.stripe_col = col
+		elif slot == "decal" and not none:
+			ca.decal_txt = txt
+			ca.decal_bg = bg
+			ca.decal_col = col
+		elif slot == "glow" and not none:
+			ca.glow_col = col
+		ca.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(ca)
+		ca.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		ca.offset_left = 4
+		ca.offset_right = -4
+		ca.offset_top = 3
+		ca.offset_bottom = -3
 
 	func _draw() -> void:
 		var r := Rect2(Vector2.ZERO, size)
 		var cx := size.x * 0.5
 		var cy := size.y * 0.5
+		if slot in ["paint", "stripe", "decal", "glow"]:
+			# showroom card: soft vertical gradient + floor light, the car itself is a child
+			var pts := PackedVector2Array([Vector2(0, 0), Vector2(size.x, 0), Vector2(size.x, size.y), Vector2(0, size.y)])
+			var cols := PackedColorArray([Color(0.17, 0.18, 0.22), Color(0.17, 0.18, 0.22), Color(0.06, 0.065, 0.08), Color(0.06, 0.065, 0.08)])
+			draw_polygon(pts, cols)
+			draw_rect(Rect2(0, size.y * 0.8, size.x, size.y * 0.2), Color(1, 1, 1, 0.04))
+			if selected:
+				draw_style_box(UI.sb(Color.TRANSPARENT, 10, UI.ACCENT, 3), r)
+			return
 		match slot:
 			"paint":
 				var st := UI.sb(col, 10)

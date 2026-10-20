@@ -94,9 +94,9 @@ func _box(parent: Node, size: Vector3, pos: Vector3, c: Color) -> MeshInstance3D
 
 
 func _ready() -> void:
-	_torso = _box(self, Vector3(0.52, 0.56, 0.3), Vector3(0, 0.25, 0.12), shirt_color)
+	_torso = _box(self, Vector3(0.52, 0.68, 0.3), Vector3(0, 0.31, 0.12), shirt_color)
 	_head = Node3D.new()
-	_head.position = Vector3(0, 0.7 if not is_local else 0.64, 0.05)
+	_head.position = Vector3(0, 0.8 if not is_local else 0.72, 0.05)
 	add_child(_head)
 	_helmet = _box(_head, Vector3(0.36, 0.36, 0.36), Vector3.ZERO, helmet_color)
 	_visor = _box(_head, Vector3(0.3, 0.12, 0.04), Vector3(0, 0.03, -0.19), Color(0.03, 0.03, 0.05))
@@ -707,7 +707,7 @@ func _podium_targets() -> Array:
 		"silver":
 			var chest_l := Vector3(-0.07, 0.1, -0.3)
 			var chest_r := Vector3(0.07, 0.1, -0.3)
-			var cyc := fmod(maxf(pt - 0.9, 0.0), 3.6)
+			var cyc := fmod(maxf(pt - 0.9, 0.0), 5.6)
 			if pt < 0.9:
 				var k := smoothstep(0.0, 0.5, pt)
 				dl = rest_l.lerp(chest_l, k)
@@ -720,6 +720,11 @@ func _podium_targets() -> Array:
 				var k3 := smoothstep(1.2, 1.6, cyc)
 				dr = chest_r.lerp(Vector3(0.18, 0.72, -0.58), k3) + Vector3(0, sin(cyc * 9.0) * 0.02, 0)
 				dl = Vector3(-0.36, 0.0, -0.15)
+			elif cyc >= 3.6:                                 # Messi: both arms up, pointing to the sky
+				var k5 := smoothstep(3.6, 4.1, cyc)
+				var fl := sin((cyc - 3.6) * 6.0) * 0.03
+				dr = Vector3(0.32, 0.95, -0.12).lerp(Vector3(0.2, 1.3 + fl, -0.06), k5)
+				dl = Vector3(-0.32, 0.4, -0.4).lerp(Vector3(-0.2, 1.3 - fl, -0.06), k5)
 			else:                                            # fist pumps
 				var k4 := smoothstep(2.3, 2.6, cyc)
 				var pump := absf(sin((cyc - 2.3) * 7.0)) * 0.22
@@ -773,10 +778,12 @@ func _podium_body(delta: float) -> void:
 				head_pitch = -0.2 + clampf((pt - 0.9) / 1.0, 0.0, 1.0) * 0.7
 		"silver":
 			if pt > 0.9:
-				var cyc := fmod(pt - 0.9, 3.6)
-				head_pitch = -0.35 if cyc < 1.2 else 0.0
-				if cyc > 2.3:
+				var cyc := fmod(pt - 0.9, 5.6)
+				head_pitch = -0.35 if cyc < 1.2 else (0.6 if cyc >= 3.6 else 0.0)
+				if cyc > 2.3 and cyc < 3.6:
 					hop = absf(sin((cyc - 2.3) * 7.0)) * 0.1
+				elif cyc >= 3.6:
+					hop = absf(sin((cyc - 3.6) * 3.0)) * 0.06
 				twist = sin(cyc * 1.7) * 0.18
 			elif pt > 0.0:
 				head_pitch = -0.4
