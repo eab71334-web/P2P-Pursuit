@@ -63,7 +63,7 @@ func _process(d: float) -> void:
 					sc.hub._mod_fill()
 				else:
 					sc.hub.mod_section = "paint"
-					sc.hub.mod_sub["paint"] = "decal"
+					sc.hub.mod_sub["paint"] = OS.get_environment("SUB") if OS.get_environment("SUB") != "" else "decal"
 					Profile.owned["decal:rs"] = true
 					Profile.equip_car_part("decal", "rs")
 					sc.hub._mod_fill()
