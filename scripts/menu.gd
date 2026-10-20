@@ -233,7 +233,7 @@ func _build_ui() -> void:
 	var stack := Control.new()
 	mc.add_child(stack)
 	hub = Hub.new()
-	hub.tab_ids = ["play", "garage", "workshop", "character", "shop", "quests", "chests", "settings"]
+	hub.tab_ids = ["play", "garage", "character", "shop", "quests", "chests", "settings"]
 	hub.play_content = _build_main()
 	panels["main"] = hub
 	panels["setup"] = _build_setup()
@@ -521,7 +521,7 @@ func _open_room_garage() -> void:
 		room_hub.queue_free()
 	room_hub = Hub.new()
 	room_hub.in_room = true
-	room_hub.tab_ids = ["garage", "workshop", "character", "shop", "settings"]
+	room_hub.tab_ids = ["garage", "character", "shop", "settings"]
 	room_hub.closed.connect(_close_room_garage)
 	var stack: Control = panels["lobby"].get_parent()
 	stack.add_child(room_hub)

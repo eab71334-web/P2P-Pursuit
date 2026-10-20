@@ -96,7 +96,7 @@ func _box(parent: Node, size: Vector3, pos: Vector3, c: Color) -> MeshInstance3D
 func _ready() -> void:
 	_torso = _box(self, Vector3(0.52, 0.56, 0.3), Vector3(0, 0.25, 0.12), shirt_color)
 	_head = Node3D.new()
-	_head.position = Vector3(0, 0.7, 0.05)
+	_head.position = Vector3(0, 0.7 if not is_local else 0.64, 0.05)
 	add_child(_head)
 	_helmet = _box(_head, Vector3(0.36, 0.36, 0.36), Vector3.ZERO, helmet_color)
 	_visor = _box(_head, Vector3(0.3, 0.12, 0.04), Vector3(0, 0.03, -0.19), Color(0.03, 0.03, 0.05))
@@ -119,6 +119,11 @@ func _ready() -> void:
 		_visor.visible = false
 		_look.visible = false
 		_bx.visible = false
+		# first-person: slimmer arms and hands so they never hide the gauges
+		for sd2 in ["L", "R"]:
+			((_limbs[sd2]["up"] as MeshInstance3D).mesh as BoxMesh).size = Vector3(0.08, 0.08, 1.0)
+			((_limbs[sd2]["fore"] as MeshInstance3D).mesh as BoxMesh).size = Vector3(0.07, 0.07, 1.0)
+			((_limbs[sd2]["hand"] as MeshInstance3D).mesh as BoxMesh).size = Vector3(0.1, 0.1, 0.1)
 		cam = Camera3D.new()
 		cam.fov = 82.0
 		cam.near = 0.05

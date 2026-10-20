@@ -104,7 +104,7 @@ func setup(p_team: int, color: Color, remote: bool, p_lo := {}, p_preview := fal
 
 
 func seat_origin(role: String) -> Vector3:
-	return Vector3(-0.45, 1.0 - sd, 0.3) if role == "driver" else Vector3(0.45, 1.0 - sd, 0.3)
+	return Vector3(-0.45, 0.95 - sd, 0.3) if role == "driver" else Vector3(0.45, 0.95 - sd, 0.3)
 
 
 func _ready() -> void:
@@ -692,11 +692,15 @@ func _mirror_glass_mat() -> StandardMaterial3D:
 func _build_mirrors() -> void:
 	var shell := body_mat if body_mat != null else _mat(body_color)
 	var dark := CarStyle.mat(Color(0.05, 0.05, 0.07), 0.2, 0.5)
-	# rear-view: hangs from the roof edge above the windshield
+	# rear-view: fixed to the roof header above the driver (stalk + base plate screwed into the headliner)
+	var gh: Dictionary = CarStyle.GREENHOUSE.get(model, CarStyle.GREENHOUSE["hatch"])
+	var roof_y := 1.95 - drop
 	var rv := Node3D.new()
-	rv.position = Vector3(0.0, 1.76 - drop, -0.66 - drop * 0.35)
+	rv.position = Vector3(-0.22, roof_y - 0.2, float(gh["zf1"]) - drop * 0.3 + 0.12)
+	rv.scale = Vector3(0.78, 0.78, 0.78)
 	add_child(rv)
-	CarStyle.box(rv, Vector3(0.05, 0.09, 0.05), Vector3(0, 0.1, -0.02), dark)
+	CarStyle.box(rv, Vector3(0.14, 0.014, 0.09), Vector3(0, 0.2, -0.01), dark)                 # base plate on the roof
+	CarStyle.box(rv, Vector3(0.035, 0.2, 0.035), Vector3(0, 0.1, -0.02), dark)                 # stalk up to the roof
 	CarStyle.box(rv, Vector3(0.5, 0.15, 0.06), Vector3.ZERO, dark)
 	_mirror_quad(rv, Vector2(0.45, 0.115), Vector3(0, 0, 0.034))
 	_mirror_nodes["rear"] = rv
@@ -880,9 +884,9 @@ func _build_cluster() -> void:
 	_cl_spec = CLUSTERS.get(model, CLUSTERS["hatch"])
 	var style: String = _cl_spec["style"]
 	var root := Node3D.new()
-	root.position = Vector3(-0.45, 1.2 - sd * 0.5, -0.745)
-	root.scale = Vector3(1.3, 1.3, 1.3)
-	root.rotation_degrees.x = -14.0
+	root.position = Vector3(-0.45, 1.3 - sd * 0.8 + 0.115, -0.76)
+	root.scale = Vector3(1.2, 1.2, 1.2)
+	root.rotation_degrees.x = -10.0
 	add_child(root)
 	# hood / binnacle
 	CarStyle.box(root, Vector3(0.5, 0.2, 0.02), Vector3(0, 0, -0.016), CarStyle.mat(Color(0.03, 0.03, 0.04), 0.2, 0.6))
@@ -902,14 +906,26 @@ func _build_cluster() -> void:
 			_cl_text.font_size = 60
 			_cl_text.modulate = _cl_spec["ink"]
 			_cl_text.shaded = false
-			_cl_text.position = Vector3(-0.02, -0.01, 0.01)
+			_cl_text.pixel_size = 0.0019 if style != "hyper" else 0.0016
+			_cl_text.position = Vector3(-0.05 if style != "hyper" else 0.0, 0.012, 0.01)
 			root.add_child(_cl_text)
+			var unit := Label3D.new()
+			unit.text = "KM/H"
+			unit.pixel_size = 0.00055
+			unit.font_size = 60
+			unit.modulate = (_cl_spec["ink"] as Color) * 0.7
+			unit.shaded = false
+			unit.position = Vector3(-0.05 if style != "hyper" else 0.0, -0.035, 0.01)
+			root.add_child(unit)
+			# gear in its own window
+			CarStyle.box(root, Vector3(0.085, 0.11, 0.004), Vector3(0.165, -0.005, 0.007), _cl_mat(Color(0.14, 0.15, 0.18)))
+			CarStyle.box(root, Vector3(0.075, 0.1, 0.004), Vector3(0.165, -0.005, 0.0085), _cl_mat(Color(0.01, 0.01, 0.015)))
 			_cl_gear = Label3D.new()
-			_cl_gear.pixel_size = 0.0016
+			_cl_gear.pixel_size = 0.0021
 			_cl_gear.font_size = 60
 			_cl_gear.modulate = Color(1, 1, 1)
 			_cl_gear.shaded = false
-			_cl_gear.position = Vector3(0.16, -0.01, 0.01)
+			_cl_gear.position = Vector3(0.165, -0.005, 0.012)
 			root.add_child(_cl_gear)
 			var n := 14 if style == "digital" else 18
 			for i in n:
@@ -953,7 +969,7 @@ func _update_cluster(delta: float) -> void:
 				f = 0.7
 		(n["node"] as Node3D).rotation.z = deg_to_rad(135.0 - 270.0 * f)
 	if _cl_text:
-		_cl_text.text = "%03d" % int(spd) + (" km/h" if _cl_spec["style"] == "digital" else "")
+		_cl_text.text = "%d" % int(spd)
 	if _cl_gear:
 		_cl_gear.text = gear_sel if gear_sel != "" else "N"
 		_cl_gear.modulate = Color(1.0, 0.75, 0.2) if gear_sel in ["R", "P"] else Color(1, 1, 1)
@@ -984,6 +1000,8 @@ var _shift_dur := 0.7
 var _shift_from := Vector2.ZERO
 var _shift_to := Vector2.ZERO
 var _lever_now := Vector2.ZERO
+var _shift_snd := true
+var _shift_heavy := true
 
 
 func _gear_target() -> String:
@@ -1009,6 +1027,10 @@ func _update_gear(delta: float) -> void:
 	if _gear_map.is_empty():
 		return
 	if preview or delta <= 0.0:
+		if preview and speed_kmh > 1.0 and not _gear_map.is_empty():
+			var pg := "D" if (_gear_style == "auto" or _gear_style == "buttons") else str(clampi(int(speed_kmh / maxf(top_speed / maxf(float(CarInterior.gear_count(_gear_style)), 1.0), 1.0)) + 1, 1, maxi(CarInterior.gear_count(_gear_style), 1)))
+			if _gear_map.has(pg):
+				gear_sel = pg
 		_apply_lever(delta)
 		return
 	var pos := global_position
@@ -1046,6 +1068,8 @@ func _begin_shift(from_g: String, to_g: String) -> void:
 	var numeric := to_g.is_valid_int() and from_g.is_valid_int()
 	_shift_dur = 0.45 if numeric else 0.8
 	_shift_t = 0.0
+	_shift_snd = false
+	_shift_heavy = not numeric
 	# the lights on the gate follow the lever
 	for g in _gear_letters:
 		(_gear_letters[g] as Label3D).modulate = Color(1.0, 0.75, 0.2) if g == to_g else Color(0.55, 0.58, 0.65)
@@ -1065,6 +1089,10 @@ func _apply_lever(delta: float) -> void:
 		var u := clampf(_shift_t / _shift_dur, 0.0, 1.0)
 		k = smoothstep(0.0, 0.3, u) * (1.0 - smoothstep(0.7, 1.0, u))
 		ease_t = smoothstep(0.3, 0.7, u)
+		if not _shift_snd and u >= 0.62:
+			_shift_snd = true
+			if not preview and DisplayServer.get_name() != "headless":
+				Sfx.play3d("gear_clunk" if _shift_heavy else "gear_tick", self, -2.0 if _shift_heavy else -4.0, randf_range(0.94, 1.06))
 		_lever_now = _shift_from.lerp(_shift_to, ease_t)
 		if u >= 1.0:
 			_shift_t = -1.0

@@ -8,6 +8,7 @@ var cam: Camera3D
 var car: Car
 var avatar: Avatar
 var spin := true
+var zoom := 1.0
 var hero := false             # big menu background showroom
 var yaw := 0.4
 var _drag := false
@@ -111,7 +112,7 @@ func _frame_car() -> void:
 		cam.position = Vector3(0, 3.5, 13.6)
 		cam.look_at(Vector3(0, 0.9, 0))
 		return
-	cam.position = Vector3(0, 3.8, 10.6)
+	cam.position = Vector3(0, 3.8 * zoom, 10.6 * zoom)
 	cam.look_at(Vector3(0, 0.9, 0))
 
 

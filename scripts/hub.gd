@@ -166,7 +166,7 @@ func _build() -> void:
 	var sp0 := Control.new()
 	sp0.custom_minimum_size = Vector2(0, 10)
 	sv.add_child(sp0)
-	var names := {"play": ["PLAY", "العب"], "garage": ["GARAGE", "الكراج"], "workshop": ["WORKSHOP", "الورشة"], "character": ["CHARACTER", "الشخصية"],
+	var names := {"play": ["PLAY", "العب"], "garage": ["GARAGE", "الكراج"], "character": ["CHARACTER", "الشخصية"],
 		"shop": ["SHOP", "المتجر"], "quests": ["QUESTS", "المهام"], "chests": ["CHESTS", "الصناديق"], "settings": ["SETTINGS", "الإعدادات"]}
 	for id in tab_ids:
 		var b := NavItem.new(id)
@@ -307,7 +307,7 @@ func select(id: String) -> void:
 	browser_box = null
 	cur = id
 	for k in nav_btns:
-		(nav_btns[k] as NavItem).active = (k == id)
+		(nav_btns[k] as NavItem).active = (k == id or (id == "modify" and k == "garage"))
 	var p: Control
 	match id:
 		"play":
@@ -316,8 +316,8 @@ func select(id: String) -> void:
 				p.get_parent().remove_child(p)
 		"garage":
 			p = _tab_garage()
-		"workshop":
-			p = _tab_workshop()
+		"modify":
+			p = _tab_modify()
 		"character":
 			p = _tab_character()
 		"shop":
@@ -388,7 +388,7 @@ func _stats(parent: Node, car_id: String) -> void:
 
 func _lo_for(car_id: String, over := {}) -> Dictionary:
 	var cs: Dictionary = Profile.car_set(car_id)
-	var lo := {"car": car_id, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "up": Profile.up.get(car_id, {}), "outfit": Profile.outfit}
+	var lo := {"car": car_id, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"], "up": Profile.up.get(car_id, {}), "outfit": Profile.outfit}
 	for k in over:
 		lo[k] = over[k]
 	return lo
@@ -452,7 +452,7 @@ func _equipped(slot: String) -> String:
 	if slot == "emote":
 		return str(Profile.outfit.get("emote", "wave"))
 	if Catalog.CAR_SLOTS.has(slot):
-		return str(Profile.car_set(g_car if cur == "garage" else Profile.car)[slot])
+		return str(Profile.car_set(g_car)[slot])
 	return str(Profile.outfit.get(slot, Catalog.DEFAULT_OUTFIT[slot]))
 
 
@@ -493,7 +493,9 @@ func _item_cell(slot: String, id: String, equipped: String, on_pick: Callable, g
 		sw.none = id == "none"
 		sw.metal = float(e.get("m", 0.0))
 		sw.rough = float(e.get("ro", 0.5))
-		sw.base = Catalog.PAINTS[Profile.car_set(g_car if cur == "garage" else Profile.car)["paint"]]["c"]
+		sw.txt = str(e.get("t", ""))
+		sw.bg = e.get("bg", Color.BLACK)
+		sw.base = Catalog.PAINTS[Profile.car_set(g_car)["paint"]]["c"]
 		sw.custom_minimum_size = Vector2(0, 54)
 		sw.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		sw.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -554,7 +556,8 @@ func _action_bar(slot: String, id: String) -> void:
 
 func _equip(slot: String, id: String) -> void:
 	if Catalog.CAR_SLOTS.has(slot):
-		Profile.select_car(g_car) if cur == "garage" else null
+		if Profile.cars.has(g_car):
+			Profile.select_car(g_car)
 		Profile.equip_car_part(slot, id)
 	elif slot == "emote":
 		Profile.outfit["emote"] = id
@@ -578,103 +581,378 @@ func _buy(slot: String, id: String) -> void:
 
 ## after a purchase / equip: refresh the current tab without losing the 3D preview
 func _rerender() -> void:
-	if browser_box and browser_box.has_meta("fill"):
+	if cur == "modify":
+		_mod_fill()
+	elif browser_box and browser_box.has_meta("fill"):
 		(browser_box.get_meta("fill") as Callable).call(browser_slot)
 	if preview:
-		if cur in ["garage", "workshop"]:
-			preview.show_car(_lo_for(g_car if cur == "garage" else Profile.car))
+		if cur in ["garage", "modify"]:
+			preview.show_car(_lo_for(g_car))
 		elif cur == "character":
 			preview.show_avatar(Profile.outfit)
 	if stat_box:
 		for c in stat_box.get_children():
 			c.queue_free()
-		_stats(stat_box, g_car if cur == "garage" else Profile.car)
+		_stats(stat_box, g_car)
 	_update_top()
 
 
 # ====================================================================== GARAGE
+const DOCK_H := 188
+const MOD_SECTIONS := ["paint", "mods", "wheels", "engine"]
+const MOD_SUBS := {"paint": ["paint", "stripe", "decal", "glow"], "mods": ["aero", "susp", "kit", "armor"], "wheels": ["rim", "tires"], "engine": ["engine", "turbo", "exhaust", "cooling"]}
+const MOD_NAMES := {"paint": ["Colour", "اللون"], "stripe": ["Stripes", "الخطوط"], "decal": ["Stickers", "الملصقات"], "glow": ["Underglow", "الإضاءة السفلية"], "rim": ["Rims", "الجنوط"]}
+const SEC_NAMES := {"paint": ["PAINT", "الطلاء"], "mods": ["MODS", "التعديلات"], "wheels": ["WHEELS", "العجلات"], "engine": ["ENGINE", "المحرك"]}
+var mod_section := "paint"
+var mod_sub := {}
+var _mod_chips: HBoxContainer
+var _mod_strip: HBoxContainer
+var _mod_tabs: HBoxContainer
+
+
+func _anchor(c: Control, l: float, t: float, r: float, b: float) -> void:
+	c.anchor_left = l
+	c.anchor_top = t
+	c.anchor_right = r
+	c.anchor_bottom = b
+
 
 func _tab_garage() -> Control:
 	g_car = Profile.car
-	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 12)
-	# left: showroom
-	var left := VBoxContainer.new()
-	left.custom_minimum_size = Vector2(360, 0)
-	left.add_theme_constant_override("separation", 8)
-	h.add_child(left)
+	var root := Control.new()
 	preview = Preview3D.new()
-	preview.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	left.add_child(preview)
-	var sp := UI.panel(left)
+	preview.zoom = 0.74
+	root.add_child(preview)
+	preview.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	preview.offset_bottom = -(DOCK_H + 4)
+	preview.ready.connect(func(): preview.show_car(_lo_for(g_car)))
+	# selected car: name + description (top left) and Modify / Buy (top right)
+	var ip := UI.panel(root, UI.PANEL, 12)
+	ip.position = Vector2(12, 12)
+	var iv := VBoxContainer.new()
+	iv.add_theme_constant_override("separation", 2)
+	iv.custom_minimum_size = Vector2(300, 0)
+	ip.add_child(iv)
+	var ap := MarginContainer.new()
+	root.add_child(ap)
+	_anchor(ap, 1, 0, 1, 0)
+	ap.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	ap.offset_right = -12
+	ap.offset_top = 12
+	var av := VBoxContainer.new()
+	av.add_theme_constant_override("separation", 6)
+	ap.add_child(av)
+	# stats: same place (bottom left of the showroom) but raised above the dock
+	var sp := UI.panel(root, UI.PANEL, 12)
+	_anchor(sp, 0, 1, 0, 1)
+	sp.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	sp.offset_left = 12
+	sp.offset_top = -(DOCK_H + 14)
+	sp.offset_bottom = -(DOCK_H + 14)
+	var sv := VBoxContainer.new()
+	sv.custom_minimum_size = Vector2(380, 0)
+	sv.add_theme_constant_override("separation", 4)
+	sp.add_child(sv)
+	UI.lbl(sv, UI.tx("CAR STATS", "قدرات السيارة"), 15, UI.TXT2, false)
 	stat_box = VBoxContainer.new()
 	stat_box.add_theme_constant_override("separation", 4)
-	sp.add_child(stat_box)
-	# right
-	var right := VBoxContainer.new()
-	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right.add_theme_constant_override("separation", 8)
-	h.add_child(right)
+	sv.add_child(stat_box)
+	_stats(stat_box, g_car)
+	# dock: full-width bar with every car
+	var dock := PanelContainer.new()
+	dock.add_theme_stylebox_override("panel", UI.sb(UI.PANEL, 0, UI.LINE, 1))
+	_anchor(dock, 0, 1, 1, 1)
+	dock.offset_top = -DOCK_H
+	root.add_child(dock)
 	var csc := TScroll.new()
-	csc.custom_minimum_size = Vector2(0, 124)
 	csc.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	right.add_child(csc)
+	dock.add_child(csc)
 	var cars := HBoxContainer.new()
-	cars.add_theme_constant_override("separation", 8)
+	cars.add_theme_constant_override("separation", 10)
 	csc.add_child(cars)
-	var info := HBoxContainer.new()
-	right.add_child(info)
 	var rebuild_info := func() -> void:
-		for c in info.get_children():
+		for c in iv.get_children():
+			c.queue_free()
+		for c in av.get_children():
 			c.queue_free()
 		var m: Dictionary = Catalog.CARS[g_car]
-		var t := UI.lbl(info, "%s   -   %s" % [Catalog.nm(m), Catalog.txt(m["d"])], 20, Catalog.RARITY_COLOR[int(m["r"])], false)
-		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		if not Profile.cars.has(g_car):
+		UI.lbl(iv, Catalog.nm(m), 30, Catalog.RARITY_COLOR[int(m["r"])], false)
+		UI.lbl(iv, Catalog.txt(m["d"]), 16, UI.TXT2, true)
+		UI.lbl(iv, Catalog.rar_name(int(m["r"])), 14, UI.TXT2, false)
+		if Profile.cars.has(g_car):
+			UI.btn(av, UI.tx("MODIFY", "تعديل"), UI.ACCENT, func():
+				Sfx.play("click")
+				select("modify"), 24, Vector2(210, 58))
+		else:
 			var need := int(m["lvl"])
-			var b := UI.btn(info, "", UI.GOLD.darkened(0.35), func():
+			var b := UI.btn(av, "", UI.GOLD.darkened(0.35), func():
 				if Profile.buy_car(g_car):
 					Sfx.play("success")
 					say(UI.tx("New car!", "سيارة جديدة!"))
-					select("garage"), 22, Vector2(250, 48))
+					select("garage"), 22, Vector2(210, 58))
 			b.disabled = Profile.level < need or Profile.coins < int(m["price"])
-			var ph := UI.price_row(null, int(m["price"]), false, 22)
+			var ph := UI.price_row(null, int(m["price"]), false, 24)
 			ph.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 			b.add_child(ph)
 			if Profile.level < need:
-				UI.lbl(info, UI.tx("Level %d needed", "يحتاج مستوى %d") % need, 18, Color(1.0, 0.55, 0.45), false)
-	for id in Catalog.CAR_ORDER:
-		cars.add_child(_car_card(id, func():
-			g_car = id
-			if Profile.cars.has(id):
-				Profile.select_car(id)
-			preview.show_car(_lo_for(id))
-			(rebuild_info as Callable).call()
-			for c in stat_box.get_children():
-				c.queue_free()
-			_stats(stat_box, id)
-			if browser_box:
-				(browser_box.get_meta("fill") as Callable).call(browser_slot)))
+				UI.lbl(av, UI.tx("Level %d needed", "يحتاج مستوى %d") % need, 17, Color(1.0, 0.55, 0.45), false)
+	var fill_dock: Callable
+	fill_dock = func() -> void:
+		for c in cars.get_children():
+			c.queue_free()
+		for id in Catalog.CAR_ORDER:
+			cars.add_child(_car_card(id, func():
+				g_car = id
+				if Profile.cars.has(id):
+					Profile.select_car(id)
+				preview.show_car(_lo_for(id))
+				rebuild_info.call()
+				for c in stat_box.get_children():
+					c.queue_free()
+				_stats(stat_box, id)
+				fill_dock.call()))
+	fill_dock.call()
 	rebuild_info.call()
-	var br := _browser(["paint", "stripe", "rim", "glow"], func(slot: String, id: String):
-		preview.show_car(_lo_for(g_car, {slot: id})))
-	right.add_child(br)
-	# purchase area sits at the bottom: selected car strip (name / buy) above the dock of cars
-	right.move_child(info, right.get_child_count() - 1)
-	right.move_child(csc, right.get_child_count() - 1)
-	csc.custom_minimum_size = Vector2(0, 160)
-	_stats(stat_box, g_car)
+	return root
+
+
+# ====================================================================== MODIFY (paint / mods / wheels / engine)
+
+func _sub_name(sub: String) -> String:
+	if MOD_NAMES.has(sub):
+		return Catalog.txt(MOD_NAMES[sub])
+	if Catalog.PARTS.has(sub):
+		return Catalog.txt(Catalog.PARTS[sub]["n"])
+	return Catalog.txt(Catalog.UPGRADES[sub]["n"])
+
+
+func _tab_modify() -> Control:
+	g_car = Profile.car
+	var root := Control.new()
+	var bar_h := 262
+	preview = Preview3D.new()
+	preview.zoom = 0.74
+	root.add_child(preview)
+	preview.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	preview.offset_bottom = -bar_h
 	preview.ready.connect(func(): preview.show_car(_lo_for(g_car)))
-	return h
+	# back + title (top left)
+	var tp := UI.panel(root, UI.PANEL, 12)
+	tp.position = Vector2(12, 12)
+	var th := HBoxContainer.new()
+	th.add_theme_constant_override("separation", 14)
+	tp.add_child(th)
+	UI.btn(th, UI.tx("< GARAGE", "< الكراج"), UI.CARD2, func():
+		Sfx.play("click", -6.0)
+		select("garage"), 18, Vector2(130, 44))
+	var tv := VBoxContainer.new()
+	tv.add_theme_constant_override("separation", 0)
+	th.add_child(tv)
+	UI.lbl(tv, UI.tx("MODIFY", "تعديل السيارة"), 13, UI.TXT2, false)
+	UI.lbl(tv, Catalog.nm(Catalog.CARS[g_car]), 24, UI.TXT, false)
+	# live stats (top right)
+	var sp := UI.panel(root, UI.PANEL, 12)
+	_anchor(sp, 1, 0, 1, 0)
+	sp.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	sp.offset_right = -12
+	sp.offset_top = 12
+	var sv := VBoxContainer.new()
+	sv.custom_minimum_size = Vector2(340, 0)
+	sv.add_theme_constant_override("separation", 4)
+	sp.add_child(sv)
+	UI.lbl(sv, UI.tx("CAR STATS", "قدرات السيارة"), 15, UI.TXT2, false)
+	stat_box = VBoxContainer.new()
+	stat_box.add_theme_constant_override("separation", 4)
+	sv.add_child(stat_box)
+	_stats(stat_box, g_car)
+	# bottom: options bar (full width) + section tabs
+	var bp := PanelContainer.new()
+	bp.add_theme_stylebox_override("panel", UI.sb(UI.PANEL, 0, UI.LINE, 1))
+	_anchor(bp, 0, 1, 1, 1)
+	bp.offset_top = -bar_h
+	root.add_child(bp)
+	var bv := VBoxContainer.new()
+	bv.add_theme_constant_override("separation", 8)
+	bp.add_child(bv)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	head.custom_minimum_size = Vector2(0, 46)
+	bv.add_child(head)
+	_mod_chips = HBoxContainer.new()
+	_mod_chips.add_theme_constant_override("separation", 6)
+	head.add_child(_mod_chips)
+	action_box = HBoxContainer.new()
+	action_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	action_box.add_theme_constant_override("separation", 10)
+	head.add_child(action_box)
+	var ssc := TScroll.new()
+	ssc.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	ssc.custom_minimum_size = Vector2(0, 132)
+	bv.add_child(ssc)
+	_mod_strip = HBoxContainer.new()
+	_mod_strip.add_theme_constant_override("separation", 10)
+	ssc.add_child(_mod_strip)
+	_mod_tabs = HBoxContainer.new()
+	_mod_tabs.add_theme_constant_override("separation", 6)
+	bv.add_child(_mod_tabs)
+	for sec in MOD_SECTIONS:
+		var tb := Button.new()
+		tb.text = UI.tx(SEC_NAMES[sec][0], SEC_NAMES[sec][1])
+		tb.custom_minimum_size = Vector2(0, 54)
+		tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tb.add_theme_font_size_override("font_size", 21)
+		tb.set_meta("sec", sec)
+		tb.pressed.connect(func():
+			Sfx.play("click", -8.0)
+			mod_section = sec
+			_mod_fill())
+		_mod_tabs.add_child(tb)
+	_mod_fill()
+	return root
+
+
+func _mod_fill() -> void:
+	for c in _mod_chips.get_children():
+		c.queue_free()
+	for c in _mod_strip.get_children():
+		c.queue_free()
+	for c in action_box.get_children():
+		c.queue_free()
+	for tb in _mod_tabs.get_children():
+		var on: bool = tb.get_meta("sec") == mod_section
+		for st in ["normal", "hover", "pressed", "focus"]:
+			(tb as Button).add_theme_stylebox_override(st, UI.sb(UI.ACCENT if on else UI.CARD2, 8))
+	var subs: Array = MOD_SUBS[mod_section]
+	var cs: String = mod_sub.get(mod_section, subs[0])
+	if not subs.has(cs):
+		cs = subs[0]
+	mod_sub[mod_section] = cs
+	for sname in subs:
+		var on: bool = sname == cs
+		var b := UI.btn(_mod_chips, _sub_name(sname), UI.ACCENT if on else UI.CARD2, func():
+			mod_sub[mod_section] = sname
+			_mod_fill(), 18, Vector2(0, 42))
+		b.add_theme_stylebox_override("normal", UI.sb(UI.ACCENT if on else UI.CARD2, 8))
+	if Catalog.CAR_SLOTS.has(cs):
+		_mod_cosmetics(cs)
+	elif Catalog.PARTS.has(cs):
+		_mod_tiers(cs)
+	else:
+		_mod_level(cs)
+
+
+func _mod_cosmetics(slot: String) -> void:
+	var eq := _equipped(slot)
+	browser_slot = slot
+	browser_id = eq
+	for id in Catalog.CAR_SLOT_ORDER[slot]:
+		var cell := _item_cell(slot, id, eq, func(sl: String, i: String):
+			preview.show_car(_lo_for(g_car, {sl: i})), _mod_strip)
+		cell.size_flags_horizontal = Control.SIZE_FILL
+		cell.custom_minimum_size = Vector2(136, 120)
+		_mod_strip.add_child(cell)
+	_action_bar(slot, eq)
+
+
+## a card with title / effect / button used for parts and levels. kind: install | remove | buy | max
+func _mod_cell(title: String, effect: String, kind: String, price: int, cb: Callable, fitted := false, wide := false, pips := -1) -> void:
+	var cell := UI.panel(_mod_strip, UI.CARD2 if not fitted else Color(0.1, 0.2, 0.15), 12)
+	cell.custom_minimum_size = Vector2(280 if wide else 210, 118)
+	if fitted:
+		cell.add_theme_stylebox_override("panel", UI.sb(Color(0.1, 0.2, 0.15), 12, UI.OK, 2))
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 3)
+	cell.add_child(v)
+	UI.lbl(v, title, 16, UI.TXT, false)
+	UI.lbl(v, effect, 18, UI.ACCENT, false)
+	if pips >= 0:
+		var ph := HBoxContainer.new()
+		ph.add_theme_constant_override("separation", 4)
+		v.add_child(ph)
+		for i in Catalog.MAX_UP:
+			var r := ColorRect.new()
+			r.custom_minimum_size = Vector2(28, 8)
+			r.color = UI.OK if i < pips else Color(1, 1, 1, 0.14)
+			ph.add_child(r)
+	var sp := Control.new()
+	sp.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	v.add_child(sp)
+	match kind:
+		"max":
+			var m := UI.lbl(v, UI.tx("MAX", "الحد الأقصى"), 18, UI.GOLD, false)
+			m.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		"remove":
+			UI.btn(v, UI.tx("Remove", "إزالة"), UI.BLUE, cb, 17, Vector2(0, 38))
+		"install":
+			UI.btn(v, UI.tx("Install", "تركيب"), UI.GREEN, cb, 17, Vector2(0, 38))
+		_:
+			var b := UI.btn(v, "", UI.GOLD.darkened(0.35), cb, 17, Vector2(0, 38))
+			b.disabled = Profile.coins < price
+			var ph2 := UI.price_row(null, price, false, 17)
+			ph2.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+			b.add_child(ph2)
+
+
+func _mod_tiers(slot: String) -> void:
+	var pd: Dictionary = Catalog.PARTS[slot]
+	var up: Dictionary = Profile.up.get(g_car, {})
+	var fitted := int(up.get("fit_" + slot, 0))
+	UI.lbl(action_box, Catalog.txt(pd["d"]) + ("" if fitted == 0 else "  -  " + UI.tx("Fitted: ", "مركّب: ") + Catalog.txt(pd["tiers"][fitted - 1])), 18, UI.TXT2 if fitted == 0 else UI.OK, false)
+	for ti in 3:
+		var tier := ti + 1
+		var pct := int(round(float(pd["v"][ti]) * 100.0))
+		var eff := ("-%d%% " + UI.tx("damage", "ضرر")) % pct if pd["stat"] == "armor" else "+%d%%" % pct
+		var price := int(pd["price"][ti])
+		var kind := "buy"
+		var cb: Callable
+		if fitted == tier:
+			kind = "remove"
+			cb = func():
+				Profile.install_part(g_car, slot, 0)
+				Sfx.play("click")
+				_rerender()
+		elif Profile.part_owned(slot, tier):
+			kind = "install"
+			cb = func():
+				Profile.install_part(g_car, slot, tier)
+				Sfx.play("success", -4.0)
+				say(UI.tx("Installed!", "تم التركيب!"))
+				_rerender()
+		else:
+			cb = func():
+				if Profile.buy_part(slot, tier):
+					Sfx.play("success", -2.0)
+					say(UI.tx("Bought and installed!", "تم الشراء والتركيب!"))
+					_rerender()
+				else:
+					say(UI.tx("Not enough coins", "العملات لا تكفي"))
+		_mod_cell(Catalog.txt(pd["tiers"][ti]), eff, kind, price, cb, fitted == tier)
+
+
+func _mod_level(key: String) -> void:
+	var u: Dictionary = Catalog.UPGRADES[key]
+	var lv := Profile.up_level(g_car, key)
+	UI.lbl(action_box, Catalog.txt(u["d"]), 18, UI.TXT2, false)
+	if lv >= Catalog.MAX_UP:
+		_mod_cell(Catalog.txt(u["n"]) + "  " + str(lv) + "/" + str(Catalog.MAX_UP), UI.tx("Fully upgraded", "مطوّر بالكامل"), "max", 0, func(): pass, false, true, lv)
+		return
+	var cost := Catalog.upgrade_cost(key, lv)
+	_mod_cell(Catalog.txt(u["n"]) + "  " + str(lv) + "/" + str(Catalog.MAX_UP), UI.tx("Next level", "المستوى التالي") + "  " + str(lv + 1), "buy", cost, func():
+		if Profile.upgrade(g_car, key):
+			Sfx.play("success", -2.0)
+			say(UI.tx("Upgraded!", "تمت الترقية!"))
+			_rerender()
+		else:
+			say(UI.tx("Not enough coins", "العملات لا تكفي")), false, true, lv)
 
 
 func _car_card(id: String, cb: Callable) -> Control:
 	var m: Dictionary = Catalog.CARS[id]
 	var rc: Color = Catalog.RARITY_COLOR[int(m["r"])]
 	var owned := Profile.cars.has(id)
-	var cur_car := id == Profile.car
+	var cur_car := id == g_car
 	var b := Button.new()
-	b.custom_minimum_size = Vector2(176, 150)
+	b.custom_minimum_size = Vector2(236, 160)
 	var n := UI.sb(UI.CARD, 12, UI.ACCENT if cur_car else Color(1, 1, 1, 0.08), 3 if cur_car else 1)
 	b.add_theme_stylebox_override("normal", n)
 	b.add_theme_stylebox_override("hover", UI.sb(UI.CARD2, 12, UI.ACCENT, 2))
@@ -697,7 +975,7 @@ func _car_card(id: String, cb: Callable) -> Control:
 	art.paint = Catalog.PAINTS[cs["paint"]]["c"]
 	art.rim = Catalog.RIMS[cs["rim"]]["c"]
 	art.locked = not owned
-	art.custom_minimum_size = Vector2(0, 68)
+	art.custom_minimum_size = Vector2(0, 84)
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(art)
 	var t := UI.lbl(vb, Catalog.nm(m), 15, UI.TXT, false)
@@ -724,161 +1002,10 @@ func _car_card(id: String, cb: Callable) -> Control:
 	dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	foot.add_child(dot)
-	var st := UI.tx("OWNED", "مملوكة") if owned else (UI.tx("Lv ", "م ") + str(m["lvl"]) + "  ·  " + str(m["price"]))
+	var st := (UI.tx("IN USE", "قيد الاستخدام") if id == Profile.car else UI.tx("OWNED", "مملوكة")) if owned else (UI.tx("Lv ", "م ") + str(m["lvl"]) + "  ·  " + str(m["price"]))
 	var sl := UI.lbl(foot, "  " + st, 13, UI.TXT2 if owned or Profile.level >= int(m["lvl"]) else Color(1.0, 0.6, 0.45), false)
 	sl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return b
-
-
-# ====================================================================== WORKSHOP
-
-func _tab_workshop() -> Control:
-	g_car = Profile.car
-	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 12)
-	var left := VBoxContainer.new()
-	left.custom_minimum_size = Vector2(360, 0)
-	left.add_theme_constant_override("separation", 8)
-	h.add_child(left)
-	preview = Preview3D.new()
-	preview.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	left.add_child(preview)
-	preview.ready.connect(func(): preview.show_car(_lo_for(Profile.car)))
-	var sp := UI.panel(left)
-	stat_box = VBoxContainer.new()
-	stat_box.add_theme_constant_override("separation", 4)
-	sp.add_child(stat_box)
-	_stats(stat_box, Profile.car)
-	var right := VBoxContainer.new()
-	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right.add_theme_constant_override("separation", 8)
-	h.add_child(right)
-	UI.lbl(right, "%s  -  %s" % [UI.tx("Upgrade your", "طوّر"), Catalog.nm(Catalog.CARS[Profile.car])], 26, UI.GOLD, false)
-	var tabs := HBoxContainer.new()
-	tabs.add_theme_constant_override("separation", 6)
-	right.add_child(tabs)
-	var body := VBoxContainer.new()
-	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right.add_child(body)
-	var show_tab := func(which: String) -> void:
-		ws_tab = which
-		for c in body.get_children():
-			c.queue_free()
-		for tb in tabs.get_children():
-			(tb as Button).add_theme_stylebox_override("normal", UI.sb(UI.ACCENT if tb.get_meta("k") == which else UI.CARD2, 6))
-		if which == "parts":
-			_workshop_parts(body)
-		else:
-			_workshop_levels(body)
-	for k in ["parts", "levels"]:
-		var tb := UI.btn(tabs, UI.tx("Parts", "قطع التعديل") if k == "parts" else UI.tx("Tuning levels", "مستويات الأداء"), UI.CARD2, func(): show_tab.call(k), 20, Vector2(0, 46))
-		tb.set_meta("k", k)
-	show_tab.call(ws_tab)
-	return h
-
-
-func _workshop_parts(host: Control) -> void:
-	var sc := _scroll(host)
-	var list := VBoxContainer.new()
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list.add_theme_constant_override("separation", 8)
-	sc.add_child(list)
-	var up: Dictionary = Profile.up.get(Profile.car, {})
-	for slot in Catalog.PART_SLOTS:
-		var pd: Dictionary = Catalog.PARTS[slot]
-		var fitted := int(up.get("fit_" + slot, 0))
-		var row := UI.panel(list, UI.CARD, 12)
-		var v := VBoxContainer.new()
-		v.add_theme_constant_override("separation", 6)
-		row.add_child(v)
-		var head := HBoxContainer.new()
-		v.add_child(head)
-		var t := UI.lbl(head, Catalog.txt(pd["n"]) + "  -  " + Catalog.txt(pd["d"]), 20, UI.TXT, false)
-		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		UI.lbl(head, UI.tx("Not fitted", "غير مركّب") if fitted == 0 else UI.tx("Fitted: ", "مركّب: ") + Catalog.txt(pd["tiers"][fitted - 1]), 16, UI.TXT2 if fitted == 0 else UI.OK, false)
-		var tr := HBoxContainer.new()
-		tr.add_theme_constant_override("separation", 8)
-		v.add_child(tr)
-		for ti in 3:
-			var tier := ti + 1
-			var cell := UI.panel(tr, UI.CARD2, 10)
-			cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			var cv := VBoxContainer.new()
-			cv.add_theme_constant_override("separation", 3)
-			cell.add_child(cv)
-			UI.lbl(cv, Catalog.txt(pd["tiers"][ti]), 15, UI.TXT, false)
-			var pct := int(round(float(pd["v"][ti]) * 100.0))
-			UI.lbl(cv, ("-%d%% " + UI.tx("damage", "ضرر")) % pct if pd["stat"] == "armor" else "+%d%%" % pct, 17, UI.ACCENT, false)
-			if fitted == tier:
-				var b := UI.btn(cv, UI.tx("Remove", "إزالة"), UI.BLUE, func():
-					Profile.install_part(Profile.car, slot, 0)
-					Sfx.play("click")
-					select("workshop"), 17, Vector2(0, 40))
-			elif Profile.part_owned(slot, tier):
-				UI.btn(cv, UI.tx("Install", "تركيب"), UI.GREEN, func():
-					Profile.install_part(Profile.car, slot, tier)
-					Sfx.play("success", -4.0)
-					say(UI.tx("Installed!", "تم التركيب!"))
-					select("workshop"), 17, Vector2(0, 40))
-			else:
-				var price := int(pd["price"][ti])
-				var b := UI.btn(cv, "", UI.GOLD.darkened(0.35), func():
-					if Profile.buy_part(slot, tier):
-						Sfx.play("success", -2.0)
-						say(UI.tx("Bought and installed!", "تم الشراء والتركيب!"))
-						select("workshop")
-					else:
-						say(UI.tx("Not enough coins", "العملات لا تكفي")), 17, Vector2(0, 40))
-				b.disabled = Profile.coins < price
-				var ph := UI.price_row(null, price, false, 17)
-				ph.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-				b.add_child(ph)
-
-
-func _workshop_levels(host: Control) -> void:
-	var sc := _scroll(host)
-	var list := VBoxContainer.new()
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list.add_theme_constant_override("separation", 8)
-	sc.add_child(list)
-	for key in Catalog.UPGRADE_ORDER:
-		var u: Dictionary = Catalog.UPGRADES[key]
-		var lv := Profile.up_level(Profile.car, key)
-		var row := UI.panel(list, UI.CARD, 16)
-		var rh := HBoxContainer.new()
-		rh.add_theme_constant_override("separation", 12)
-		row.add_child(rh)
-		var tv := VBoxContainer.new()
-		tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		rh.add_child(tv)
-		UI.lbl(tv, Catalog.txt(u["n"]), 22, Color.WHITE, false)
-		UI.lbl(tv, Catalog.txt(u["d"]), 15, UI.TXT2)
-		var pips := HBoxContainer.new()
-		pips.add_theme_constant_override("separation", 4)
-		tv.add_child(pips)
-		for i in Catalog.MAX_UP:
-			var r := ColorRect.new()
-			r.custom_minimum_size = Vector2(34, 10)
-			r.color = Color(0.3, 0.85, 0.45) if i < lv else Color(1, 1, 1, 0.14)
-			pips.add_child(r)
-		if lv >= Catalog.MAX_UP:
-			var m := UI.lbl(rh, UI.tx("MAX", "الحد الأقصى"), 22, UI.GOLD, false)
-			m.custom_minimum_size = Vector2(190, 0)
-			m.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		else:
-			var cost := Catalog.upgrade_cost(key, lv)
-			var b := UI.btn(rh, "", UI.GREEN, func():
-				if Profile.upgrade(Profile.car, key):
-					Sfx.play("success", -2.0)
-					say(UI.tx("Upgraded!", "تمت الترقية!"))
-					select("workshop")
-				else:
-					say(UI.tx("Not enough coins", "العملات لا تكفي")), 22, Vector2(190, 56))
-			b.disabled = Profile.coins < cost
-			var ph := UI.price_row(null, cost, false, 22)
-			ph.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-			b.add_child(ph)
 
 
 # ====================================================================== CHARACTER
@@ -1154,6 +1281,8 @@ func _open_chest(kind: String, art: Control) -> void:
 			sw.col = col
 			sw.metal = float(e.get("m", 0.0))
 			sw.rough = float(e.get("ro", 0.5))
+			sw.txt = str(e.get("t", ""))
+			sw.bg = e.get("bg", Color.BLACK)
 			sw.base = Catalog.PAINTS[Profile.car_set()["paint"]]["c"]
 			sw.custom_minimum_size = Vector2(0, 80)
 			cv.add_child(sw)

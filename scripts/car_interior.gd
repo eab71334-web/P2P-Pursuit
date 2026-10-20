@@ -44,10 +44,7 @@ static func build(car: Node3D, model: String, sd: float, drop: float) -> void:
 	_bx(car, Vector3(1.86, 0.06, 0.88), Vector3(0, 1.17, -1.2), soft)
 	_bx(car, Vector3(1.84, 0.02, 0.02), Vector3(0, 1.205, -0.78), stitch)
 	var cy := 1.2 - sd * 0.5
-	_bx(car, Vector3(0.7, 0.03, 0.2), Vector3(-0.45, cy + 0.2, -0.82), trim, Vector3(-10, 0, 0))   # visor over the gauges
-	_bx(car, Vector3(0.78, 0.2, 0.03), Vector3(-0.45, cy - 0.02, -0.765), trim)                 # pod face behind the gauges over the gauges
-	for sx in [-0.84, -0.06]:
-		_bx(car, Vector3(0.03, 0.2, 0.2), Vector3(sx, cy + 0.08, -0.82), trim)               # binnacle cheeks
+	# (no hood / cheeks around the gauges: the cluster sits clean behind the wheel, like a real car)
 	for sx in [0.5, 0.82]:
 		_bx(car, Vector3(0.18, 0.06, 0.02), Vector3(sx, 1.1, -0.755), dark)
 		for k in 3:

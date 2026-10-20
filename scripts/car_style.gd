@@ -209,6 +209,14 @@ static func decorate(car: Node3D, model: String, lo: Dictionary, body_mat: Stand
 		ol.light_color = gc
 		car.add_child(ol)
 
+	# --- stickers: round badge with text on both doors
+	var dk: String = str(lo.get("decal", "none"))
+	if dk != "none" and Catalog.DECALS.has(dk):
+		var de: Dictionary = Catalog.DECALS[dk]
+		for sx in [-1.0, 1.0]:
+			cyl(car, 0.17, 0.012, Vector3(sx * 0.965, 0.86, 0.45), mat(de["bg"], 0.0, 0.5), Vector3(0, 0, 90))
+			_number(car, str(de["t"]), Vector3(sx * 0.975, 0.86, 0.45), de["c"], 90.0 * sx, 0.2)
+
 	# --- model specific parts
 	match model:
 		"hatch":

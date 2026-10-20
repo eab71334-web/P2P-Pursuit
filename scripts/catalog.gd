@@ -81,8 +81,19 @@ const GLOWS := {
 const GLOW_ORDER := ["none", "blue", "pink", "green", "white"]
 
 # car part kinds shown in the garage
-const CAR_SLOTS := {"paint": PAINTS, "stripe": STRIPES, "rim": RIMS, "glow": GLOWS}
-const CAR_SLOT_ORDER := {"paint": PAINT_ORDER, "stripe": STRIPE_ORDER, "rim": RIM_ORDER, "glow": GLOW_ORDER}
+const DECALS := {
+	"none": {"n": ["No sticker", "بدون ملصق"], "r": 0, "price": 0, "t": "", "c": Color.WHITE, "bg": Color.BLACK},
+	"n07": {"n": ["Number 07", "رقم 07"], "r": 0, "price": 250, "t": "07", "c": Color(0.05, 0.05, 0.06), "bg": Color(0.95, 0.95, 0.95)},
+	"n44": {"n": ["Number 44", "رقم 44"], "r": 0, "price": 250, "t": "44", "c": Color(1, 1, 1), "bg": Color(0.08, 0.08, 0.1)},
+	"rs": {"n": ["RS badge", "شارة RS"], "r": 1, "price": 700, "t": "RS", "c": Color(1, 1, 1), "bg": Color(0.75, 0.08, 0.08)},
+	"gt": {"n": ["GT badge", "شارة GT"], "r": 1, "price": 900, "t": "GT", "c": Color(0.05, 0.05, 0.06), "bg": Color(0.95, 0.75, 0.1)},
+	"v8": {"n": ["V8 badge", "شارة V8"], "r": 2, "price": 1500, "t": "V8", "c": Color(1, 1, 1), "bg": Color(0.1, 0.3, 0.8)},
+	"x": {"n": ["Team X", "فريق X"], "r": 3, "price": 0, "gem": 70, "t": "X", "c": Color(0.05, 0.05, 0.06), "bg": Color(0.2, 1.0, 0.5)},
+}
+const DECAL_ORDER := ["none", "n07", "n44", "rs", "gt", "v8", "x"]
+
+const CAR_SLOTS := {"paint": PAINTS, "stripe": STRIPES, "rim": RIMS, "glow": GLOWS, "decal": DECALS}
+const CAR_SLOT_ORDER := {"paint": PAINT_ORDER, "stripe": STRIPE_ORDER, "rim": RIM_ORDER, "glow": GLOW_ORDER, "decal": DECAL_ORDER}
 
 # ---------------------------------------------------------------- character
 const SKINS := {
@@ -141,7 +152,7 @@ const GLASSES := {
 const OUTFIT_SLOTS := {"skin": SKINS, "shirt": SHIRTS, "pants": PANTS, "shoes": SHOES, "hat": HATS, "glasses": GLASSES}
 const OUTFIT_ORDER := ["skin", "hat", "glasses", "shirt", "pants", "shoes"]
 const SLOT_NAME := {
-	"paint": ["Paint", "الطلاء"], "stripe": ["Stripes", "الخطوط"], "rim": ["Rims", "الجنوط"], "glow": ["Underglow", "إضاءة سفلية"],
+	"paint": ["Paint", "الطلاء"], "stripe": ["Stripes", "الخطوط"], "rim": ["Rims", "الجنوط"], "glow": ["Underglow", "إضاءة سفلية"], "decal": ["Stickers", "ملصقات"],
 	"skin": ["Skin", "البشرة"], "hat": ["Hat", "القبعة"], "glasses": ["Glasses", "النظارة"], "shirt": ["T-shirt", "التيشيرت"],
 	"pants": ["Pants", "السروال"], "shoes": ["Shoes", "الحذاء"], "emote": ["Emote", "الحركة"],
 }

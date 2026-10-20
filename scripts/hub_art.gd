@@ -100,6 +100,8 @@ class SwatchArt extends Control:
 	var rough := 0.5
 	var none := false
 	var selected := false
+	var txt := ""
+	var bg := Color.BLACK
 
 	func _draw() -> void:
 		var r := Rect2(Vector2.ZERO, size)
@@ -133,6 +135,17 @@ class SwatchArt extends Control:
 					var a := TAU * k / 5.0 - PI / 2.0
 					draw_line(Vector2(cx, cy), Vector2(cx, cy) + Vector2(cos(a), sin(a)) * rad * 0.72, col, 3.5)
 				draw_circle(Vector2(cx, cy), rad * 0.16, col.lightened(0.3))
+			"decal":
+				draw_style_box(UI.sb(Color(0.07, 0.075, 0.09), 10), r)
+				if none:
+					draw_arc(Vector2(cx, cy), minf(size.x, size.y) * 0.25, 0, TAU, 28, Color(1, 1, 1, 0.35), 2.0)
+					draw_line(Vector2(cx - 14, cy + 14), Vector2(cx + 14, cy - 14), Color(1, 1, 1, 0.35), 2.0)
+				else:
+					draw_circle(Vector2(cx, cy), minf(size.x, size.y) * 0.36, bg)
+					var f := ThemeDB.fallback_font
+					var fs := int(minf(size.x, size.y) * 0.34)
+					var tw := f.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
+					draw_string(f, Vector2(cx - tw.x * 0.5, cy + fs * 0.35), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 			"glow":
 				draw_style_box(UI.sb(Color(0.07, 0.075, 0.09), 10), r)
 				if none:

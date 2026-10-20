@@ -142,7 +142,7 @@ func car_set(id := "") -> Dictionary:
 		id = car
 	var d: Dictionary = carset.get(id, {})
 	var cd: Dictionary = Catalog.CARS.get(id, {})
-	return {"paint": d.get("paint", cd.get("paint", "red")), "stripe": d.get("stripe", cd.get("stripe", "none")), "rim": d.get("rim", cd.get("rim", "steel")), "glow": d.get("glow", "none")}
+	return {"paint": d.get("paint", cd.get("paint", "red")), "stripe": d.get("stripe", cd.get("stripe", "none")), "rim": d.get("rim", cd.get("rim", "steel")), "glow": d.get("glow", "none"), "decal": d.get("decal", "none")}
 
 
 func equip_car_part(slot: String, id: String) -> void:
@@ -216,7 +216,7 @@ func upgrade(car_id: String, key: String) -> bool:
 ## what is sent to the other players / used by the server physics
 func loadout() -> Dictionary:
 	var cs := car_set()
-	return {"car": car, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"],
+	return {"car": car, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"],
 		"up": (up.get(car, {}) as Dictionary).duplicate(), "outfit": outfit.duplicate()}
 
 
