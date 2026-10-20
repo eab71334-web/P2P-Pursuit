@@ -49,6 +49,57 @@ func _process(d: float) -> void:
 				step = 4; shot("garage1")
 			elif step == 4 and t > 7.5:
 				get_tree().quit()
+		"steer":
+			# FORCE_TOUCH=1 : picker -> pick wheel360 -> drive view with the wheel turned
+			if step == 0 and t > 2.0:
+				step = 1; Profile.steer_mode = ""; sc._on_solo()
+			elif step == 1 and t > 6.0:
+				step = 2; shot("steer_picker")
+			elif step == 2 and t > 6.5:
+				step = 3
+				var w := get_tree().current_scene
+				(w._picker as SteerUI.Picker).picked.emit(OS.get_environment("MODE") if OS.get_environment("MODE") != "" else "wheel360")
+			elif step == 3 and t > 9.0:
+				step = 4
+				Input.action_press("accel")
+			elif step == 4 and t > 14.0:
+				step = 5
+				get_tree().current_scene.wheel_touch = 99; get_tree().current_scene.wheel_angle = 3.6
+			elif step == 5 and t > 24.0:
+				step = 6; shot("steer_a")
+			elif step == 6 and t > 24.3:
+				step = 7
+				get_tree().current_scene.wheel_angle = -1.4
+			elif step == 7 and t > 26.0:
+				step = 8; shot("steer_b")
+			elif step == 8 and t > 26.5:
+				get_tree().quit()
+		"body":
+			# BODY="gt3" CAR kit shots: stock + each body option on the 3D car, plus the Modify body section
+			if step == 0 and t > 2.5:
+				step = 1; Profile.level = 20; Profile.coins = 99999
+				var cid: String = OS.get_environment("CAR") if OS.get_environment("CAR") != "" else "coupe"
+				Profile.car = cid; Profile.cars[cid] = true
+				for sl in Catalog.BODY_SLOTS:
+					for bid in Catalog.body_opts(cid, sl):
+						Profile.owned[sl + ":" + bid] = true
+				sc.hub.select("modify"); sc.hub.mod_section = "body"; sc.hub._mod_fill()
+			elif step == 1 and t > 4.5:
+				step = 2; shot("body_ui")
+			elif step == 2 and t > 5.0:
+				step = 3
+				var cid2: String = Profile.car
+				var set := {"spoiler": "gt", "front": "canards", "hood": "vents", "skirts": "wide"}
+				for k2 in set:
+					if Catalog.body_opts(cid2, k2).has(set[k2]):
+						Profile.equip_car_part(k2, set[k2])
+					else:
+						Profile.equip_car_part(k2, Catalog.body_opts(cid2, k2)[-1])
+				sc.hub._rerender()
+			elif step == 3 and t > 7.5:
+				step = 4; shot("body_full")
+			elif step == 4 and t > 8.0:
+				get_tree().quit()
 		"modify":
 			# SECS="paint,mods,wheels,engine" shots of each section of the modify page
 			if step == 0 and t > 2.5:
