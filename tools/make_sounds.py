@@ -121,3 +121,21 @@ save("success", chime)
 warn = np.concatenate([tone(740, 0.12), np.zeros(int(SR * 0.05)), tone(740, 0.12)])
 save("warn", warn)
 print("done", sorted(os.listdir(OUT)))
+
+# ---------------------------------------------------------------- gearbox: lever slide + gate "clunk" (manual / auto) and a soft detent (buttons)
+def gear_sound(heavy):
+    n = int(SR * 0.32)
+    tt = np.arange(n) / SR
+    out = np.zeros(n)
+    L = int(SR * 0.09)                                   # lever scraping through the gate
+    out[:L] += rng.normal(0, 1, L) * np.hanning(L) * 0.18
+    p = int(SR * 0.09)                                   # the clunk when it lands in the gate
+    m = n - p
+    t2 = np.arange(m) / SR
+    body = np.sin(2 * np.pi * (150 if heavy else 210) * t2) * env_decay(m, 0.045)
+    knock = rng.normal(0, 1, m) * env_decay(m, 0.006) * 0.7
+    ring = np.sin(2 * np.pi * 1850 * t2) * env_decay(m, 0.012) * 0.25
+    out[p:] += body + knock + ring
+    return out
+save("gear_clunk", gear_sound(True), 0.8)
+save("gear_tick", gear_sound(False), 0.6)

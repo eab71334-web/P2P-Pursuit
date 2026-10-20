@@ -35,27 +35,44 @@ func _process(d: float) -> void:
 				step = 3; shot("menu1")
 			elif step == 3 and t > 4.3:
 				get_tree().quit()
-		"workshop":
-			if step == 0 and t > 2.5:
-				step = 1; Profile.coins = 99999; Profile.car = "coupe"; Profile.cars["coupe"] = true
-				Profile.buy_part("turbo", 2); Profile.buy_part("aero", 3); Profile.buy_part("exhaust", 3); Profile.buy_part("susp", 3); Profile.buy_part("kit", 3)
-				sc.hub.select("workshop")
-			elif step == 1 and t > 5.0:
-				step = 2; shot("ws0")
-			elif step == 2 and t > 5.1:
-				get_tree().quit()
 		"garage":
 			if step == 0 and t > 2.5:
-				step = 1; Profile.level = 20; Profile.coins = 99999; Profile.cars["muscle"] = true; Profile.cars["gt3"] = true; Profile.owned["paint:papaya"] = true; sc.hub.select("garage")
+				step = 1; Profile.level = 20; Profile.coins = 99999; Profile.cars["muscle"] = true; Profile.cars["gt3"] = true; Profile.car = "coupe"; Profile.cars["coupe"] = true
+				sc.hub.select("garage")
 			elif step == 1 and t > 4.5:
 				step = 2; shot("garage0")
-			elif step == 2 and t > 4.6:
-				step = 3; sc.hub._browser_fill("stripe") if sc.hub.has_method("_browser_fill") else null
-				(sc.hub.browser_box.get_meta("fill") as Callable).call("rim")
-			elif step == 3 and t > 5.5:
+			elif step == 2 and t > 5.0:
+				step = 3
+				sc.hub.g_car = "hyper"
+				sc.hub.select("garage")
+			elif step == 3 and t > 7.0:
 				step = 4; shot("garage1")
-			elif step == 4 and t > 5.6:
+			elif step == 4 and t > 7.5:
 				get_tree().quit()
+		"modify":
+			# SECS="paint,mods,wheels,engine" shots of each section of the modify page
+			if step == 0 and t > 2.5:
+				step = 1; Profile.level = 20; Profile.coins = 99999; Profile.car = "coupe"; Profile.cars["coupe"] = true
+				Profile.buy_part("turbo", 2); Profile.buy_part("aero", 3)
+				sc.hub.select("modify")
+			elif step >= 1 and step <= 8 and t > 3.5 + step * 1.0:
+				var secs: Array = ["paint", "mods", "wheels", "engine"]
+				var sec: String = secs[(step - 1) % 4]
+				if step <= 4:
+					sc.hub.mod_section = sec
+					sc.hub._mod_fill()
+				else:
+					sc.hub.mod_section = "paint"
+					sc.hub.mod_sub["paint"] = "decal"
+					Profile.owned["decal:rs"] = true
+					Profile.equip_car_part("decal", "rs")
+					sc.hub._mod_fill()
+					sc.hub._rerender()
+					if step > 5:
+						get_tree().quit()
+				step += 1
+				await get_tree().create_timer(0.6).timeout
+				shot("mod_%s" % (sec if step <= 5 else "decal"))
 		"chests":
 			if step == 0 and t > 2.5:
 				step = 1; Profile.chests = {"bronze": 2, "silver": 2, "gold": 2}; sc.hub.select("chests")
