@@ -95,6 +95,9 @@ func _process(d: float) -> void:
 						Profile.equip_car_part(k2, set[k2])
 					else:
 						Profile.equip_car_part(k2, Catalog.body_opts(cid2, k2)[-1])
+				Profile.owned["stripe:white"] = true; Profile.equip_car_part("stripe", "white")
+				var wo: Array = Catalog.wheel_opts(cid2)
+				Profile.owned["wheel:" + str(wo[-1])] = true; Profile.equip_car_part("wheel", str(wo[-1]))
 				sc.hub._rerender()
 			elif step == 3 and t > 7.5:
 				step = 4; shot("body_full")
@@ -103,7 +106,7 @@ func _process(d: float) -> void:
 		"modify":
 			# SECS="paint,mods,wheels,engine" shots of each section of the modify page
 			if step == 0 and t > 2.5:
-				step = 1; Profile.level = 20; Profile.coins = 99999; Profile.car = "coupe"; Profile.cars["coupe"] = true
+				step = 1; Profile.level = 20; Profile.coins = 99999; Profile.car = (OS.get_environment("CAR") if OS.get_environment("CAR") != "" else "coupe"); Profile.cars[Profile.car] = true
 				Profile.buy_part("turbo", 2); Profile.buy_part("aero", 3)
 				sc.hub.select("modify")
 			elif step >= 1 and step <= 8 and t > 3.5 + step * 1.0:
@@ -309,7 +312,7 @@ func _cars_step() -> void:
 		if _cs_car:
 			_cs_car.queue_free()
 		var lo := {"car": id, "paint": OS.get_environment("PAINT") if OS.get_environment("PAINT") != "" else Catalog.CARS[id].get("paint", "red"),
-			"stripe": OS.get_environment("STRIPE") if OS.get_environment("STRIPE") != "" else "none", "rim": "steel", "glow": "none"}
+			"stripe": OS.get_environment("STRIPE") if OS.get_environment("STRIPE") != "" else "none", "rim": "steel", "glow": "none", "wheel": OS.get_environment("WHEEL") if OS.get_environment("WHEEL") != "" else "stock"}
 		var car := Car.new()
 		car.setup(0, Color(0.2, 0.8, 0.3), false, lo, true)
 		get_tree().root.add_child(car)
@@ -343,7 +346,7 @@ func _gear_step() -> void:
 	if k == 0:
 		if _cs_car:
 			_cs_car.queue_free()
-		var lo := {"car": id, "paint": Catalog.CARS[id].get("paint", "red"), "stripe": "none", "rim": "steel", "glow": "none"}
+		var lo := {"car": id, "paint": Catalog.CARS[id].get("paint", "red"), "stripe": "none", "rim": "steel", "glow": "none", "wheel": OS.get_environment("WHEEL") if OS.get_environment("WHEEL") != "" else "stock"}
 		var car := Car.new()
 		car.setup(0, Color(0.2, 0.8, 0.3), false, lo, true)
 		get_tree().root.add_child(car)
