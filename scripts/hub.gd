@@ -388,7 +388,7 @@ func _stats(parent: Node, car_id: String) -> void:
 
 func _lo_for(car_id: String, over := {}) -> Dictionary:
 	var cs: Dictionary = Profile.car_set(car_id)
-	var lo := {"car": car_id, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"], "spoiler": cs["spoiler"], "front": cs["front"], "hood": cs["hood"], "skirts": cs["skirts"], "up": Profile.up.get(car_id, {}), "outfit": Profile.outfit}
+	var lo := {"car": car_id, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"], "spoiler": cs["spoiler"], "front": cs["front"], "hood": cs["hood"], "skirts": cs["skirts"], "wheel": cs["wheel"], "up": Profile.up.get(car_id, {}), "outfit": Profile.outfit}
 	for k in over:
 		lo[k] = over[k]
 	return lo
@@ -491,6 +491,8 @@ func _item_cell(slot: String, id: String, equipped: String, on_pick: Callable, g
 		sw.slot = slot
 		sw.model = g_car
 		sw.kit_id = id
+		sw.wheel_cur = str(Profile.car_set(g_car)["wheel"])
+		sw.rim_cur = Catalog.RIMS[Profile.car_set(g_car)["rim"]]["c"]
 		sw.col = col
 		sw.none = id == "none"
 		sw.metal = float(e.get("m", 0.0))
@@ -602,8 +604,8 @@ func _rerender() -> void:
 # ====================================================================== GARAGE
 const DOCK_H := 188
 const MOD_SECTIONS := ["paint", "body", "mods", "wheels", "engine"]
-const MOD_SUBS := {"paint": ["paint", "stripe", "decal", "glow"], "body": ["spoiler", "front", "hood", "skirts"], "mods": ["aero", "susp", "kit", "armor"], "wheels": ["rim", "tires"], "engine": ["engine", "turbo", "exhaust", "cooling"]}
-const MOD_NAMES := {"paint": ["Colour", "اللون"], "stripe": ["Stripes", "الخطوط"], "decal": ["Stickers", "الملصقات"], "glow": ["Underglow", "الإضاءة السفلية"], "rim": ["Rims", "الجنوط"],
+const MOD_SUBS := {"paint": ["paint", "stripe", "decal", "glow"], "body": ["spoiler", "front", "hood", "skirts"], "mods": ["aero", "susp", "kit", "armor"], "wheels": ["wheel", "rim", "tires"], "engine": ["engine", "turbo", "exhaust", "cooling"]}
+const MOD_NAMES := {"paint": ["Colour", "اللون"], "stripe": ["Stripes", "الخطوط"], "decal": ["Stickers", "الملصقات"], "glow": ["Underglow", "الإضاءة السفلية"], "rim": ["Rim colour", "لون الجنوط"], "wheel": ["Wheel design", "تصميم الجنط"],
 	"spoiler": ["Rear wing", "المؤخرة"], "front": ["Front", "المقدمة"], "hood": ["Hood", "الغطاء"], "skirts": ["Sides", "الجوانب"]}
 const SEC_NAMES := {"paint": ["PAINT", "الطلاء"], "body": ["BODY", "الشكل"], "mods": ["MODS", "التعديلات"], "wheels": ["WHEELS", "العجلات"], "engine": ["ENGINE", "المحرك"]}
 var mod_section := "paint"
@@ -828,6 +830,8 @@ func _mod_fill() -> void:
 	var subs: Array = MOD_SUBS[mod_section]
 	if mod_section == "body":
 		subs = subs.filter(func(x): return Catalog.body_opts(g_car, x).size() > 1)
+	elif mod_section == "mods" or mod_section == "engine":
+		subs = subs.filter(func(x): return not Catalog.PARTS.has(x) or Catalog.has_part(g_car, x))
 	var cs: String = mod_sub.get(mod_section, subs[0])
 	if not subs.has(cs):
 		cs = subs[0]
@@ -853,11 +857,13 @@ func _mod_cosmetics(slot: String) -> void:
 	var ids: Array = Catalog.CAR_SLOT_ORDER[slot]
 	if Catalog.BODY_SLOTS.has(slot):
 		ids = Catalog.body_opts(g_car, slot)
+	elif slot == "wheel":
+		ids = Catalog.wheel_opts(g_car)
 	for id in ids:
 		var cell := _item_cell(slot, id, eq, func(sl: String, i: String):
 			preview.show_car(_lo_for(g_car, {sl: i})), _mod_strip)
 		cell.size_flags_horizontal = Control.SIZE_FILL
-		cell.custom_minimum_size = Vector2(196 if slot != "rim" else 136, 136)
+		cell.custom_minimum_size = Vector2(196 if slot != "rim" else 150, 136)
 		_mod_strip.add_child(cell)
 	_action_bar(slot, eq)
 
@@ -865,13 +871,14 @@ func _mod_cosmetics(slot: String) -> void:
 ## a card with title / effect / button used for parts and levels. kind: install | remove | buy | max
 func _mod_cell(title: String, effect: String, kind: String, price: int, cb: Callable, fitted := false, wide := false, pips := -1) -> void:
 	var cell := UI.panel(_mod_strip, UI.CARD2 if not fitted else Color(0.1, 0.2, 0.15), 12)
-	cell.custom_minimum_size = Vector2(280 if wide else 210, 118)
+	cell.custom_minimum_size = Vector2(280 if wide else 236, 126)
 	if fitted:
 		cell.add_theme_stylebox_override("panel", UI.sb(Color(0.1, 0.2, 0.15), 12, UI.OK, 2))
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 3)
 	cell.add_child(v)
-	UI.lbl(v, title, 16, UI.TXT, false)
+	var tl := UI.lbl(v, title, 16, UI.TXT, false)
+	tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	UI.lbl(v, effect, 18, UI.ACCENT, false)
 	if pips >= 0:
 		var ph := HBoxContainer.new()
@@ -903,9 +910,10 @@ func _mod_cell(title: String, effect: String, kind: String, price: int, cb: Call
 
 func _mod_tiers(slot: String) -> void:
 	var pd: Dictionary = Catalog.PARTS[slot]
+	var names: Array = Catalog.part_tier_names(g_car, slot)
 	var up: Dictionary = Profile.up.get(g_car, {})
 	var fitted := int(up.get("fit_" + slot, 0))
-	UI.lbl(action_box, Catalog.txt(pd["d"]) + ("" if fitted == 0 else "  -  " + UI.tx("Fitted: ", "مركّب: ") + Catalog.txt(pd["tiers"][fitted - 1])), 18, UI.TXT2 if fitted == 0 else UI.OK, false)
+	UI.lbl(action_box, Catalog.txt(pd["d"]) + ("" if fitted == 0 else "  -  " + UI.tx("Fitted: ", "مركّب: ") + (str(names[fitted - 1]) if names.size() >= fitted else Catalog.txt(pd["tiers"][fitted - 1]))), 18, UI.TXT2 if fitted == 0 else UI.OK, false)
 	for ti in 3:
 		var tier := ti + 1
 		var pct := int(round(float(pd["v"][ti]) * 100.0))
@@ -934,18 +942,23 @@ func _mod_tiers(slot: String) -> void:
 					_rerender()
 				else:
 					say(UI.tx("Not enough coins", "العملات لا تكفي"))
-		_mod_cell(Catalog.txt(pd["tiers"][ti]), eff, kind, price, cb, fitted == tier)
+		_mod_cell(str(names[ti]) if names.size() > ti else Catalog.txt(pd["tiers"][ti]), eff, kind, price, cb, fitted == tier)
 
 
 func _mod_level(key: String) -> void:
 	var u: Dictionary = Catalog.UPGRADES[key]
 	var lv := Profile.up_level(g_car, key)
-	UI.lbl(action_box, Catalog.txt(u["d"]), 18, UI.TXT2, false)
+	var tk: Dictionary = Catalog.tech(g_car)
+	var stages: Array = tk["stages"] if key == "engine" else []
+	var head := Catalog.txt(u["d"])
+	if key == "engine":
+		head = str(tk["engine"]) + (("  -  " + UI.tx("Stage ", "المرحلة ") + str(lv) + ": " + str(stages[lv - 1])) if lv > 0 else "")
+	UI.lbl(action_box, head, 18, UI.TXT2, false)
 	if lv >= Catalog.MAX_UP:
-		_mod_cell(Catalog.txt(u["n"]) + "  " + str(lv) + "/" + str(Catalog.MAX_UP), UI.tx("Fully upgraded", "مطوّر بالكامل"), "max", 0, func(): pass, false, true, lv)
+		_mod_cell((str(stages[lv - 1]) if key == "engine" else Catalog.txt(u["n"])) + "  " + str(lv) + "/" + str(Catalog.MAX_UP), UI.tx("Fully upgraded", "مطوّر بالكامل"), "max", 0, func(): pass, false, true, lv)
 		return
 	var cost := Catalog.upgrade_cost(key, lv)
-	_mod_cell(Catalog.txt(u["n"]) + "  " + str(lv) + "/" + str(Catalog.MAX_UP), UI.tx("Next level", "المستوى التالي") + "  " + str(lv + 1), "buy", cost, func():
+	_mod_cell((str(stages[lv]) if key == "engine" else Catalog.txt(u["n"])) + "  " + str(lv) + "/" + str(Catalog.MAX_UP), UI.tx("Next level", "المستوى التالي") + "  " + str(lv + 1), "buy", cost, func():
 		if Profile.upgrade(g_car, key):
 			Sfx.play("success", -2.0)
 			say(UI.tx("Upgraded!", "تمت الترقية!"))
@@ -982,6 +995,7 @@ func _car_card(id: String, cb: Callable) -> Control:
 	art.model = id
 	art.paint = Catalog.PAINTS[cs["paint"]]["c"]
 	art.rim = Catalog.RIMS[cs["rim"]]["c"]
+	art.wheel_style = Catalog.wheel_style(id, str(cs["wheel"]))
 	art.locked = not owned
 	art.custom_minimum_size = Vector2(0, 84)
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE

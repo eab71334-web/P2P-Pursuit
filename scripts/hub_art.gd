@@ -3,6 +3,59 @@ extends RefCounted
 ## Small vector illustrations for the garage and chest screens (drawn with _draw, no textures).
 
 
+## One wheel face drawn on any CanvasItem: the same real-world designs the 3D cars wear.
+static func wheel_face(ci: CanvasItem, c: Vector2, rad: float, style: String, col: Color) -> void:
+	var dk := Color(0.07, 0.08, 0.1)
+	ci.draw_circle(c, rad, col)
+	ci.draw_circle(c, rad * 0.82, dk)
+	var n := 5
+	var w := 0.16
+	var twin := false
+	match style:
+		"steel":
+			ci.draw_circle(c, rad * 0.8, col.darkened(0.15))
+			for k in 5:
+				var a := TAU * k / 5.0
+				ci.draw_circle(c + Vector2(cos(a), sin(a)) * rad * 0.5, rad * 0.07, Color(0.85, 0.86, 0.9))
+			ci.draw_circle(c, rad * 0.2, Color(0.25, 0.25, 0.28))
+			return
+		"mesh":
+			n = 18
+			w = 0.07
+		"multi":
+			n = 10
+			w = 0.1
+		"turbine":
+			n = 14
+			w = 0.1
+		"beadlock":
+			n = 6
+			w = 0.26
+			for k in 14:
+				var a := TAU * k / 14.0
+				ci.draw_circle(c + Vector2(cos(a), sin(a)) * rad * 0.93, rad * 0.05, Color(0.9, 0.9, 0.95))
+		"classic":
+			n = 8
+			w = 0.2
+		"centre":
+			n = 5
+			w = 0.1
+			twin = true
+	for k in n:
+		var a := TAU * k / float(n) - PI / 2.0
+		if style == "turbine":
+			a += 0.5
+		var d := Vector2(cos(a), sin(a))
+		if twin:
+			for off in [-0.12, 0.12]:
+				var d2 := Vector2(cos(a + off), sin(a + off))
+				ci.draw_line(c + d2 * rad * 0.15, c + d2 * rad * 0.8, col, maxf(1.2, rad * w))
+		else:
+			ci.draw_line(c, c + d * rad * 0.8, col, maxf(1.0, rad * w))
+	var cap := Color(1.0, 0.75, 0.2) if style == "centre" else (Color(0.85, 0.12, 0.12) if style == "classic" else col.lightened(0.3))
+	ci.draw_circle(c, rad * (0.2 if style == "centre" else 0.16), cap)
+
+
 ## Side silhouette of a car. Front points to the right.
 class CarArt extends Control:
 	var model := "hatch"
@@ -18,6 +71,7 @@ class CarArt extends Control:
 	var metal := 0.0
 	var kit_slot := ""                       # body kit preview: spoiler | front | hood | skirts
 	var kit_id := "none"
+	var wheel_style := "spoke5"
 	# cab: [front base x, roof front x, roof back x, rear base x, cabin height, belt y]
 	const SHAPES := {
 		"hatch": {"cab": [134, 116, 64, 50, 30, 52], "wing": "small", "nose": 0.0},
@@ -81,8 +135,21 @@ class CarArt extends Control:
 			draw_line(Vector2(20, belt + 6), Vector2(176, belt + 7 + nose * 0.3), Color(1, 1, 1, 0.22), 2.0)
 		# racing stripe along the body side
 		if stripe_col.a > 0.0:
-			draw_rect(Rect2(16, belt + 9, 170, 5), stripe_col)
-			draw_rect(Rect2(16, belt + 16, 170, 2), stripe_col)
+			var sk: Dictionary = CarStyle.STRIPE_KIND.get(model, CarStyle.STRIPE_KIND["hatch"])
+			match int(sk["side"]):
+				1:
+					draw_rect(Rect2(16, belt + 9, 170, 3), stripe_col)
+				2:
+					draw_rect(Rect2(18, belt + 11, 166, 8), stripe_col)
+				3:
+					draw_rect(Rect2(16, belt + 8, 170, 2), stripe_col)
+					draw_rect(Rect2(16, belt + 13, 170, 2), stripe_col)
+			# centre stripe seen from the side: over the bonnet, roof and boot
+			var th := 2.0 + float(sk["w"]) * 10.0
+			if sk["hood"]:
+				draw_line(Vector2(cab[0] - 4, belt - 3.0), Vector2(188, belt + 1.0 + nose * 0.3), stripe_col, th)
+			if sk["roof"]:
+				draw_line(Vector2(cab[1] + 2, belt - ch - 1.0), Vector2(cab[2] - 2, belt - ch - 1.0), stripe_col, th)
 		# door badge
 		if decal_txt != "":
 			var dcx := (float(cab[1]) + float(cab[2])) * 0.5 + 4.0
@@ -155,9 +222,7 @@ class CarArt extends Control:
 		# wheels
 		for wx in [48.0, 154.0]:
 			draw_circle(Vector2(wx, 66), 14.0, Color(0.03, 0.03, 0.04))
-			draw_circle(Vector2(wx, 66), 9.0, rim)
-			draw_circle(Vector2(wx, 66), 5.0, Color(0.08, 0.09, 0.11))
-			draw_circle(Vector2(wx, 66), 1.8, rim)
+			HubArt.wheel_face(self, Vector2(wx, 66), 11.0, wheel_style, rim)
 		if locked:
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
@@ -175,6 +240,8 @@ class SwatchArt extends Control:
 	var bg := Color.BLACK
 	var model := "hatch"
 	var kit_id := "none"
+	var wheel_cur := "stock"
+	var rim_cur := Color(0.7, 0.72, 0.76)
 
 	func _ready() -> void:
 		if not slot in ["paint", "stripe", "decal", "glow", "spoiler", "front", "hood", "skirts"]:
@@ -184,6 +251,8 @@ class SwatchArt extends Control:
 			ca.kit_slot = slot
 			ca.kit_id = kit_id
 		ca.model = model
+		ca.wheel_style = Catalog.wheel_style(model, wheel_cur)
+		ca.rim = rim_cur
 		ca.paint = col if slot == "paint" else base
 		ca.metal = metal if slot == "paint" else 0.0
 		if slot == "stripe" and not none:
@@ -233,16 +302,19 @@ class SwatchArt extends Control:
 				else:
 					for k in [-1.0, 1.0]:
 						draw_rect(Rect2(cx + k * size.x * 0.1 - size.x * 0.055, 0, size.x * 0.11, size.y), col)
-			"rim":
+			"rim", "wheel":
 				draw_style_box(UI.sb(Color(0.07, 0.075, 0.09), 10), r)
 				var rad := minf(size.x, size.y) * 0.42
 				draw_circle(Vector2(cx, cy), rad, Color(0.03, 0.03, 0.04))
-				draw_circle(Vector2(cx, cy), rad * 0.74, col)
-				draw_circle(Vector2(cx, cy), rad * 0.6, Color(0.07, 0.08, 0.1))
-				for k in 5:
-					var a := TAU * k / 5.0 - PI / 2.0
-					draw_line(Vector2(cx, cy), Vector2(cx, cy) + Vector2(cos(a), sin(a)) * rad * 0.72, col, 3.5)
-				draw_circle(Vector2(cx, cy), rad * 0.16, col.lightened(0.3))
+				var wst := "spoke5"
+				if slot == "wheel":
+					wst = Catalog.wheel_style(model, kit_id)
+				else:
+					wst = Catalog.wheel_style(model, wheel_cur)
+				var wcol := col if slot == "rim" else rim_cur
+				if wcol.get_luminance() < 0.22:
+					wcol = wcol.lightened(0.55)
+				HubArt.wheel_face(self, Vector2(cx, cy), rad * 0.8, wst, wcol)
 			"decal":
 				draw_style_box(UI.sb(Color(0.07, 0.075, 0.09), 10), r)
 				if none:

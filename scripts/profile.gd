@@ -144,7 +144,7 @@ func car_set(id := "") -> Dictionary:
 		id = car
 	var d: Dictionary = carset.get(id, {})
 	var cd: Dictionary = Catalog.CARS.get(id, {})
-	return {"paint": d.get("paint", cd.get("paint", "red")), "stripe": d.get("stripe", cd.get("stripe", "none")), "rim": d.get("rim", cd.get("rim", "steel")), "glow": d.get("glow", "none"), "decal": d.get("decal", "none"), "spoiler": d.get("spoiler", "none"), "front": d.get("front", "none"), "hood": d.get("hood", "none"), "skirts": d.get("skirts", "none")}
+	return {"paint": d.get("paint", cd.get("paint", "red")), "stripe": d.get("stripe", cd.get("stripe", "none")), "rim": d.get("rim", cd.get("rim", "steel")), "glow": d.get("glow", "none"), "decal": d.get("decal", "none"), "spoiler": d.get("spoiler", "none"), "front": d.get("front", "none"), "hood": d.get("hood", "none"), "skirts": d.get("skirts", "none"), "wheel": d.get("wheel", "stock")}
 
 
 func equip_car_part(slot: String, id: String) -> void:
@@ -218,7 +218,7 @@ func upgrade(car_id: String, key: String) -> bool:
 ## what is sent to the other players / used by the server physics
 func loadout() -> Dictionary:
 	var cs := car_set()
-	return {"car": car, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"], "spoiler": cs["spoiler"], "front": cs["front"], "hood": cs["hood"], "skirts": cs["skirts"],
+	return {"car": car, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"], "spoiler": cs["spoiler"], "front": cs["front"], "hood": cs["hood"], "skirts": cs["skirts"], "wheel": cs["wheel"],
 		"up": (up.get(car, {}) as Dictionary).duplicate(), "outfit": outfit.duplicate()}
 
 

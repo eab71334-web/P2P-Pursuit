@@ -124,7 +124,7 @@ const BODY_OPTS := {
 	"muscle": {"spoiler": ["none", "lip", "duck"], "front": ["none", "splitter"], "hood": ["none", "scoop", "vents", "carbon"], "skirts": ["none", "skirts"]},
 	"sierra": {"spoiler": ["none", "lip", "duck", "twin"], "front": ["none", "splitter"], "hood": ["none", "vents"], "skirts": ["none", "skirts"]},
 	"pickup": {"spoiler": ["none", "lip"], "front": ["none", "bullbar", "splitter"], "hood": ["none", "scoop", "vents"], "skirts": ["none", "skirts"]},
-	"charger": {"spoiler": ["none", "lip", "duck"], "front": ["none", "splitter", "canards"], "hood": ["none", "scoop", "vents", "carbon"], "skirts": ["none", "skirts", "wide"]},
+	"charger": {"spoiler": ["none", "lip", "duck"], "front": ["none", "splitter", "canards"], "hood": ["none", "scoop", "vents", "carbon"], "skirts": ["none", "skirts", "wide"], "wheel": WHEEL_ORDER},
 	"coupe": {"spoiler": ["none", "lip", "gt"], "front": ["none", "splitter", "canards"], "hood": ["none", "vents", "carbon"], "skirts": ["none", "skirts", "wide"]},
 	"m4": {"spoiler": ["none", "lip", "gt"], "front": ["none", "splitter", "canards"], "hood": ["none", "vents", "carbon"], "skirts": ["none", "skirts", "wide"]},
 	"gt3": {"spoiler": ["none", "gt", "twin"], "front": ["none", "splitter", "canards"], "hood": ["none", "vents", "carbon"], "skirts": ["none", "skirts", "wide"]},
@@ -138,10 +138,92 @@ static func body_opts(car_id: String, slot: String) -> Array:
 	return d.get(slot, ["none"])
 
 
+# ---- real-world tech per car: engine, stage names, the parts each car can take, wheel designs it can wear
+const CAR_TECH := {
+	"hatch": {"engine": "1.6L Turbo I4  ·  220 hp", "stages": ["Sport air filter", "ECU remap", "Hybrid turbo", "Forged pistons", "Group-A race engine"],
+		"slots": ["turbo", "exhaust", "aero", "susp", "kit"], "stock_wheel": "spoke5", "wheels": ["stock", "steel", "mesh"],
+		"turbo": ["Garrett GT15", "Garrett GT25", "Garrett GT28 ball-bearing"], "exhaust": ["Cat-back sport", "Stainless 3\" race", "Titanium straight-pipe"],
+		"aero": ["Front lip", "Roof spoiler kit", "Rally wing kit"], "susp": ["Lowering springs", "Rally coilovers", "Long-travel Ohlins"], "kit": ["Skid plate", "Underbody guard", "Full rally armor"]},
+	"buggy": {"engine": "2.0L Turbo flat-4  ·  180 hp", "stages": ["Free-flow intake", "Dune remap", "Big turbo", "Forged flat-4", "Baja race engine"],
+		"slots": ["turbo", "exhaust", "susp", "kit"], "stock_wheel": "beadlock", "wheels": ["stock", "steel"],
+		"turbo": ["Mini turbo", "Hybrid turbo", "Race big turbo"], "exhaust": ["Side-exit pipe", "Race header", "Titanium stinger"],
+		"susp": ["Long-travel shocks", "Bypass dampers", "Baja race shocks"], "kit": ["Roll bar braces", "Tube bumper", "Full roll cage"]},
+	"muscle": {"engine": "5.7L V8  ·  360 hp", "stages": ["Cold-air intake", "Long-tube headers", "Cam + tune", "6.2L stroker kit", "Supercharged race V8"],
+		"slots": ["turbo", "exhaust", "aero", "susp"], "stock_wheel": "classic", "wheels": ["stock", "spoke5", "mesh"],
+		"turbo": ["Roots blower", "Twin-screw supercharger", "Centrifugal ProCharger"], "exhaust": ["Dual cat-back", "Long-tube headers", "Race X-pipe"],
+		"aero": ["Rear lip", "Ducktail spoiler", "Drag wing"], "susp": ["Sport springs", "Tubular arms", "Drag coilovers"]},
+	"sierra": {"engine": "2.0L Cosworth YB Turbo I4  ·  204 hp", "stages": ["Group-A airbox", "Chip tune", "Garrett T3/T4", "Forged YB internals", "Group-A race spec"],
+		"slots": ["turbo", "exhaust", "aero", "susp", "kit"], "stock_wheel": "mesh", "wheels": ["stock", "spoke5", "steel"],
+		"turbo": ["Garrett T3", "Garrett T3/T04E", "Garrett T04B race"], "exhaust": ["Stainless 3\"", "Group-A manifold", "Titanium race"],
+		"aero": ["Whale-tail trim", "Extended whale tail", "Group-A wing"], "susp": ["Bilstein springs", "Group-A struts", "Rally coilovers"], "kit": ["Sump guard", "Underbody plates", "Full rally armor"]},
+	"pickup": {"engine": "3.0L Turbo-diesel V6  ·  260 hp", "stages": ["Snorkel + filter", "Diesel remap", "Bigger turbo", "Reinforced block", "Baja race diesel"],
+		"slots": ["turbo", "exhaust", "susp", "kit"], "stock_wheel": "steel", "wheels": ["stock", "beadlock", "spoke5"],
+		"turbo": ["VNT turbo", "Twin turbo", "Compound turbo"], "exhaust": ["Diesel cat-back", "4\" turbo-back", "Race straight-pipe"],
+		"susp": ["Lift springs", "Fox shocks", "Long-travel 2.5\""], "kit": ["Winch bumper", "Skid plates", "Armor + roof rack"]},
+	"charger": {"engine": "6.4L HEMI V8  ·  485 hp", "stages": ["Cold-air intake", "Cat-back + tune", "Cam + heads", "7.0L stroker", "Supercharged Hellcat"],
+		"slots": ["turbo", "exhaust", "aero", "susp"], "stock_wheel": "classic", "wheels": ["stock", "multi", "mesh"],
+		"turbo": ["Whipple supercharger", "Twin-screw supercharger", "Hellcat supercharger"], "exhaust": ["Dual cat-back", "Long-tube headers", "Race headers"],
+		"aero": ["Front splitter", "Ducktail kit", "GT wing"], "susp": ["Hellcat springs", "Adaptive dampers", "Race coilovers"]},
+	"coupe": {"engine": "3.5L Twin-turbo V6  ·  400 hp", "stages": ["Performance intake", "ECU + tune", "Upgraded turbos", "Forged internals", "Track race engine"],
+		"slots": ["turbo", "exhaust", "aero", "susp"], "stock_wheel": "multi", "wheels": ["stock", "spoke5", "turbine"],
+		"turbo": ["Hybrid twin-turbo", "Big twin-turbo", "Race turbos"], "exhaust": ["Valved cat-back", "Race downpipes", "Titanium system"],
+		"aero": ["Carbon lip", "Rear diffuser kit", "Track wing kit"], "susp": ["Sport springs", "Adjustable coilovers", "Track suspension"]},
+	"m4": {"engine": "3.0L Twin-turbo I6 (S58)  ·  510 hp", "stages": ["Intake + charge pipes", "Stage 1 tune", "Catless downpipes", "Stage 2 hybrid turbos", "Stage 3 race build"],
+		"slots": ["turbo", "exhaust", "aero", "susp"], "stock_wheel": "multi", "wheels": ["stock", "mesh", "centre"],
+		"turbo": ["Upgraded turbos", "Hybrid turbos", "Race turbos"], "exhaust": ["Valved cat-back", "Catless downpipes", "Titanium race"],
+		"aero": ["CSL lip", "Carbon trunk spoiler", "GT4 wing"], "susp": ["Eibach springs", "KW coilovers", "Race coilovers"]},
+	"gt3": {"engine": "4.0L Flat-6 NA  ·  510 hp", "stages": ["Race intake", "ECU race map", "Cams + valvetrain", "Titanium rods", "Cup-spec engine"],
+		"slots": ["exhaust", "aero", "susp", "kit"], "stock_wheel": "centre", "wheels": ["stock", "mesh", "multi"],
+		"exhaust": ["Sport headers", "Race headers", "Titanium works exhaust"], "aero": ["Front splitter", "Swan-neck wing", "Cup aero package"],
+		"susp": ["Sport dampers", "Race dampers", "Cup suspension"], "kit": ["Roll cage", "Fire system", "FIA safety pack"]},
+	"hyper": {"engine": "8.0L Quad-turbo W16  ·  1500 hp", "stages": ["Hyper intake", "Hyper ECU", "Bigger turbos", "Titanium internals", "Hyper race build"],
+		"slots": ["turbo", "exhaust", "aero", "susp"], "stock_wheel": "centre", "wheels": ["stock", "turbine", "multi"],
+		"turbo": ["Quad hybrid turbos", "Big quad turbos", "Race quad turbos"], "exhaust": ["Hyper valved", "Titanium race", "Inconel system"],
+		"aero": ["Active lip", "Active wing kit", "Track aero pack"], "susp": ["Active dampers", "Race active", "Track active"]},
+}
+
+const WHEELS := {
+	"stock": {"n": ["Stock design", "التصميم الأصلي"], "r": 0, "price": 0},
+	"steel": {"n": ["Steel wheel", "جنط حديد"], "r": 0, "price": 300},
+	"spoke5": {"n": ["5-spoke", "5 أذرع"], "r": 1, "price": 900},
+	"mesh": {"n": ["Mesh (BBS style)", "شبكي"], "r": 2, "price": 1600},
+	"multi": {"n": ["Multi-spoke", "أذرع متعددة"], "r": 2, "price": 1800},
+	"turbine": {"n": ["Turbine", "تيربين"], "r": 2, "price": 2200},
+	"beadlock": {"n": ["Beadlock off-road", "أوف رود مثبّت"], "r": 1, "price": 1200},
+	"classic": {"n": ["Classic muscle", "كلاسيك ماسل"], "r": 1, "price": 1000},
+	"centre": {"n": ["Centre-lock race", "سباق قفل مركزي"], "r": 3, "price": 3500},
+}
+const WHEEL_ORDER := ["stock", "steel", "spoke5", "mesh", "multi", "turbine", "beadlock", "classic", "centre"]
+
+
+static func tech(car_id: String) -> Dictionary:
+	return CAR_TECH.get(car_id, CAR_TECH["hatch"])
+
+
+## the real design a wheel id means on this car ("stock" = the car's own)
+static func wheel_style(car_id: String, id: String) -> String:
+	return str(tech(car_id)["stock_wheel"]) if id == "stock" or not WHEELS.has(id) else id
+
+
+static func wheel_opts(car_id: String) -> Array:
+	return tech(car_id)["wheels"]
+
+
+static func part_tier_names(car_id: String, slot: String) -> Array:
+	var t: Dictionary = tech(car_id)
+	if t.has(slot):
+		return t[slot]
+	return []
+
+
+static func has_part(car_id: String, slot: String) -> bool:
+	return (tech(car_id)["slots"] as Array).has(slot)
+
+
 const CAR_SLOTS := {"paint": PAINTS, "stripe": STRIPES, "rim": RIMS, "glow": GLOWS, "decal": DECALS,
-	"spoiler": SPOILERS, "front": FRONTS, "hood": HOODS, "skirts": SKIRTS}
+	"spoiler": SPOILERS, "front": FRONTS, "hood": HOODS, "skirts": SKIRTS, "wheel": WHEELS}
 const CAR_SLOT_ORDER := {"paint": PAINT_ORDER, "stripe": STRIPE_ORDER, "rim": RIM_ORDER, "glow": GLOW_ORDER, "decal": DECAL_ORDER,
-	"spoiler": ["none", "lip", "duck", "gt", "twin"], "front": ["none", "splitter", "canards", "bullbar"], "hood": ["none", "scoop", "vents", "carbon"], "skirts": ["none", "skirts", "wide"]}
+	"spoiler": ["none", "lip", "duck", "gt", "twin"], "front": ["none", "splitter", "canards", "bullbar"], "hood": ["none", "scoop", "vents", "carbon"], "skirts": ["none", "skirts", "wide"], "wheel": WHEEL_ORDER}
 
 # ---------------------------------------------------------------- character
 const SKINS := {
@@ -200,7 +282,7 @@ const GLASSES := {
 const OUTFIT_SLOTS := {"skin": SKINS, "shirt": SHIRTS, "pants": PANTS, "shoes": SHOES, "hat": HATS, "glasses": GLASSES}
 const OUTFIT_ORDER := ["skin", "hat", "glasses", "shirt", "pants", "shoes"]
 const SLOT_NAME := {
-	"paint": ["Paint", "الطلاء"], "stripe": ["Stripes", "الخطوط"], "rim": ["Rims", "الجنوط"], "glow": ["Underglow", "إضاءة سفلية"], "decal": ["Stickers", "ملصقات"], "spoiler": ["Rear", "المؤخرة"], "front": ["Front", "المقدمة"], "hood": ["Hood", "الغطاء"], "skirts": ["Sides", "الجوانب"],
+	"paint": ["Paint", "الطلاء"], "stripe": ["Stripes", "الخطوط"], "rim": ["Rims", "الجنوط"], "glow": ["Underglow", "إضاءة سفلية"], "decal": ["Stickers", "ملصقات"], "spoiler": ["Rear", "المؤخرة"], "front": ["Front", "المقدمة"], "hood": ["Hood", "الغطاء"], "skirts": ["Sides", "الجوانب"], "wheel": ["Wheel design", "تصميم الجنط"],
 	"skin": ["Skin", "البشرة"], "hat": ["Hat", "القبعة"], "glasses": ["Glasses", "النظارة"], "shirt": ["T-shirt", "التيشيرت"],
 	"pants": ["Pants", "السروال"], "shoes": ["Shoes", "الحذاء"], "emote": ["Emote", "الحركة"],
 }

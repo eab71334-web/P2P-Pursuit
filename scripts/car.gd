@@ -146,7 +146,7 @@ func _add_wheels() -> void:
 				holder.position = Vector3(x, 0.45, z)
 				holder.set_meta("front", z < 0.0)
 				add_child(holder)
-				CarStyle.make_wheel(holder, rim_color(), model)
+				CarStyle.make_wheel(holder, rim_color(), model, Catalog.wheel_style(model, str(lo.get("wheel", "stock"))))
 				_holders.append(holder)
 				continue
 			var w := VehicleWheel3D.new()
@@ -163,7 +163,7 @@ func _add_wheels() -> void:
 			w.use_as_traction = true
 			w.use_as_steering = z < 0.0
 			add_child(w)
-			CarStyle.make_wheel(w, rim_color(), model)
+			CarStyle.make_wheel(w, rim_color(), model, Catalog.wheel_style(model, str(lo.get("wheel", "stock"))))
 
 
 # ------------------------------------------------------------------ controls

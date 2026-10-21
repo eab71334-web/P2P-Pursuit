@@ -62,7 +62,9 @@ static func beam(parent: Node, a: Vector3, b: Vector3, th: float, m: Material) -
 
 
 ## wheel with tyre, rim and spokes. The axle is the local X axis.
-static func make_wheel(parent: Node, rim_col: Color, model: String) -> void:
+static func make_wheel(parent: Node, rim_col: Color, model: String, style := "") -> void:
+	if style == "":
+		style = Catalog.wheel_style(model, "stock")
 	var width := 0.34
 	if model in ["buggy","muscle","hyper","gt3","charger","m4"]:
 		width = 0.42
@@ -78,14 +80,78 @@ static func make_wheel(parent: Node, rim_col: Color, model: String) -> void:
 	cyl(gear, rim_r, width + 0.02, Vector3.ZERO, rim_m)
 	var dark := mat(Color(0.06, 0.06, 0.08), 0.0, 0.8)
 	cyl(gear, rim_r * 0.82, width + 0.025, Vector3.ZERO, dark)
-	for k in 5:
-		var s := box(gear, Vector3(rim_r * 1.7, width + 0.03, 0.055), Vector3.ZERO, rim_m)
-		s.rotation_degrees.y = k * 36.0
-	cyl(gear, 0.06, width + 0.05, Vector3.ZERO, mat(CHROME, 0.9, 0.2))
+	_wheel_face(gear, style, rim_r, width, rim_m, dark)
 	if model == "pickup" or model == "buggy":    # chunky tread blocks
 		for k in 10:
 			var a := TAU * k / 10.0
 			box(gear, Vector3(0.1, width * 0.96, 0.06), Vector3(cos(a) * 0.4, 0.0, sin(a) * 0.4), tyre_m, Vector3(0, -rad_to_deg(a), 0))
+
+
+## the wheel face: every design is a different real-world pattern
+static func _wheel_face(gear: Node3D, style: String, rim_r: float, width: float, rim_m: StandardMaterial3D, dark: StandardMaterial3D) -> void:
+	var hub_m := mat(CHROME, 0.9, 0.2)
+	var h := width + 0.03
+	match style:
+		"steel":     # plain pressed-steel dish with lug nuts and a centre cap
+			cyl(gear, rim_r * 0.8, h, Vector3.ZERO, rim_m)
+			for k in 5:
+				var a := TAU * k / 5.0
+				for sy in [-1.0, 1.0]:
+					cyl(gear, 0.025, 0.02, Vector3(cos(a) * rim_r * 0.5, sy * (width * 0.5 + 0.02), sin(a) * rim_r * 0.5), hub_m)
+			cyl(gear, 0.08, width + 0.05, Vector3.ZERO, mat(Color(0.2, 0.2, 0.22), 0.6, 0.4))
+		"mesh":      # BBS-style cross-spoke mesh
+			for k in 9:
+				box(gear, Vector3(rim_r * 1.75, h, 0.028), Vector3.ZERO, rim_m).rotation_degrees.y = k * 20.0 + 6.0
+				box(gear, Vector3(rim_r * 1.75, h - 0.01, 0.028), Vector3.ZERO, rim_m).rotation_degrees.y = k * 20.0 - 6.0
+			cyl(gear, rim_r * 0.3, h + 0.01, Vector3.ZERO, rim_m)
+			cyl(gear, 0.05, width + 0.05, Vector3.ZERO, hub_m)
+		"multi":     # ten slim spokes
+			for k in 10:
+				box(gear, Vector3(rim_r * 1.7, h, 0.04), Vector3.ZERO, rim_m).rotation_degrees.y = k * 18.0
+			cyl(gear, rim_r * 0.22, h + 0.01, Vector3.ZERO, rim_m)
+			cyl(gear, 0.045, width + 0.05, Vector3.ZERO, hub_m)
+		"turbine":   # fan-blade turbine, blades swept
+			for k in 14:
+				var b := box(gear, Vector3(rim_r * 0.9, h, 0.045), Vector3(cos(TAU * k / 14.0) * rim_r * 0.45, 0, sin(TAU * k / 14.0) * rim_r * 0.45), rim_m)
+				b.rotation_degrees.y = -rad_to_deg(TAU * k / 14.0) + 28.0
+			cyl(gear, rim_r * 0.2, h + 0.01, Vector3.ZERO, rim_m)
+			cyl(gear, 0.04, width + 0.05, Vector3.ZERO, hub_m)
+		"beadlock":  # off-road: six heavy spokes and a ring of bolts
+			for k in 6:
+				box(gear, Vector3(rim_r * 1.7, h, 0.09), Vector3.ZERO, rim_m).rotation_degrees.y = k * 30.0
+			for k in 16:
+				var a := TAU * k / 16.0
+				for sy in [-1.0, 1.0]:
+					cyl(gear, 0.018, 0.02, Vector3(cos(a) * rim_r * 0.93, sy * (width * 0.5 + 0.02), sin(a) * rim_r * 0.93), hub_m)
+			cyl(gear, 0.07, width + 0.05, Vector3.ZERO, hub_m)
+		"classic":   # muscle-car slotted 8-spoke with a polished lip and centre cap
+			for k in 8:
+				box(gear, Vector3(rim_r * 1.7, h, 0.075), Vector3.ZERO, rim_m).rotation_degrees.y = k * 22.5
+			cyl(gear, 0.09, width + 0.05, Vector3.ZERO, mat(Color(0.8, 0.1, 0.1), 0.6, 0.3))
+		"centre":    # race forged: five twin spokes and a single centre-lock nut
+			for k in 5:
+				for d in [-5.0, 5.0]:
+					box(gear, Vector3(rim_r * 1.75, h, 0.04), Vector3.ZERO, rim_m).rotation_degrees.y = k * 72.0 + d
+			cyl(gear, 0.075, width + 0.06, Vector3.ZERO, mat(Color(1.0, 0.75, 0.2), 0.9, 0.25))
+		_:           # five-spoke
+			for k in 5:
+				box(gear, Vector3(rim_r * 1.7, h, 0.055), Vector3.ZERO, rim_m).rotation_degrees.y = k * 36.0
+			cyl(gear, 0.06, width + 0.05, Vector3.ZERO, hub_m)
+
+
+## livery layout per model: stripe count/width/gap, which panels carry it, and the side treatment (0 none, 1 belt, 2 rocker band, 3 pin-stripes)
+const STRIPE_KIND := {
+	"hatch": {"n": 2, "w": 0.09, "gap": 0.12, "hood": true, "roof": true, "deck": false, "side": 1},
+	"buggy": {"n": 1, "w": 0.4, "gap": 0.0, "hood": true, "roof": false, "deck": false, "side": 2},
+	"muscle": {"n": 2, "w": 0.24, "gap": 0.2, "hood": true, "roof": true, "deck": true, "side": 0},
+	"sierra": {"n": 2, "w": 0.1, "gap": 0.14, "hood": true, "roof": true, "deck": true, "side": 3},
+	"pickup": {"n": 1, "w": 0.3, "gap": 0.0, "hood": true, "roof": false, "deck": false, "side": 2},
+	"charger": {"n": 2, "w": 0.2, "gap": 0.17, "hood": true, "roof": true, "deck": true, "side": 0},
+	"coupe": {"n": 1, "w": 0.3, "gap": 0.0, "hood": true, "roof": true, "deck": true, "side": 1},
+	"m4": {"n": 2, "w": 0.05, "gap": 0.1, "hood": true, "roof": false, "deck": true, "side": 3},
+	"gt3": {"n": 1, "w": 0.26, "gap": 0.0, "hood": true, "roof": true, "deck": true, "side": 2},
+	"hyper": {"n": 2, "w": 0.04, "gap": 0.1, "hood": true, "roof": true, "deck": true, "side": 1},
+}
 
 
 # cabin shape per model: windshield top z, rear window base z / top z, roof half width (smaller = more tumblehome)
@@ -188,16 +254,28 @@ static func decorate(car: Node3D, model: String, lo: Dictionary, body_mat: Stand
 	box(car, Vector3(minf(0.9, rlen - 0.1), 0.012, minf(0.9, rlen - 0.1)), Vector3(0, rt + 0.012, rcz), tm)
 	for sx in [-1.0, 1.0]:
 		box(car, Vector3(0.03, 0.34, 0.34), Vector3(sx * 1.01, 1.1, 0.4), tm)
-	# --- stripes
+	# --- stripes: each model carries its own real livery layout
 	if lo.get("stripe", "none") != "none":
 		var sm := mat(accent_col, 0.2, 0.4, 0.15)
-		for sx in [-0.14, 0.14]:
-			if hood:
-				box(hood, Vector3(0.16, 0.012, 0.98), Vector3(sx, 0.012, -0.49), sm)
-			box(car, Vector3(0.16, 0.012, 2.0), Vector3(sx, 1.97, 0.35), sm)
-			box(car, Vector3(0.16, 0.012, 0.6), Vector3(sx, 0.885, 1.7), sm)
+		var sk: Dictionary = STRIPE_KIND.get(model, STRIPE_KIND["hatch"])
+		var sw: float = sk["w"]
+		var offs: Array = [0.0] if int(sk["n"]) == 1 else [-float(sk["gap"]), float(sk["gap"])]
+		for sx in offs:
+			if hood and sk["hood"]:
+				box(hood, Vector3(sw, 0.012, 0.98), Vector3(sx, 0.012, -0.49), sm)
+			if sk["roof"]:
+				box(car, Vector3(sw, 0.012, minf(rlen - 0.05, 1.9)), Vector3(sx, rt + 0.02, rcz), sm)
+			if sk["deck"]:
+				box(car, Vector3(sw, 0.012, 0.6), Vector3(sx, 0.885, 1.7), sm)
+		var side: int = sk["side"]
 		for sx in [-1.0, 1.0]:
-			box(car, Vector3(0.03, 0.05, 3.7), Vector3(sx * 0.96, 0.7, 0.0), sm)
+			if side == 1:       # thin belt line
+				box(car, Vector3(0.03, 0.05, 3.7), Vector3(sx * 0.96, 0.7, 0.0), sm)
+			elif side == 2:     # broad lower rocker band
+				box(car, Vector3(0.03, 0.13, 3.5), Vector3(sx * 0.965, 0.5, 0.0), sm)
+			elif side == 3:     # double pin-stripes
+				box(car, Vector3(0.03, 0.03, 3.6), Vector3(sx * 0.96, 0.74, 0.0), sm)
+				box(car, Vector3(0.03, 0.02, 3.6), Vector3(sx * 0.96, 0.68, 0.0), sm)
 	# --- underglow
 	var gc: Color = Catalog.GLOWS.get(lo.get("glow", "none"), Catalog.GLOWS["none"])["c"]
 	if lo.get("glow", "none") != "none":
