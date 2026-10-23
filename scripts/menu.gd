@@ -64,6 +64,70 @@ class ModeIcon extends Control:
 				_car(c + Vector2(-8, -14), col)
 				_car(c + Vector2(4, 0), col.darkened(0.2))
 				_car(c + Vector2(-4, 14), col.darkened(0.4))
+			"online":     # globe
+				draw_arc(c, 20, 0, TAU, 40, col, 2.5)
+				draw_arc(c, 20.0, 0, TAU, 40, col, 1.0)
+				draw_line(c + Vector2(-20, 0), c + Vector2(20, 0), col, 2.0)
+				draw_arc(c, 9.0, PI * 0.5, PI * 1.5, 16, col, 2.0)
+				draw_arc(c, 9.0, -PI * 0.5, PI * 0.5, 16, col, 2.0)
+				draw_arc(c + Vector2(0, -22), 20, 0.5, 2.64, 14, col, 1.6)
+				draw_arc(c + Vector2(0, 22), 20, -2.64, -0.5, 14, col, 1.6)
+			"lan":        # wifi waves
+				for i in 3:
+					draw_arc(c + Vector2(0, 14), 10.0 + i * 9.0, -PI * 0.78, -PI * 0.22, 14, col, 3.0)
+				draw_circle(c + Vector2(0, 14), 3.4, col)
+
+
+class ChoiceCard extends Button:
+	var kind := "solo"
+	var badge := ""
+	var accent := UI.ACCENT
+	var dim := false
+
+	func _init(k: String, title: String, desc: String, p_badge: String, p_dim: bool, cb: Callable) -> void:
+		kind = k
+		badge = p_badge
+		dim = p_dim
+		custom_minimum_size = Vector2(0, 118)
+		size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		focus_mode = Control.FOCUS_NONE
+		var n := UI.sb(Color(0.075, 0.08, 0.1, 0.92), 14, Color(1, 1, 1, 0.1), 1)
+		var hv := UI.sb(Color(0.12, 0.115, 0.115, 0.96), 14, UI.ACCENT if not dim else Color(1, 1, 1, 0.2), 2)
+		add_theme_stylebox_override("normal", n)
+		add_theme_stylebox_override("hover", hv)
+		add_theme_stylebox_override("pressed", hv)
+		add_theme_stylebox_override("focus", n)
+		pressed.connect(cb)
+		var h := HBoxContainer.new()
+		h.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		h.offset_left = 14
+		h.offset_right = -16
+		h.add_theme_constant_override("separation", 14)
+		h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(h)
+		var ic := ModeIcon.new(k)
+		ic.custom_minimum_size = Vector2(84, 84)
+		ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		ic.hot = not dim
+		h.add_child(ic)
+		var v := VBoxContainer.new()
+		v.alignment = BoxContainer.ALIGNMENT_CENTER
+		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v.add_theme_constant_override("separation", 2)
+		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		h.add_child(v)
+		UI.lbl(v, title, 26, UI.TXT if not dim else UI.TXT2, false)
+		UI.lbl(v, desc, 14, UI.TXT2, false)
+		if badge != "":
+			var pill := PanelContainer.new()
+			pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			pill.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+			var bc := Color(1.0, 0.8, 0.25) if dim else UI.OK
+			pill.add_theme_stylebox_override("panel", UI.sb(Color(bc.r, bc.g, bc.b, 0.15), 10, Color(bc.r, bc.g, bc.b, 0.6), 1))
+			v.add_child(pill)
+			var bl := UI.lbl(pill, "  " + badge + "  ", 13, bc, false)
+			bl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		UI.pop(self, 1.02)
 
 
 ## one game mode in the PLAY list
@@ -103,6 +167,10 @@ class ModeRow extends Button:
 		mouse_exited.connect(func():
 			micon.hot = false
 			micon.queue_redraw())
+
+
+var choose_box: VBoxContainer
+var lan_box: VBoxContainer
 
 
 class Spinner extends Control:
@@ -275,22 +343,43 @@ func _build_main() -> Control:
 	col.custom_minimum_size = Vector2(470, 0)
 	col.add_theme_constant_override("separation", 8)
 	h.add_child(col)
-	var cap := UI.lbl(col, UI.tx("SELECT MODE", "اختر نمط اللعب"), 16, UI.ACCENT, false)
+	choose_box = VBoxContainer.new()
+	choose_box.add_theme_constant_override("separation", 12)
+	col.add_child(choose_box)
+	lan_box = VBoxContainer.new()
+	lan_box.add_theme_constant_override("separation", 8)
+	lan_box.visible = false
+	col.add_child(lan_box)
+	var cap0 := UI.lbl(choose_box, UI.tx("HOW DO YOU WANT TO PLAY?", "كيف تحب تلعب؟"), 16, UI.ACCENT, false)
+	cap0.add_theme_constant_override("outline_size", 0)
+	var choices := [
+		["solo", UI.tx("SOLO", "لعب فردي"), UI.tx("Practice the stage alone and beat the medals", "تدرّب على المرحلة وحدك وحقّق الميداليات"), "", false, func(): _on_solo()],
+		["online", UI.tx("ONLINE", "أونلاين"), UI.tx("Race players from anywhere in the world", "تسابق مع لاعبين من أي مكان بالعالم"), UI.tx("COMING SOON", "قريباً"), true, func(): _say(UI.tx("Online play is coming soon - it needs a game server. Play SOLO or LAN for now.", "اللعب أونلاين قريباً - يحتاج خادم. العب فردي أو LAN حالياً."))],
+		["lan", UI.tx("LAN", "شبكة محلية LAN"), UI.tx("Friends on the same Wi-Fi  -  iPhone + Android", "مع أصدقائك على نفس الواي فاي  -  iPhone + Android"), "Wi-Fi", false, func(): _show_lan(true)],
+	]
+	for i in choices.size():
+		var cd: Array = choices[i]
+		var card := ChoiceCard.new(cd[0], cd[1], cd[2], cd[3], cd[4], cd[5])
+		choose_box.add_child(card)
+		card.modulate.a = 0.0
+		card.create_tween().tween_property(card, "modulate:a", 1.0, 0.35).set_delay(0.08 * i)
+	var back := UI.btn(lan_box, "<  " + L.t("back"), UI.CARD2, func(): _show_lan(false), 18, Vector2(0, 40))
+	back.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	var cap := UI.lbl(lan_box, UI.tx("LAN  -  SELECT MODE", "LAN  -  اختر نمط اللعب"), 16, UI.ACCENT, false)
 	cap.add_theme_constant_override("outline_size", 0)
 	var specs := [
-		["solo", "solo", "solo_d", func(): _on_solo()],
 		["coop", "coop", "coop_d", func(): _open_setup("coop")],
 		["teams", "teams", "teams_d", func(): _open_setup("teams")],
 		["ffa", "ffa", "ffa_d", func(): _open_setup("ffa")],
 	]
 	for i in specs.size():
 		var r := ModeRow.new(specs[i][0], L.t(specs[i][1]), L.t(specs[i][2]), specs[i][3])
-		col.add_child(r)
+		lan_box.add_child(r)
 		r.modulate.a = 0.0
 		r.create_tween().tween_interval(0.07 * i)
 		r.create_tween().tween_property(r, "modulate:a", 1.0, 0.35).set_delay(0.07 * i)
 	# LAN strip
-	var join := UI.panel(col, UI.PANEL, 8)
+	var join := UI.panel(lan_box, UI.PANEL, 8)
 	var jv := VBoxContainer.new()
 	jv.add_theme_constant_override("separation", 6)
 	join.add_child(jv)
@@ -330,6 +419,16 @@ func _build_main() -> Control:
 	info.add_child(cb)
 	_update_hero_name()
 	return c
+
+
+func _show_lan(on: bool) -> void:
+	if choose_box == null or not is_instance_valid(choose_box):
+		return
+	Sfx.play("click", -8.0)
+	choose_box.visible = not on
+	lan_box.visible = on
+	if on:
+		_refresh_hosts()
 
 
 func _update_hero_name() -> void:

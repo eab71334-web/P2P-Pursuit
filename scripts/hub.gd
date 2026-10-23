@@ -237,6 +237,11 @@ func _build() -> void:
 			gem_label = l
 		else:
 			coin_label = l
+		# a small "+" opens the coin shop
+		var plus := UI.btn(ch, "+", UI.ACCENT, func():
+			Sfx.play("click", -8.0)
+			select("shop"), 22, Vector2(34, 34))
+		plus.add_theme_color_override("font_color", Color(0.08, 0.05, 0.02))
 	content = Control.new()
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content.clip_contents = true
@@ -1068,6 +1073,31 @@ func _tab_shop() -> Control:
 	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vb.add_theme_constant_override("separation", 12)
 	sc.add_child(vb)
+	UI.lbl(vb, UI.tx("COINS", "العملات"), 28, UI.GOLD, false)
+	var packs := HBoxContainer.new()
+	packs.add_theme_constant_override("separation", 10)
+	vb.add_child(packs)
+	for pk in Billing.PACKS:
+		var pp := UI.panel(packs, UI.CARD, 16)
+		pp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var best: bool = str(pk["tag"]) != ""
+		if best:
+			pp.add_theme_stylebox_override("panel", UI.sb(UI.CARD, 16, UI.GOLD, 2))
+		var pv := VBoxContainer.new()
+		pv.add_theme_constant_override("separation", 4)
+		pp.add_child(pv)
+		var tg := UI.lbl(pv, UI.tx("BEST VALUE", "الأفضل قيمة") if pk["tag"] == "best" else (UI.tx("POPULAR", "الأكثر شراء") if pk["tag"] == "popular" else " "), 13, UI.GOLD, false)
+		tg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var cs := Checkout.CoinStack.new()
+		pv.add_child(cs)
+		var cn := UI.lbl(pv, "%d" % int(pk["coins"]), 26, Color(1.0, 0.86, 0.35), false)
+		cn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var bn := UI.lbl(pv, str(pk["bonus"]) if str(pk["bonus"]) != "" else " ", 15, UI.OK, false)
+		bn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var pid: String = pk["id"]
+		UI.btn(pv, "$" + str(pk["price"]), UI.ACCENT, func():
+			Sfx.play("click", -6.0)
+			Checkout.open(self, Billing.pack(pid)), 20, Vector2(0, 46))
 	UI.lbl(vb, UI.tx("DAILY DEALS  -30%", "عروض اليوم  -30%"), 28, UI.GOLD, false)
 	var deals := HBoxContainer.new()
 	deals.add_theme_constant_override("separation", 12)

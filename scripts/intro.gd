@@ -28,7 +28,7 @@ var _logo: TextureRect
 var _logo_mat: ShaderMaterial
 var _black: ColorRect
 var _bars: Array[ColorRect] = []
-var _title: Control
+var _title: VBoxContainer
 var _eng: AudioStreamPlayer
 var _flash := 0.0
 var _boomed := false
@@ -126,9 +126,14 @@ func _build_ui() -> void:
 	_logo.texture = load("res://art/avf_logo.png")
 	_logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_logo.custom_minimum_size = Vector2(600, 285)
-	_logo.size = Vector2(600, 285)
-	_logo.position = Vector2(340, 217)
+	_logo.anchor_left = 0.5
+	_logo.anchor_right = 0.5
+	_logo.anchor_top = 0.5
+	_logo.anchor_bottom = 0.5
+	_logo.offset_left = -300
+	_logo.offset_right = 300
+	_logo.offset_top = -143
+	_logo.offset_bottom = 142
 	_logo.pivot_offset = Vector2(300, 142)
 	var sh := Shader.new()
 	sh.code = SWEEP_SHADER
@@ -144,11 +149,15 @@ func _build_ui() -> void:
 		b.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE if k == 0 else Control.PRESET_BOTTOM_WIDE)
 		cl.add_child(b)
 		_bars.append(b)
-	_title = Control.new()
+	_title = VBoxContainer.new()
 	_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_title.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_title.anchor_left = 0.58
+	_title.anchor_right = 0.97
+	_title.anchor_top = 0.3
+	_title.anchor_bottom = 0.75
+	_title.alignment = BoxContainer.ALIGNMENT_CENTER
+	_title.add_theme_constant_override("separation", 4)
 	cl.add_child(_title)
-	var yy := 250.0
 	for e2 in [["رالي السائق المساعد", 50, Color(1, 0.58, 0.14)], ["CO-DRIVER RALLY", 28, Color(0.9, 0.92, 0.97)], ["© 2026 AVF", 18, Color(0.55, 0.6, 0.68)]]:
 		var l := Label.new()
 		l.text = e2[0]
@@ -157,10 +166,8 @@ func _build_ui() -> void:
 		l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
 		l.add_theme_constant_override("outline_size", 8)
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		l.position = Vector2(770, yy)
-		l.size = Vector2(470, e2[1] * 1.5)
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_title.add_child(l)
-		yy += e2[1] * 1.5 + 6.0
 	_title.modulate.a = 0.0
 
 

@@ -721,17 +721,70 @@ func _build_mirrors() -> void:
 	CarStyle.box(rv, Vector3(0.5, 0.15, 0.06), Vector3.ZERO, dark)
 	_mirror_quad(rv, Vector2(0.45, 0.115), Vector3(0, 0, 0.034))
 	_mirror_nodes["rear"] = rv
-	# wing mirrors (stalk + housing in body colour, glass faces back and inwards)
+	# wing mirrors: housing shape depends on the car (see WING)
 	for side in ["left", "right"]:
 		var sx := -1.0 if side == "left" else 1.0
 		var wm := Node3D.new()
 		wm.position = Vector3(sx * 1.13, 1.44 - drop * 0.3, -0.8)
 		wm.rotation_degrees.y = -sx * 24.0
 		add_child(wm)
-		CarStyle.box(wm, Vector3(0.2, 0.05, 0.05), Vector3(-sx * 0.12, -0.04, -0.02), dark)
-		CarStyle.box(wm, Vector3(0.24, 0.17, 0.09), Vector3.ZERO, shell)
-		_mirror_quad(wm, Vector2(0.2, 0.135), Vector3(0, 0, 0.047))
+		_wing_mirror(wm, sx, shell, dark)
 		_mirror_nodes[side] = wm
+	# rear-view: trim ring + wedge housing around the glass
+	var rim := CarStyle.mat(Color(0.02, 0.02, 0.03), 0.1, 0.4)
+	CarStyle.box(rv, Vector3(0.52, 0.176, 0.03), Vector3(0, 0, -0.03), rim)
+	CarStyle.box(rv, Vector3(0.54, 0.012, 0.07), Vector3(0, 0.082, 0.004), rim)
+	CarStyle.box(rv, Vector3(0.54, 0.012, 0.07), Vector3(0, -0.082, 0.004), rim)
+	CarStyle.box(rv, Vector3(0.012, 0.16, 0.07), Vector3(0.265, 0, 0.004), rim)
+	CarStyle.box(rv, Vector3(0.012, 0.16, 0.07), Vector3(-0.265, 0, 0.004), rim)
+
+
+## per-model wing-mirror look: kind = round | aero | truck | bar | bullet ; cap = body-colour cap or dark carbon
+const WING := {
+	"hatch": {"kind": "round", "cap": true}, "buggy": {"kind": "bar", "cap": false},
+	"muscle": {"kind": "bullet", "cap": false}, "sierra": {"kind": "round", "cap": false},
+	"pickup": {"kind": "truck", "cap": false}, "charger": {"kind": "aero", "cap": true},
+	"m4": {"kind": "aero", "cap": true}, "coupe": {"kind": "aero", "cap": true},
+	"gt3": {"kind": "aero", "cap": false}, "hyper": {"kind": "aero", "cap": false},
+}
+
+
+func _wing_mirror(wm: Node3D, sx: float, shell: Material, dark: Material) -> void:
+	var spec: Dictionary = WING.get(model, WING["hatch"])
+	var kind: String = spec["kind"]
+	var chrome := CarStyle.mat(Color(0.82, 0.84, 0.88), 0.9, 0.2)
+	var carbon := CarStyle.mat(Color(0.04, 0.04, 0.05), 0.3, 0.45)
+	var body: Material = shell if spec["cap"] else carbon
+	var ax := Vector3(90, 0, 0)
+	match kind:
+		"round":
+			CarStyle.box(wm, Vector3(0.2, 0.045, 0.05), Vector3(-sx * 0.13, -0.05, -0.03), dark)        # arm
+			CarStyle.cyl(wm, 0.112, 0.085, Vector3(0, 0, -0.005), body, ax)
+			CarStyle.cyl(wm, 0.118, 0.02, Vector3(0, 0, 0.034), carbon, ax)                              # bezel
+			_mirror_quad(wm, Vector2(0.15, 0.15), Vector3(0, 0, 0.046))
+		"bullet":                      # chrome classic
+			CarStyle.box(wm, Vector3(0.2, 0.03, 0.03), Vector3(-sx * 0.13, -0.06, -0.03), chrome)
+			CarStyle.cyl(wm, 0.108, 0.07, Vector3(0, 0, -0.005), chrome, ax)
+			CarStyle.cyl(wm, 0.1, 0.01, Vector3(0, 0, 0.034), carbon, ax)
+			_mirror_quad(wm, Vector2(0.14, 0.14), Vector3(0, 0, 0.042))
+		"truck":                       # tall tow mirror on two stays
+			CarStyle.box(wm, Vector3(0.2, 0.028, 0.03), Vector3(-sx * 0.13, 0.1, -0.03), dark)
+			CarStyle.box(wm, Vector3(0.2, 0.028, 0.03), Vector3(-sx * 0.13, -0.1, -0.03), dark)
+			CarStyle.box(wm, Vector3(0.036, 0.3, 0.05), Vector3(-sx * 0.04, 0, -0.04), dark)
+			CarStyle.box(wm, Vector3(0.22, 0.34, 0.07), Vector3(sx * 0.0, 0, -0.01), dark)
+			CarStyle.box(wm, Vector3(0.23, 0.02, 0.09), Vector3(0, 0.17, 0.0), chrome)
+			_mirror_quad(wm, Vector2(0.18, 0.29), Vector3(0, 0, 0.03))
+		"bar":                         # rally / buggy: bare frame
+			CarStyle.box(wm, Vector3(0.22, 0.03, 0.03), Vector3(-sx * 0.14, -0.04, -0.03), dark)
+			CarStyle.box(wm, Vector3(0.2, 0.14, 0.03), Vector3(0, 0, 0.0), carbon)
+			_mirror_quad(wm, Vector2(0.17, 0.115), Vector3(0, 0, 0.02))
+		_:                             # aero: swept housing on a slim blade
+			CarStyle.box(wm, Vector3(0.16, 0.026, 0.07), Vector3(-sx * 0.11, -0.065, -0.03), carbon)
+			CarStyle.box(wm, Vector3(0.25, 0.135, 0.07), Vector3(-sx * 0.01, 0, -0.01), body)
+			CarStyle.box(wm, Vector3(0.1, 0.11, 0.06), Vector3(-sx * 0.15, 0.0, -0.05), body)         # tapered inner fairing
+			CarStyle.box(wm, Vector3(0.24, 0.015, 0.075), Vector3(-sx * 0.01, 0.07, -0.005), carbon)    # top lip
+			CarStyle.box(wm, Vector3(0.236, 0.13, 0.016), Vector3(0, 0, 0.03), carbon)                   # glass frame
+			_mirror_quad(wm, Vector2(0.2, 0.108), Vector3(0, 0, 0.04))
 
 
 func _mirror_quad(parent: Node3D, sz: Vector2, pos: Vector3) -> void:
@@ -897,16 +950,59 @@ func _cl_dial(parent: Node3D, pos: Vector3, r: float, spec: Dictionary, kind: St
 	nd.name = "needle"
 
 
+## per-model placement of the instrument pod: dy / dz offsets, scale, tilt toward the driver
+const CLUSTER_POS := {
+	"hatch": {"dy": 0.0, "dz": 0.0, "s": 1.25, "tilt": -10.0, "hood": "brow", "trim": Color(0.08, 0.08, 0.1)},
+	"buggy": {"dy": 0.02, "dz": 0.02, "s": 1.15, "tilt": -6.0, "hood": "tube", "trim": Color(0.5, 0.5, 0.46)},
+	"muscle": {"dy": -0.01, "dz": 0.0, "s": 1.3, "tilt": -12.0, "hood": "chrome", "trim": Color(0.85, 0.87, 0.9)},
+	"sierra": {"dy": 0.0, "dz": 0.0, "s": 1.25, "tilt": -10.0, "hood": "brow", "trim": Color(0.55, 0.45, 0.3)},
+	"pickup": {"dy": 0.01, "dz": 0.0, "s": 1.3, "tilt": -8.0, "hood": "brow", "trim": Color(0.3, 0.3, 0.32)},
+	"charger": {"dy": -0.01, "dz": 0.0, "s": 1.3, "tilt": -12.0, "hood": "chrome", "trim": Color(0.55, 0.57, 0.6)},
+	"m4": {"dy": -0.02, "dz": 0.01, "s": 1.25, "tilt": -12.0, "hood": "screen", "trim": Color(0.05, 0.05, 0.07)},
+	"coupe": {"dy": -0.02, "dz": 0.01, "s": 1.25, "tilt": -12.0, "hood": "screen", "trim": Color(0.05, 0.05, 0.07)},
+	"gt3": {"dy": 0.1, "dz": 0.06, "s": 1.0, "tilt": -16.0, "hood": "race", "trim": Color(0.04, 0.04, 0.05)},
+	"hyper": {"dy": 0.0, "dz": 0.02, "s": 1.2, "tilt": -14.0, "hood": "gold", "trim": Color(0.8, 0.65, 0.25)},
+}
+
+
+## pod housing: back shell + bezel + visor, different for every model so it matches the interior
+func _cluster_housing(root: Node3D, style: String, pl: Dictionary) -> void:
+	var hood: String = pl["hood"]
+	var trim: Color = pl["trim"]
+	var shell := CarStyle.mat(Color(0.03, 0.03, 0.04), 0.2, 0.6)
+	var tm := CarStyle.mat(trim, 0.8 if hood in ["chrome", "gold", "tube"] else 0.3, 0.3)
+	var w := 0.5 if style in ["classic", "single"] else 0.46
+	var h := 0.2 if style in ["classic", "single"] else 0.17
+	CarStyle.box(root, Vector3(w, h, 0.02), Vector3(0, 0, -0.016), shell)
+	# neck down into the dash so the pod never floats
+	CarStyle.box(root, Vector3(w * 0.7, 0.12, 0.09), Vector3(0, -h * 0.5 - 0.03, -0.05), shell)
+	# bezel frame
+	CarStyle.box(root, Vector3(w + 0.012, 0.012, 0.03), Vector3(0, h * 0.5, 0.0), tm)
+	CarStyle.box(root, Vector3(w + 0.012, 0.012, 0.03), Vector3(0, -h * 0.5, 0.0), tm)
+	CarStyle.box(root, Vector3(0.012, h, 0.03), Vector3(w * 0.5, 0, 0.0), tm)
+	CarStyle.box(root, Vector3(0.012, h, 0.03), Vector3(-w * 0.5, 0, 0.0), tm)
+	match hood:
+		"brow", "chrome", "tube", "gold":       # analogue pods: visor over the dials
+			var depth := 0.09 if hood != "tube" else 0.06
+			CarStyle.box(root, Vector3(w + 0.03, 0.02, depth), Vector3(0, h * 0.5 + 0.012, depth * 0.45), shell)
+			CarStyle.box(root, Vector3(0.02, h * 0.9, depth * 0.7), Vector3(w * 0.5, 0, depth * 0.3), shell)
+			CarStyle.box(root, Vector3(0.02, h * 0.9, depth * 0.7), Vector3(-w * 0.5, 0, depth * 0.3), shell)
+		"screen":                                  # glossy slab with a thin chrome-less edge
+			CarStyle.box(root, Vector3(w + 0.02, h + 0.02, 0.006), Vector3(0, 0, -0.004), CarStyle.mat(Color(0.01, 0.01, 0.015), 0.6, 0.12))
+		"race":                                    # carbon box with a red shift strip
+			CarStyle.box(root, Vector3(w + 0.03, 0.016, 0.05), Vector3(0, h * 0.5 + 0.01, 0.02), CarStyle.mat(Color(0.03, 0.03, 0.04), 0.5, 0.3))
+
+
 func _build_cluster() -> void:
 	_cl_spec = CLUSTERS.get(model, CLUSTERS["hatch"])
 	var style: String = _cl_spec["style"]
 	var root := Node3D.new()
-	root.position = Vector3(-0.45, 1.3 - sd * 0.8 + 0.1, -0.77)
-	root.scale = Vector3(1.25, 1.25, 1.25)
-	root.rotation_degrees.x = -10.0
+	var pl: Dictionary = CLUSTER_POS.get(model, CLUSTER_POS["hatch"])
+	root.position = Vector3(-0.45, 1.3 - sd * 0.8 + 0.1 + float(pl["dy"]), -0.77 + float(pl["dz"]))
+	root.scale = Vector3.ONE * float(pl["s"])
+	root.rotation_degrees.x = float(pl["tilt"])
 	add_child(root)
-	# hood / binnacle
-	CarStyle.box(root, Vector3(0.5, 0.2, 0.02), Vector3(0, 0, -0.016), CarStyle.mat(Color(0.03, 0.03, 0.04), 0.2, 0.6))
+	_cluster_housing(root, style, pl)
 	var vis := not preview or true
 	match style:
 		"classic":

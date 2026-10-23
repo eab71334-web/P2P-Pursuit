@@ -2127,63 +2127,25 @@ func _show_result(place: int, t: float) -> void:
 	var rw := Profile.race_reward(place, Net.team_count, mi, track.theme == "mountain")
 	_rewarded = true
 	my_reward_line = _reward_line(rw)
-	result_panel = PanelContainer.new()
-	result_panel.set_anchors_preset(Control.PRESET_CENTER)
-	result_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	result_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 10)
-	result_panel.add_child(vb)
-	var title := Label.new()
-	title.text = "%s  %s" % [L.t("finish"), _place(place - 1) if Net.team_count > 1 else ""]
-	title.add_theme_font_size_override("font_size", 46)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vb.add_child(title)
-	var res := Label.new()
-	res.text = "%s  %s\n%s  %s" % [L.t("time"), _fmt(t), L.t("medal"), medal]
-	res.add_theme_font_size_override("font_size", 28)
-	res.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vb.add_child(res)
-	var rl := Label.new()
-	rl.text = "+%d %s    +%d XP" % [int(rw["coins"]), UI.tx("coins", "عملة"), int(rw["xp"])]
-	if rw["chest"] != "":
-		rl.text += "    +1 " + UI.tx("chest", "صندوق")
-	if rw["level_up"]:
-		rl.text += "\n" + UI.tx("LEVEL UP!  Level %d", "ارتقيت! المستوى %d") % Profile.level
-	rl.add_theme_font_size_override("font_size", 26)
-	rl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
-	rl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vb.add_child(rl)
-	if Net.team_count > 1:
-		result_standings = Label.new()
-		result_standings.add_theme_font_size_override("font_size", 22)
-		result_standings.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		vb.add_child(result_standings)
-		_refresh_result()
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 14)
-	vb.add_child(row)
 	var solo_room := Net.required_players <= 1
-	rematch_btn = Button.new()
-	rematch_btn.text = UI.tx("Race again", "سباق جديد") if solo_room else UI.tx("Rematch", "إعادة المباراة")
-	rematch_btn.custom_minimum_size = Vector2(260, 64)
-	rematch_btn.add_theme_font_size_override("font_size", 26)
-	rematch_btn.pressed.connect(func():
-		if solo_room:
-			Net.start_now()
-		else:
-			Net.return_to_room(true))
-	row.add_child(rematch_btn)
-	room_btn = Button.new()
-	room_btn.text = UI.tx("Main menu", "القائمة الرئيسية") if solo_room else UI.tx("Back to room", "الرجوع للغرفة")
-	room_btn.custom_minimum_size = Vector2(260, 64)
-	room_btn.add_theme_font_size_override("font_size", 26)
-	room_btn.pressed.connect(func():
-		if solo_room:
-			Net.return_to_menu()
-		else:
-			Net.return_to_room(false))
-	row.add_child(room_btn)
+	var card := ResultCard.new()
+	card.build(str(place) if Net.team_count > 1 else "", track.stage_name, _fmt(t), mi, medal, rw, Profile.level, Net.team_count > 1, solo_room,
+		func():
+			if solo_room:
+				Net.start_now()
+			else:
+				Net.return_to_room(true),
+		func():
+			if solo_room:
+				Net.return_to_menu()
+			else:
+				Net.return_to_room(false))
+	result_panel = card
+	result_standings = card.standings
+	rematch_btn = card.again_btn
+	room_btn = card.exit_btn
+	if Net.team_count > 1:
+		_refresh_result()
 	_update_result_buttons()
 	hud_root.add_child(result_panel)
 
