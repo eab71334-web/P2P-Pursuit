@@ -170,6 +170,8 @@ class ModeRow extends Button:
 
 
 var choose_box: VBoxContainer
+var online_box: VBoxContainer
+var online_addr: LineEdit
 var lan_box: VBoxContainer
 
 
@@ -354,7 +356,7 @@ func _build_main() -> Control:
 	cap0.add_theme_constant_override("outline_size", 0)
 	var choices := [
 		["solo", UI.tx("SOLO", "لعب فردي"), UI.tx("Practice the stage alone and beat the medals", "تدرّب على المرحلة وحدك وحقّق الميداليات"), "", false, func(): _on_solo()],
-		["online", UI.tx("ONLINE", "أونلاين"), UI.tx("Race players from anywhere in the world", "تسابق مع لاعبين من أي مكان بالعالم"), UI.tx("COMING SOON", "قريباً"), true, func(): _say(UI.tx("Online play is coming soon - it needs a game server. Play SOLO or LAN for now.", "اللعب أونلاين قريباً - يحتاج خادم. العب فردي أو LAN حالياً."))],
+		["online", UI.tx("ONLINE", "أونلاين"), UI.tx("Queue up - the race starts automatically", "ادخل الصف - والسباق يبدأ تلقائياً"), UI.tx("SERVER", "سيرفر"), false, func(): _show_online(true)],
 		["lan", UI.tx("LAN", "شبكة محلية LAN"), UI.tx("Friends on the same Wi-Fi  -  iPhone + Android", "مع أصدقائك على نفس الواي فاي  -  iPhone + Android"), "Wi-Fi", false, func(): _show_lan(true)],
 	]
 	for i in choices.size():
@@ -378,6 +380,27 @@ func _build_main() -> Control:
 		r.modulate.a = 0.0
 		r.create_tween().tween_interval(0.07 * i)
 		r.create_tween().tween_property(r, "modulate:a", 1.0, 0.35).set_delay(0.07 * i)
+	# ONLINE page: server address (saved) + matchmaking modes
+	online_box = VBoxContainer.new()
+	online_box.add_theme_constant_override("separation", 8)
+	online_box.visible = false
+	col.add_child(online_box)
+	var oback := UI.btn(online_box, "<  " + L.t("back"), UI.CARD2, func(): _show_online(false), 18, Vector2(0, 40))
+	oback.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	var ocap := UI.lbl(online_box, UI.tx("ONLINE  -  PICK A MODE, THE RACE STARTS WHEN PLAYERS ARE READY", "أونلاين  -  اختر النمط والسباق يبدأ لما يكتمل اللاعبين"), 15, UI.ACCENT, false)
+	ocap.add_theme_constant_override("outline_size", 0)
+	online_addr = LineEdit.new()
+	online_addr.placeholder_text = UI.tx("Server address  e.g. 203.0.113.5", "عنوان السيرفر  مثال 203.0.113.5")
+	online_addr.text = Net.saved_server()
+	online_addr.custom_minimum_size = Vector2(0, 44)
+	online_addr.add_theme_font_size_override("font_size", 18)
+	online_addr.add_theme_stylebox_override("normal", UI.sb(Color(1, 1, 1, 0.06), 6, UI.LINE, 1))
+	online_addr.add_theme_stylebox_override("focus", UI.sb(Color(1, 1, 1, 0.1), 6, UI.ACCENT, 1))
+	online_box.add_child(online_addr)
+	for m in ["coop", "teams", "ffa"]:
+		var mode: String = m
+		var orow := ModeRow.new(mode, L.t(mode), L.t(mode + "_d"), func(): _join_online(mode))
+		online_box.add_child(orow)
 	# LAN strip
 	var join := UI.panel(lan_box, UI.PANEL, 8)
 	var jv := VBoxContainer.new()
@@ -419,6 +442,25 @@ func _build_main() -> Control:
 	info.add_child(cb)
 	_update_hero_name()
 	return c
+
+
+func _show_online(on: bool) -> void:
+	if online_box == null or not is_instance_valid(online_box):
+		return
+	Sfx.play("click", -8.0)
+	choose_box.visible = not on
+	online_box.visible = on
+
+
+func _join_online(mode: String) -> void:
+	var addr := online_addr.text.strip_edges()
+	if addr == "":
+		_say(UI.tx("Type the server address first.", "اكتب عنوان السيرفر أولاً."))
+		return
+	if addr.count(":") == 0:
+		addr += ":%d" % int(Net.ONLINE_PORTS[mode])
+	Net.save_server(online_addr.text.strip_edges())
+	_join(addr)
 
 
 func _show_lan(on: bool) -> void:

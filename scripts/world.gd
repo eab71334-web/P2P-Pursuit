@@ -161,9 +161,9 @@ func _ready() -> void:
 		Net.track_seed = int(Net.stage["seed"])
 		Net.blind = false
 	my_id = multiplayer.get_unique_id()
-	my_role = Net.roles.get(my_id, "driver")
+	my_role = "" if Net.dedicated else Net.roles.get(my_id, "driver")
 	my_team = Net.team_of.get(my_id, 0)
-	solo = Net.players.size() == 1 or Net.ffa
+	solo = (Net.players.size() == 1 or Net.ffa) and not Net.dedicated
 	show_touch = (DisplayServer.is_touchscreen_available() or OS.get_environment("FORCE_TOUCH") != "") and my_role == "driver"
 	if Net.stage.is_empty():
 		Net.stage = {"seed": Net.track_seed}
@@ -178,7 +178,8 @@ func _ready() -> void:
 	_build_teams()
 	_build_hud()
 	Net.peer_left.connect(_on_peer_left)
-	Radio.start_race()
+	if not Net.dedicated:
+		Radio.start_race()
 	get_viewport().size_changed.connect(_update_layout)
 	_update_layout()
 	if show_touch and Profile.steer_mode == "":
@@ -197,6 +198,10 @@ func _ready() -> void:
 
 
 func _after_steer() -> void:
+	if Net.dedicated:        # nobody plays at the server: wait for the clients' READY only
+		tutorial_done = true
+		_check_all_ready()
+		return
 	if L.tutorial_off:
 		_im_ready()
 	else:
@@ -294,6 +299,9 @@ func all_done(order: Array, pcts: Array) -> void:
 	final_order = order
 	final_pcts = pcts
 	grace_show = -1.0
+	if Net.dedicated:        # server: no ceremony, give the clients time, then reopen the room
+		get_tree().create_timer(12.0).timeout.connect(Net.server_idle)
+		return
 	flash_message(UI.tx("RACE OVER!", "انتهى السباق!"))
 	# players who did not cross the line still get paid for their place
 	var my := teams[my_team]
@@ -558,6 +566,11 @@ func _physics_process(delta: float) -> void:
 		return
 	if state == State.COUNTDOWN and countdown_left <= 0.0:
 		race_started.rpc()
+	if Net.dedicated and Engine.get_physics_frames() % 120 == 0:
+		var dbg := []
+		for tt in teams:
+			dbg.append("%s in=%s spd=%.1f" % [tt.idx, tt.input, tt.speed])
+		print("ROOM state=%d t=%.1f %s" % [state, race_time, dbg])
 	if state == State.RUNNING:
 		race_time += delta
 		if grace_left > 0.0:
@@ -1646,7 +1659,7 @@ func _build_teams() -> void:
 		if Net.blind and not solo:
 			car.add_lights()
 		ts.car = car
-		if t == my_team:
+		if t == my_team and not Net.dedicated:
 			car.enable_mirrors(my_role)
 			car.bind_radio()
 		car.set_plate_text(str(Net.players.get(ts.driver_id, char(65 + t))))

@@ -6,6 +6,9 @@ extends Node
 const PORT := 24565
 const DISCOVERY_PORT := 24566
 const MAX_PLAYERS := 8
+## one server process per mode: coop (1 team), team race (2 teams), free-for-all (4 players)
+const ONLINE_PORTS := {"coop": 24570, "teams": 24571, "ffa": 24572}
+const SERVER_FILE := "user://online_server.txt"
 const MENU_SCENE := "res://scenes/main.tscn"
 const WORLD_SCENE := "res://scenes/world.tscn"
 
@@ -30,6 +33,8 @@ var blind := true      # driver can hardly see (co-driver must guide)
 var in_game := false
 var race_over := false
 var is_hosting := false
+var dedicated := false   # headless online server: nobody sits at the server, it only runs the room + physics
+var port := PORT
 var pending_message := ""
 var found_hosts := {}   # ip -> {name, count, required, time}
 var loadouts := {}      # peer -> cosmetic / car loadout (see Profile.loadout)
@@ -48,12 +53,75 @@ var _starting := false
 
 
 func _ready() -> void:
+	_boot_server_if_asked()
 	DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_LANDSCAPE)
 	_setup_inputs()
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.connected_to_server.connect(_on_connected)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
+
+
+func saved_server() -> String:
+	if FileAccess.file_exists(SERVER_FILE):
+		return FileAccess.get_file_as_string(SERVER_FILE).strip_edges()
+	return ""
+
+
+func save_server(addr: String) -> void:
+	var f := FileAccess.open(SERVER_FILE, FileAccess.WRITE)
+	if f:
+		f.store_string(addr)
+
+
+## `godot --headless -- --server [--port=24565] [--ffa=4 | --teams=2 | --squads=2 --ffa=6]`
+func _boot_server_if_asked() -> void:
+	var args := OS.get_cmdline_user_args()
+	if not args.has("--server"):
+		return
+	var opt := {"port": PORT, "ffa": 0, "teams": 0, "squads": 0}
+	for a in args:
+		for k in opt.keys():
+			if a.begins_with("--%s=" % k):
+				opt[k] = int(a.substr(k.length() + 3))
+	if int(opt["ffa"]) == 0 and int(opt["teams"]) == 0:
+		opt["ffa"] = 4
+	port = int(opt["port"])
+	dedicated = true
+	var err := host_dedicated(int(opt["teams"]), int(opt["ffa"]), int(opt["squads"]))
+	print("RALLY SERVER port=%d players=%d err=%d" % [port, required_players, err])
+	get_tree().change_scene_to_file.call_deferred("res://scenes/server.tscn")
+
+
+## one room, no host player. Mode comes from the command line.
+func host_dedicated(teams: int, p_ffa: int, p_squads: int) -> int:
+	var err := host_game("Server", teams, false, p_ffa, p_squads)
+	if err != OK:
+		return err
+	players.clear()
+	loadouts.clear()
+	rdy.clear()
+	present.clear()
+	dedicated = true
+	_bcast.close()
+	return OK
+
+
+## back to an empty waiting room (after a race, or when everybody left)
+func server_idle() -> void:
+	if not dedicated:
+		return
+	in_game = false
+	race_over = false
+	in_room = true
+	_starting = false
+	lobby_cd = -1.0
+	roles.clear()
+	team_of.clear()
+	for id in players:
+		rdy[id] = false
+	_broadcast_players()
+	get_tree().change_scene_to_file("res://scenes/server.tscn")
 
 
 func _setup_inputs() -> void:
@@ -109,7 +177,7 @@ func host_game(p_name: String, teams: int, p_blind := true, p_ffa := 0, p_squads
 		team_count = clampi(teams, 1, 4)
 		required_players = team_count * 2
 	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_server(PORT, MAX_PLAYERS)
+	var err := peer.create_server(port, MAX_PLAYERS)
 	if err != OK:
 		return err
 	multiplayer.multiplayer_peer = peer
@@ -169,7 +237,13 @@ func join_game(ip: String, p_name: String) -> int:
 	leave()
 	player_name = p_name
 	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_client(ip.strip_edges(), PORT)
+	var host := ip.strip_edges()
+	var cport := PORT
+	if host.count(":") == 1:
+		var parts := host.split(":")
+		host = parts[0]
+		cport = int(parts[1])
+	var err := peer.create_client(host, cport)
 	if err != OK:
 		return err
 	multiplayer.multiplayer_peer = peer
@@ -194,6 +268,7 @@ func leave() -> void:
 	in_game = false
 	race_over = false
 	is_hosting = false
+	dedicated = false
 	_starting = false
 	_bcast.close()
 
@@ -230,8 +305,40 @@ func _all_ready() -> bool:
 	return true
 
 
+## online matchmaking: nobody presses READY. Full room -> 8 s countdown, enough players -> 30 s wait for more.
+const Q_FULL_WAIT := 8.0
+const Q_WAIT := 30.0
+
+
+func _queue_tick(delta: float) -> void:
+	var n := players.size()
+	var min_start := 2 if (ffa or required_players <= 2) else 4
+	var enough := n >= required_players or (n >= min_start and (ffa or n % 2 == 0))
+	if not enough:
+		if lobby_cd >= 0.0:
+			lobby_cd = -1.0
+			_broadcast_players()
+		return
+	if lobby_cd < 0.0:
+		lobby_cd = Q_FULL_WAIT if n >= required_players else Q_WAIT
+		_cd_shown = ceili(lobby_cd)
+		_broadcast_players()
+	elif n >= required_players and lobby_cd > Q_FULL_WAIT:
+		lobby_cd = Q_FULL_WAIT
+	lobby_cd -= delta
+	var whole := ceili(lobby_cd)
+	if whole != _cd_shown:
+		_cd_shown = whole
+		_broadcast_players()
+	if lobby_cd <= 0.0:
+		lobby_cd = -1.0
+		start_now()
+
+
 func _process(delta: float) -> void:
-	if is_hosting and multiplayer.is_server() and not _starting and in_room:
+	if dedicated and in_room and not _starting and not in_game:
+		_queue_tick(delta)
+	elif is_hosting and multiplayer.is_server() and not _starting and in_room:
 		if _all_ready():
 			if lobby_cd < 0.0:
 				lobby_cd = 5.0
@@ -249,7 +356,7 @@ func _process(delta: float) -> void:
 		elif lobby_cd >= 0.0:
 			lobby_cd = -1.0
 			_broadcast_players()
-	if is_hosting and not in_game:
+	if is_hosting and not in_game and not dedicated:
 		_bcast_timer -= delta
 		if _bcast_timer <= 0.0:
 			_bcast_timer = 1.0
@@ -280,11 +387,13 @@ func register(p_name: String) -> void:
 	if not multiplayer.is_server():
 		return
 	var id := multiplayer.get_remote_sender_id()
+	if dedicated:
+		print("REGISTER ", id, " ", p_name, " in_game=", in_game, " n=", players.size(), "/", required_players)
 	if in_game or players.size() >= required_players:
 		multiplayer.multiplayer_peer.disconnect_peer(id)
 		return
 	players[id] = p_name.substr(0, 16)
-	rdy[id] = false
+	rdy[id] = dedicated
 	present[id] = true
 	loadouts[id] = {}
 	_broadcast_players()
@@ -389,6 +498,8 @@ func start_now() -> void:
 	if not multiplayer.is_server():
 		return
 	_starting = true
+	if dedicated:
+		print("START_NOW players=", players, " req=", required_players)
 	for id in players:
 		rdy[id] = false
 	var ids: Array = players.keys()   # join order: host first
@@ -481,3 +592,5 @@ func _on_peer_disconnected(id: int) -> void:
 	if lobby_cd >= 0.0:
 		lobby_cd = -1.0
 	_broadcast_players()
+	if dedicated and players.is_empty() and in_game:
+		server_idle()
