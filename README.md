@@ -194,3 +194,10 @@
 - PLAY screen: three choices - Solo / Online (coming soon, needs a server) / LAN (coop, teams, FFA, game list, IP join).
 - Per-car instrument pod (placement, hood, bezel) and per-car wing mirrors (round, bullet, truck, bar, aero) + framed rear-view mirror.
 - Tested only as desktop screenshots; not on a real phone.
+
+## Update 12 - online
+- PLAY now has Solo / Online / LAN. Online: type the server IP (saved), pick a mode, queue; the race starts automatically.
+- Headless server mode: `godot --headless -- --server --port=24570 --teams=1` (see server/README_SERVER.md, workflow "Online Server (Linux)").
+- Matchmaking on the server: full room -> 8 s, minimum players -> 30 s wait, room reopens 12 s after a race.
+- Tested only locally: 1 headless server + 2 clients on one machine. Not tested over the internet or on phones.
+- Per-car gauge pods + wing mirrors (update 11).
