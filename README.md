@@ -186,3 +186,11 @@
 - **الأيقونة والغلاف**: `art/icon.png` (1024×1024 أيقونة التطبيق) و`art/cover.png` (1920×1080 غلاف للمتجر وتيك توك/يوتيوب).
 - **الرخصة**: ملف `LICENSE` (عربي + إنجليزي) — ملكية خاصة لـ AVF، ممنوع النسخ والتعديل والحذف وإعادة النشر ورفع اللعبة باسم أحد آخر. كل ملفات الكود فيها ترويسة حقوق، وفي الإعدادات قسم "حول اللعبة والرخصة".
 - **مهم**: الرخصة نص قانوني وليست حماية تقنية. الحماية الفعلية: خلّ مستودع GitHub **Private** ولا تشارك الكود أو الـ APK/IPA إلا مع من تثق به.
+
+## Update 11
+- New finish card (ResultCard) with medal, time, rewards and standings.
+- Intro logo centred.
+- Coin shop (Billing/Checkout). Payments are NOT live: Billing.enabled=false; a store IAP plugin / merchant account is needed.
+- PLAY screen: three choices - Solo / Online (coming soon, needs a server) / LAN (coop, teams, FFA, game list, IP join).
+- Per-car instrument pod (placement, hood, bezel) and per-car wing mirrors (round, bullet, truck, bar, aero) + framed rear-view mirror.
+- Tested only as desktop screenshots; not on a real phone.
