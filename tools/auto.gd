@@ -39,6 +39,12 @@ func _process(d: float) -> void:
 			elif step == 4 and t > 5.2:
 				step = 5; shot("menu_lan")
 			elif step == 5 and t > 5.4:
+				step = 6
+				sc._show_lan(false)
+				sc._show_online(true)
+			elif step == 6 and t > 6.3:
+				step = 7; shot("menu_online")
+			elif step == 7 and t > 6.5:
 				get_tree().quit()
 		"garage":
 			if step == 0 and t > 2.5:
@@ -286,6 +292,26 @@ func _process(d: float) -> void:
 					w._end_race()
 			elif step == 2 and t > float(OS.get_environment("SHOT_AT")) :
 				step = 3; shot("pod_%s" % OS.get_environment("SHOT_AT"))
+				get_tree().quit()
+		"online":
+			# joins a headless server on 127.0.0.1 (see tools/online_test.sh), readies up, drives, takes shots
+			if step == 0 and t > 2.0:
+				step = 1
+				L.tutorial_off = true
+				Profile.steer_mode = "buttons"
+				Net.joined.connect(func(): print("JOINED"))
+				Net.join_failed.connect(func(): print("JOIN_FAILED"))
+				Net.lobby_closed.connect(func(r): print("CLOSED ", r))
+				var e := Net.join_game(OS.get_environment("SRV") if OS.get_environment("SRV") != "" else "127.0.0.1", OS.get_environment("NAME"))
+				print("JOIN err=", e)
+			elif step == 1 and t > 22.0:
+				step = 2; shot("online_" + OS.get_environment("NAME") + "0")
+				print("INGAME ", Net.in_game, " players=", Net.players)
+				Input.action_press("accel")
+			elif step == 2 and t > 30.0:
+				step = 3; shot("online_" + OS.get_environment("NAME") + "1")
+				var w := get_tree().current_scene
+				print("SCENE ", w.name, " speed=", w.teams[w.my_team].speed if "teams" in w else -1)
 				get_tree().quit()
 		"solo":
 			if step == 0 and t > 2.0:
