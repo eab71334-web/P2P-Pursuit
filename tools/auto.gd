@@ -293,6 +293,28 @@ func _process(d: float) -> void:
 			elif step == 2 and t > float(OS.get_environment("SHOT_AT")) :
 				step = 3; shot("pod_%s" % OS.get_environment("SHOT_AT"))
 				get_tree().quit()
+		"repair":
+			# driver outside the car holding the extinguisher: right hand = body, left hand = nozzle (then covering the engine)
+			if step == 0 and t > 2.0:
+				step = 1
+				L.tutorial_off = true
+				sc._on_solo()
+			elif step == 1 and t > 14.0:
+				step = 2
+				var w = get_tree().current_scene
+				w.local_avatar.go_outside(Vector3(0.9, -0.2, -3.2))
+				w.local_avatar.work = 2
+			elif step == 2 and t > 16.0:
+				step = 3; shot("repair0")
+				get_tree().current_scene.look_pitch = -0.28
+				get_tree().current_scene.local_avatar.cover_hand = true
+			elif step == 3 and t > 17.5:
+				step = 4; shot("repair1")
+				var av2 = get_tree().current_scene.local_avatar
+				av2.cover_hand = false
+			elif step == 4 and t > 19.0:
+				step = 5; shot("repair2")
+				get_tree().quit()
 		"online":
 			# joins a headless server on 127.0.0.1 (see tools/online_test.sh), readies up, drives, takes shots
 			if step == 0 and t > 2.0:
@@ -578,7 +600,7 @@ func _promo(sc: Node) -> void:
 		vb.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		vb.alignment = BoxContainer.ALIGNMENT_CENTER
 		bg.add_child(vb)
-		for e in [["رالي السائق المساعد", 92, Color(1, 0.55, 0.12)], ["العب مع صاحبك على نفس الواي فاي", 48, Color(1, 1, 1)], ["iPhone + Android", 38, Color(0.6, 0.65, 0.72)]]:
+		for e in [["هيربن راش", 92, Color(1, 0.55, 0.12)], ["العب مع صاحبك على نفس الواي فاي", 48, Color(1, 1, 1)], ["iPhone + Android", 38, Color(0.6, 0.65, 0.72)]]:
 			var l := Label.new()
 			l.text = e[0]
 			l.add_theme_font_size_override("font_size", e[1])
@@ -754,7 +776,7 @@ func _film(sc: Node) -> void:
 			vb.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			vb.alignment = BoxContainer.ALIGNMENT_CENTER
 			bg.add_child(vb)
-			for e in [["رالي السائق المساعد", 92, Color(1, 0.55, 0.12)], ["العب مع صاحبك على نفس الواي فاي", 48, Color(1, 1, 1)], ["iPhone + Android", 38, Color(0.6, 0.65, 0.72)]]:
+			for e in [["هيربن راش", 92, Color(1, 0.55, 0.12)], ["العب مع صاحبك على نفس الواي فاي", 48, Color(1, 1, 1)], ["iPhone + Android", 38, Color(0.6, 0.65, 0.72)]]:
 				var l := Label.new()
 				l.text = e[0]
 				l.add_theme_font_size_override("font_size", e[1])
@@ -987,7 +1009,7 @@ func _film2(sc: Node) -> void:
 			vb.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			vb.alignment = BoxContainer.ALIGNMENT_CENTER
 			bg.add_child(vb)
-			for e in [["رالي السائق المساعد", 96, Color(1, 0.55, 0.12)], ["سباق 6 لاعبين على نفس الواي فاي", 50, Color(1, 1, 1)], ["iPhone + Android", 38, Color(0.6, 0.65, 0.72)]]:
+			for e in [["هيربن راش", 96, Color(1, 0.55, 0.12)], ["سباق 6 لاعبين على نفس الواي فاي", 50, Color(1, 1, 1)], ["iPhone + Android", 38, Color(0.6, 0.65, 0.72)]]:
 				var l := Label.new()
 				l.text = e[0]
 				l.add_theme_font_size_override("font_size", e[1])
@@ -1095,7 +1117,7 @@ func _icon(sc: Node) -> void:
 			cl.layer = 50
 			root.add_child(cl)
 			var yy := 240.0
-			for e2 in [["رالي السائق المساعد", 58, Color(1, 0.58, 0.14)], ["CO-DRIVER RALLY", 32, Color(0.9, 0.92, 0.97)], ["سباق تعاوني على الواي فاي", 24, Color(0.62, 0.67, 0.75)]]:
+			for e2 in [["هيربن راش", 58, Color(1, 0.58, 0.14)], ["HAIRPIN RUSH", 32, Color(0.9, 0.92, 0.97)], ["سباق تعاوني على الواي فاي", 24, Color(0.62, 0.67, 0.75)]]:
 				var l := Label.new()
 				l.text = e2[0]
 				l.add_theme_font_size_override("font_size", e2[1])
