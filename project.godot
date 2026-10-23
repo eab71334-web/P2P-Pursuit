@@ -3,10 +3,12 @@ config_version=5
 
 [application]
 
-config/name="Co-Driver Rally"
+config/name="Hairpin Rush"
 run/main_scene="res://scenes/intro.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 config/icon="res://art/icon.png"
+boot_splash/show_image=false
+boot_splash/bg_color=Color(0.03, 0.03, 0.04, 1)
 
 [autoload]
 

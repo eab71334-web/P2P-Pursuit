@@ -201,3 +201,11 @@
 - Matchmaking on the server: full room -> 8 s, minimum players -> 30 s wait, room reopens 12 s after a race.
 - Tested only locally: 1 headless server + 2 clients on one machine. Not tested over the internet or on phones.
 - Per-car gauge pods + wing mirrors (update 11).
+
+## Update 13
+- Game renamed: **Hairpin Rush / هيربن راش** (bundle id unchanged so builds keep updating).
+- Godot boot logo removed (dark launch screen, also set for the iOS launch colour).
+- Coins: $1 = 10,000 (10k / 22k / 60k / 130k / 280k). Gems packs added with the old price steps ($0.99-$19.99: 80 / 170 / 450 / 950 / 2000). Payments still NOT live (Billing.enabled=false).
+- Chests: every level = wooden chest, every 3rd level = + silver chest, every 10th level = + gold chest (always a legendary item). All chests can be bought with gems (15 / 40 / 120). Daily-quest bonus is now a silver chest.
+- Fire repair: the free hand now holds the extinguisher nozzle (hose from the valve); it still switches to the engine cover when needed (repair method unchanged).
+- New cover/icon art with the new name.
