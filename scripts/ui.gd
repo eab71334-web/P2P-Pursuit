@@ -1,3 +1,4 @@
+# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
 class_name UI
 extends RefCounted
 ## Shared look for the hub screens (garage, workshop, character, shop, quests).

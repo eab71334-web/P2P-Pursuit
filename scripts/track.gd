@@ -1,3 +1,4 @@
+# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
 class_name Track
 extends RefCounted
 ## Procedural rally stage. The same seed always gives the same stage on every machine.
@@ -5,7 +6,7 @@ extends RefCounted
 ## and the "pace notes" (Chill left, Yikes right, Fork...) that the co-driver reads.
 
 const STEP := 5.0
-const ROAD_WIDTH := 11.0
+const ROAD_WIDTH := 14.0
 const TOTAL_LENGTH := 2600.0
 const ANGLES := [18.0, 32.0, 50.0, 75.0, 105.0, 150.0]
 const RADII := [140.0, 90.0, 62.0, 42.0, 28.0, 17.0]

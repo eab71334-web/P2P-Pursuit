@@ -1,3 +1,4 @@
+# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
 class_name SteerUI
 extends RefCounted
 ## Steering controls for touch screens: a mode picker shown once before the first race, and the on-screen wheel.

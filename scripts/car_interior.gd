@@ -1,3 +1,4 @@
+# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
 class_name CarInterior
 extends RefCounted
 ## Cabin of every car: dash, console, bucket seats, door cards, head-liner, steering wheel and the radio head unit.

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
 extends Node3D
 ## The race. Server = authority (runs every car's physics). Clients send input and show the state.
 ## Each team = 1 car with 2 players: the DRIVER steers, the CO-DRIVER (map holder) reads the map,

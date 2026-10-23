@@ -1,3 +1,4 @@
+# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
 extends Node
 ## Autoload "Gfx": performance + quality settings (frame rate cap, presets, weak-device mode, dynamic resolution)
 ## and audio levels. Every heavy feature of the game asks this node how much it may spend.

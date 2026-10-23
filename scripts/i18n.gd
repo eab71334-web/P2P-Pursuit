@@ -1,3 +1,4 @@
+# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
 extends Node
 ## Tiny translation system (English / Arabic). Use L.t("key") everywhere. The choice is saved.
 

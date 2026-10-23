@@ -1,3 +1,4 @@
+# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
 extends Node
 ## Autoload "Profile": the player's garage, outfit, coins, level, daily quests and chests (saved on the device).
 

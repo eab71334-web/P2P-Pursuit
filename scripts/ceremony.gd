@@ -1,3 +1,4 @@
+# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
 class_name Ceremony
 extends Node3D
 ## Victory ceremony after the race: a night stage with a real podium (1st in the middle, 2nd left, 3rd right),

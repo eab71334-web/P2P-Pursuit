@@ -1,3 +1,4 @@
+# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
 class_name SettingsUI
 extends Control
 ## Settings tab: performance presets (incl. weak-device mode), frame-rate cap, advanced graphics, audio.
@@ -84,6 +85,10 @@ func _build() -> void:
 	if weak:
 		var tip := UI.lbl(_box, UI.tx("Tip: close other apps, and set the phone to battery-saver off for steady FPS.", "نصيحة: سكّر التطبيقات الثانية وأوقف وضع توفير الطاقة عشان تثبت الفريمات."), 15, UI.TXT2)
 		tip.custom_minimum_size = Vector2(300, 0)
+	_head(UI.tx("ABOUT & LICENSE", "حول اللعبة والرخصة"))
+	var lic := UI.lbl(_box, UI.tx("Co-Driver Rally  (c) 2026 AVF. All rights reserved.\nThis game, its code, art, sounds and all files are the exclusive property of AVF. Copying, modifying, redistributing, re-publishing, selling, extracting assets or removing this notice is prohibited without written permission.", "رالي السائق المساعد  (c) 2026 AVF. جميع الحقوق محفوظة.\nهذه اللعبة وكودها وصورها وأصواتها وكل ملفاتها ملكٌ حصريٌّ لـ AVF. يُمنع النسخ أو التعديل أو إعادة التوزيع أو النشر أو البيع أو استخراج الملفات أو إزالة هذا الإشعار دون إذن كتابي."), 14, UI.TXT2)
+	lic.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lic.custom_minimum_size = Vector2(300, 0)
 	var sp := Control.new()
 	sp.custom_minimum_size = Vector2(0, 20)
 	_box.add_child(sp)

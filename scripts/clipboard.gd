@@ -1,3 +1,4 @@
+# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
 class_name Clipboard
 extends Control
 ## The co-driver's clipboard: stage map (with CLOSED roads in red) + the next pace notes.

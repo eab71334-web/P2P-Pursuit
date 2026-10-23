@@ -1,3 +1,4 @@
+# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
 class_name HubArt
 extends RefCounted
 ## Small vector illustrations for the garage and chest screens (drawn with _draw, no textures).

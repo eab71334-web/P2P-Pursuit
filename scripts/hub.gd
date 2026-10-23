@@ -1,3 +1,4 @@
+# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
 class_name Hub
 extends Control
 ## The "game hub": top bar (level, coins, gems) + tabs PLAY / GARAGE / WORKSHOP / CHARACTER / SHOP / QUESTS / CHESTS.

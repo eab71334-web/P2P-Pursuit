@@ -1,3 +1,4 @@
+# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
 class_name Catalog
 extends RefCounted
 ## Static game data: cars, paints, outfit items, emotes, upgrades, quests. Names are [en, ar].

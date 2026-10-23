@@ -1,3 +1,4 @@
+# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
 class_name Avatar
 extends Node3D
 ## A blocky player character sitting in a car seat (long cream arms like in the video).

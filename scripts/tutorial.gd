@@ -1,3 +1,4 @@
+# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
 class_name Tutorial
 extends Control
 ## "How to play" slides shown before the race. Animated pictures, can be skipped.
