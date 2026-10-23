@@ -11,11 +11,22 @@ var _rows := {}
 
 
 class CoinStack extends Control:
-	func _init() -> void:
+	var gems := false
+
+	func _init(p_gems := false) -> void:
+		gems = p_gems
 		custom_minimum_size = Vector2(96, 70)
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	func _draw() -> void:
+		if gems:
+			var gc := Color(0.45, 0.9, 1.0)
+			for i in 3:
+				var c := Vector2(size.x * 0.5 + (i - 1) * 18, 40 - i * 4)
+				var pts := PackedVector2Array([c + Vector2(0, -22), c + Vector2(18, -6), c + Vector2(0, 22), c + Vector2(-18, -6)])
+				draw_colored_polygon(pts, gc.darkened(0.35))
+				draw_colored_polygon(PackedVector2Array([c + Vector2(0, -17), c + Vector2(13, -5), c + Vector2(0, 16), c + Vector2(-13, -5)]), gc)
+			return
 		var g := Color(1.0, 0.8, 0.2)
 		for i in 3:
 			var c := Vector2(size.x * 0.5 + (i - 1) * 16, 44 - i * 6)
@@ -62,12 +73,13 @@ func _build(on_close: Callable) -> void:
 	var sh := HBoxContainer.new()
 	sh.add_theme_constant_override("separation", 14)
 	sm.add_child(sh)
-	sh.add_child(CoinStack.new())
+	sh.add_child(CoinStack.new(pack["kind"] == "gems"))
 	var sv := VBoxContainer.new()
 	sv.alignment = BoxContainer.ALIGNMENT_CENTER
 	sv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sh.add_child(sv)
-	UI.lbl(sv, "%s %s" % [_fmt(int(pack["coins"])), UI.tx("coins", "عملة")], 30, Color(1.0, 0.86, 0.35), false)
+	var gem_pack: bool = pack["kind"] == "gems"
+	UI.lbl(sv, "%s %s" % [_fmt(int(pack["amount"])), UI.tx("gems", "جوهرة") if gem_pack else UI.tx("coins", "عملة")], 30, Color(0.55, 0.92, 1.0) if gem_pack else Color(1.0, 0.86, 0.35), false)
 	if str(pack["bonus"]) != "":
 		UI.lbl(sv, UI.tx("Bonus ", "مكافأة ") + str(pack["bonus"]), 16, UI.OK, false)
 	UI.lbl(sh, "$" + str(pack["price"]), 34, UI.TXT, false)

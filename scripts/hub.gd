@@ -153,13 +153,12 @@ func _build() -> void:
 	var logo := VBoxContainer.new()
 	logo.add_theme_constant_override("separation", 0)
 	sv.add_child(logo)
-	UI.lbl(logo, "CO-DRIVER", 25, UI.TXT, false)
-	var rl := UI.lbl(logo, "RALLY", 25, UI.ACCENT, false)
+	UI.lbl(logo, "HAIRPIN", 25, UI.TXT, false)
+	var rl := UI.lbl(logo, "RUSH", 25, UI.ACCENT, false)
 	rl.add_theme_constant_override("outline_size", 0)
 	if L.is_ar():
-		logo.get_child(0).text = "رالي"
-		rl.text = "السائق المساعد"
-		rl.add_theme_font_size_override("font_size", 21)
+		logo.get_child(0).text = "هيربن"
+		rl.text = "راش"
 	var bar := ColorRect.new()
 	bar.color = UI.ACCENT
 	bar.custom_minimum_size = Vector2(46, 3)
@@ -1066,18 +1065,12 @@ func _tab_character() -> Control:
 
 # ====================================================================== SHOP
 
-func _tab_shop() -> Control:
-	var sc := TScroll.new()
-	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	var vb := VBoxContainer.new()
-	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vb.add_theme_constant_override("separation", 12)
-	sc.add_child(vb)
-	UI.lbl(vb, UI.tx("COINS", "العملات"), 28, UI.GOLD, false)
+func _pack_section(vb: VBoxContainer, title: String, list: Array, gems: bool) -> void:
+	UI.lbl(vb, title, 28, Color(0.55, 0.92, 1.0) if gems else UI.GOLD, false)
 	var packs := HBoxContainer.new()
 	packs.add_theme_constant_override("separation", 10)
 	vb.add_child(packs)
-	for pk in Billing.PACKS:
+	for pk in list:
 		var pp := UI.panel(packs, UI.CARD, 16)
 		pp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var best: bool = str(pk["tag"]) != ""
@@ -1088,9 +1081,9 @@ func _tab_shop() -> Control:
 		pp.add_child(pv)
 		var tg := UI.lbl(pv, UI.tx("BEST VALUE", "الأفضل قيمة") if pk["tag"] == "best" else (UI.tx("POPULAR", "الأكثر شراء") if pk["tag"] == "popular" else " "), 13, UI.GOLD, false)
 		tg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		var cs := Checkout.CoinStack.new()
+		var cs := Checkout.CoinStack.new(gems)
 		pv.add_child(cs)
-		var cn := UI.lbl(pv, "%d" % int(pk["coins"]), 26, Color(1.0, 0.86, 0.35), false)
+		var cn := UI.lbl(pv, "%d" % int(pk["amount"]), 26, Color(0.55, 0.92, 1.0) if gems else Color(1.0, 0.86, 0.35), false)
 		cn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		var bn := UI.lbl(pv, str(pk["bonus"]) if str(pk["bonus"]) != "" else " ", 15, UI.OK, false)
 		bn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1098,6 +1091,17 @@ func _tab_shop() -> Control:
 		UI.btn(pv, "$" + str(pk["price"]), UI.ACCENT, func():
 			Sfx.play("click", -6.0)
 			Checkout.open(self, Billing.pack(pid)), 20, Vector2(0, 46))
+
+
+func _tab_shop() -> Control:
+	var sc := TScroll.new()
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var vb := VBoxContainer.new()
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.add_theme_constant_override("separation", 12)
+	sc.add_child(vb)
+	_pack_section(vb, UI.tx("COINS", "العملات"), Billing.COIN_PACKS, false)
+	_pack_section(vb, UI.tx("GEMS", "الجواهر"), Billing.GEM_PACKS, true)
 	UI.lbl(vb, UI.tx("DAILY DEALS  -30%", "عروض اليوم  -30%"), 28, UI.GOLD, false)
 	var deals := HBoxContainer.new()
 	deals.add_theme_constant_override("separation", 12)
@@ -1227,10 +1231,10 @@ func _tab_quests() -> Control:
 				say(UI.tx("Reward collected!", "تم استلام الجائزة!"))
 				select("quests"), 22, Vector2(170, 56))
 		b.disabled = q["claimed"] or not done
-	UI.lbl(vb, UI.tx("Finish all 3 quests to win a GOLD chest!", "أنهِ المهام الثلاث واربح صندوقاً ذهبياً!"), 18, UI.TXT2)
+	UI.lbl(vb, UI.tx("Finish all 3 quests to win a SILVER chest!", "أنهِ المهام الثلاث واربح صندوقاً فضياً!"), 18, UI.TXT2)
 	# next level rewards
 	var nr := Catalog.level_reward(Profile.level + 1)
-	UI.lbl(vb, UI.tx("Next level reward: %d coins%s", "جائزة المستوى القادم: %d عملة%s") % [int(nr["coins"]), (" + " + UI.tx("silver chest", "صندوق فضي")) if int(nr["chest"]) > 0 else ""], 18, UI.TXT2)
+	UI.lbl(vb, UI.tx("Next level reward: %d coins%s", "جائزة المستوى القادم: %d عملة%s") % [int(nr["coins"]), (" + " + UI.tx("wooden chest", "صندوق خشبي") + (" + " + UI.tx("silver chest", "صندوق فضي") if (nr["kinds"] as Array).has("silver") else "") + (" + " + UI.tx("GOLD chest (legendary)", "صندوق ذهبي (أسطوري)") if (nr["kinds"] as Array).has("gold") else ""))], 18, UI.TXT2)
 	return sc
 
 

@@ -232,8 +232,8 @@ func add_xp(n: int) -> void:
 		var r := Catalog.level_reward(level)
 		coins += int(r["coins"])
 		gems += int(r["gems"])
-		if int(r["chest"]) > 0:
-			chests["silver"] = int(chests.get("silver", 0)) + 1
+		for k in r["kinds"]:
+			chests[k] = int(chests.get(k, 0)) + 1
 		leveled.emit(level, r)
 	save()
 
@@ -321,7 +321,7 @@ func claim_quest(i: int) -> bool:
 		if not o["claimed"]:
 			all_done = false
 	if all_done:
-		chests["gold"] = int(chests.get("gold", 0)) + 1     # bonus for finishing every daily quest
+		chests["silver"] = int(chests.get("silver", 0)) + 1     # bonus for finishing every daily quest
 	add_xp(int(d["xp"]))
 	return true
 

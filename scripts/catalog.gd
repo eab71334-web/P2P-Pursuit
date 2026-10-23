@@ -351,13 +351,17 @@ static func xp_for(level: int) -> int:
 
 
 ## the loot a level-up gives
+## every level: a wooden chest. Every 3rd level also a silver chest. Every 10th level also a gold chest (legendary loot).
 static func level_reward(level: int) -> Dictionary:
 	var gems := 0
-	var chest := 0
+	var kinds: Array = ["bronze"]
+	if level % 3 == 0:
+		kinds.append("silver")
+	if level % 10 == 0:
+		kinds.append("gold")
 	if level % 5 == 0:
-		chest = 1
 		gems = 10
-	return {"coins": 250 + level * 60, "gems": gems, "chest": chest}
+	return {"coins": 250 + level * 60, "gems": gems, "chest": kinds.size(), "kinds": kinds}
 
 
 # ---------------------------------------------------------------- quests
@@ -377,10 +381,11 @@ const QUEST_POOL := [
 ]
 
 # chest loot: weight per rarity
+## key "bronze" is kept for old saves; it is shown as the WOODEN chest
 const CHESTS := {
-	"bronze": {"n": ["Bronze chest", "صندوق برونزي"], "w": [70, 25, 5, 0], "coins": 500, "c": Color(0.8, 0.5, 0.25)},
-	"silver": {"n": ["Silver chest", "صندوق فضي"], "w": [40, 40, 17, 3], "gem": 25, "c": Color(0.78, 0.82, 0.9)},
-	"gold": {"n": ["Gold chest", "صندوق ذهبي"], "w": [10, 40, 35, 15], "gem": 70, "c": Color(1.0, 0.78, 0.2)},
+	"bronze": {"n": ["Wooden chest", "صندوق خشبي"], "w": [70, 25, 5, 0], "gem": 15, "c": Color(0.55, 0.36, 0.2)},
+	"silver": {"n": ["Silver chest", "صندوق فضي"], "w": [40, 40, 17, 3], "gem": 40, "c": Color(0.78, 0.82, 0.9)},
+	"gold": {"n": ["Gold chest", "صندوق ذهبي"], "w": [0, 0, 0, 100], "gem": 120, "c": Color(1.0, 0.78, 0.2)},   # always a legendary
 }
 
 

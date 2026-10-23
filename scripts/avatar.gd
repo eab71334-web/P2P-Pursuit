@@ -36,6 +36,8 @@ var work := 0              # 0 none, 1 reaching for the hood, 2 holding the exti
 var reach_t := 0.0         # 0 hood closed .. 1 hood fully up
 var cover_hand := false    # left hand on the engine cover
 var _ext: Node3D
+var _hose: MeshInstance3D       # rubber hose from the extinguisher valve to the left hand
+var _nozzle: MeshInstance3D     # nozzle held in the left hand
 var _seat_pos := Vector3.ZERO
 var map_screen: MapScreen
 var ipad_tex: Texture2D     # live map texture (local co-driver only)
@@ -422,6 +424,11 @@ func go_outside(pos: Vector3) -> void:
 		_box(_ext, Vector3(0.13, 0.4, 0.13), Vector3(0, 0, 0), Color(0.85, 0.08, 0.08))
 		_box(_ext, Vector3(0.1, 0.06, 0.1), Vector3(0, 0.23, 0), Color(0.1, 0.1, 0.1))
 		_box(_ext, Vector3(0.04, 0.04, 0.22), Vector3(0, 0.2, -0.1), Color(0.1, 0.1, 0.1))
+	if _hose == null:
+		_hose = _box(self, Vector3(0.028, 0.028, 1.0), Vector3.ZERO, Color(0.08, 0.08, 0.09))
+		_nozzle = _box(self, Vector3(0.06, 0.06, 1.0), Vector3.ZERO, Color(0.85, 0.08, 0.08))
+		_hose.visible = false
+		_nozzle.visible = false
 	_ext.visible = false
 
 
@@ -434,6 +441,9 @@ func reseat() -> void:
 	work = 0
 	if _ext:
 		_ext.visible = false
+	if _hose:
+		_hose.visible = false
+		_nozzle.visible = false
 
 
 func go_inside() -> void:
@@ -511,7 +521,7 @@ func _process(delta: float) -> void:
 		var b := Vector3(0.3, 0.6, -0.55)
 		if work == 2:
 			dr = Vector3(0.22, 0.12, -0.6)
-			dl = Vector3(-0.1, -0.2, -0.65) if cover_hand else Vector3(-0.3, -0.05, -0.4)
+			dl = Vector3(-0.1, -0.2, -0.65) if cover_hand else Vector3(-0.14, 0.34, -0.74)    # free hand holds the nozzle
 		else:
 			dr = a.lerp(b, reach_t)
 			dl = Vector3(-a.x, a.y, a.z).lerp(Vector3(-b.x, b.y, b.z), reach_t)
@@ -544,6 +554,16 @@ func _process(delta: float) -> void:
 		_ext.visible = outside and work == 2
 		_ext.position = h + Vector3(0.0, 0.1, 0.0)
 		_ext.rotation.x = deg_to_rad(-75.0)
+	if _hose:
+		var holding := outside and work == 2 and not cover_hand
+		_hose.visible = holding
+		_nozzle.visible = holding
+		if holding:
+			var lh: Vector3 = _limbs["L"]["hand"].position
+			var valve := _ext.position + _ext.transform.basis * Vector3(0, 0.25, 0)
+			var nd := (lh - valve).normalized()
+			_place(_hose, valve, lh - nd * 0.02)
+			_place(_nozzle, lh - nd * 0.04, lh + nd * 0.1)
 	if pointing:
 		_place(_finger, h, h + dir * 0.24)
 	_palm.visible = role == "navigator" and punch_t < 0.0 and gesture == Gesture.STOP and not outside

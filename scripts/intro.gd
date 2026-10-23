@@ -158,7 +158,7 @@ func _build_ui() -> void:
 	_title.alignment = BoxContainer.ALIGNMENT_CENTER
 	_title.add_theme_constant_override("separation", 4)
 	cl.add_child(_title)
-	for e2 in [["رالي السائق المساعد", 50, Color(1, 0.58, 0.14)], ["CO-DRIVER RALLY", 28, Color(0.9, 0.92, 0.97)], ["© 2026 AVF", 18, Color(0.55, 0.6, 0.68)]]:
+	for e2 in [["هيربن راش", 50, Color(1, 0.58, 0.14)], ["HAIRPIN RUSH", 28, Color(0.9, 0.92, 0.97)], ["© 2026 AVF", 18, Color(0.55, 0.6, 0.68)]]:
 		var l := Label.new()
 		l.text = e2[0]
 		l.add_theme_font_size_override("font_size", e2[1])

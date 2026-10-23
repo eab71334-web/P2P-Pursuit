@@ -8,12 +8,21 @@ extends RefCounted
 
 static var enabled := false
 
-const PACKS := [
-	{"id": "c500", "coins": 500, "price": "0.99", "bonus": "", "tag": ""},
-	{"id": "c1300", "coins": 1300, "price": "1.99", "bonus": "+30%", "tag": ""},
-	{"id": "c3500", "coins": 3500, "price": "4.99", "bonus": "+40%", "tag": "popular"},
-	{"id": "c8000", "coins": 8000, "price": "9.99", "bonus": "+60%", "tag": ""},
-	{"id": "c20000", "coins": 20000, "price": "19.99", "bonus": "+100%", "tag": "best"},
+## coins: $1 = 10,000 (mid-range economy)
+const COIN_PACKS := [
+	{"id": "c10k", "kind": "coins", "amount": 10000, "price": "1.00", "bonus": "", "tag": ""},
+	{"id": "c22k", "kind": "coins", "amount": 22000, "price": "2.00", "bonus": "+10%", "tag": ""},
+	{"id": "c60k", "kind": "coins", "amount": 60000, "price": "5.00", "bonus": "+20%", "tag": "popular"},
+	{"id": "c130k", "kind": "coins", "amount": 130000, "price": "10.00", "bonus": "+30%", "tag": ""},
+	{"id": "c280k", "kind": "coins", "amount": 280000, "price": "20.00", "bonus": "+40%", "tag": "best"},
+]
+## gems: the same price steps the coin shop used before
+const GEM_PACKS := [
+	{"id": "g80", "kind": "gems", "amount": 80, "price": "0.99", "bonus": "", "tag": ""},
+	{"id": "g170", "kind": "gems", "amount": 170, "price": "1.99", "bonus": "+5%", "tag": ""},
+	{"id": "g450", "kind": "gems", "amount": 450, "price": "4.99", "bonus": "+10%", "tag": "popular"},
+	{"id": "g950", "kind": "gems", "amount": 950, "price": "9.99", "bonus": "+15%", "tag": ""},
+	{"id": "g2000", "kind": "gems", "amount": 2000, "price": "19.99", "bonus": "+25%", "tag": "best"},
 ]
 
 const METHODS := [
@@ -24,7 +33,7 @@ const METHODS := [
 
 
 static func pack(id: String) -> Dictionary:
-	for p in PACKS:
+	for p in COIN_PACKS + GEM_PACKS:
 		if p["id"] == id:
 			return p
 	return {}
@@ -35,6 +44,9 @@ static func grant(pack_id: String) -> bool:
 	var p := pack(pack_id)
 	if p.is_empty():
 		return false
-	Profile.coins += int(p["coins"])
+	if p["kind"] == "gems":
+		Profile.gems += int(p["amount"])
+	else:
+		Profile.coins += int(p["amount"])
 	Profile.save()
 	return true

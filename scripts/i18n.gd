@@ -10,7 +10,7 @@ var tutorial_off := false
 const T := {
 	"z_emote": ["EMOTE", "حركة"],
 	"boom_soon": ["%s: fire spreading - EXPLOSION coming!", "%s: الحريق ينتشر - انفجار قريب!"],
-	"title": ["CO-DRIVER RALLY", "رالي السائق المساعد"],
+	"title": ["HAIRPIN RUSH", "هيربن راش"],
 	"subtitle": ["Drive blind. Read the map. Trust your partner.", "سوق وأنت شبه أعمى. اقرأ الخريطة. ثق بصاحبك."],
 	"name": ["YOUR NAME", "اسمك"],
 	"solo": ["SOLO PRACTICE", "تدريب فردي"],

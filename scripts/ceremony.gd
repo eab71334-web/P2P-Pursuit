@@ -170,7 +170,7 @@ func _build_stage() -> void:
 	screen.material_override = sm2
 	screen.position = Vector3(0, 4.5, -16.72)
 	add_child(screen)
-	_label(self, "CO-DRIVER RALLY", 220, Vector3(0, 6.3, -16.6), Color(1, 1, 1, 0.95), 0.009)
+	_label(self, "HAIRPIN RUSH", 220, Vector3(0, 6.3, -16.6), Color(1, 1, 1, 0.95), 0.009)
 	if stage_name != "":
 		_label(self, stage_name.to_upper(), 120, Vector3(0, 4.5, -16.6), Color(1.0, 0.85, 0.5), 0.0065)
 	# LED stripes
