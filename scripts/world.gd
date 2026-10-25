@@ -63,10 +63,25 @@ class TeamState extends RefCounted:
 	var warned := 0
 	var boom_t := 0.0
 	var alarm_i := -1
+	var bot := false          # driven by the server (solo races with opponents)
+	var bot_skill := 0.85
+	var bot_name := ""
+	var bot_lo := {}
+	var stuck := 0.0
+	var wob_t := 0.0          # bots: short steering mistakes
+	var wob := 0.0
+	var wob_wait := 4.0
+	var resets := 0
 
 
 var track: Track
 var th: Dictionary
+var weather := "clear"
+var _rain: CPUParticles3D
+var _wx_env: Environment
+var _bolt_wait := 6.0
+var _bolt: ColorRect
+var _obst_at := {}
 var blind_mode := false
 var tutorial_done := false
 var repair_label: Label
@@ -169,14 +184,18 @@ func _ready() -> void:
 		Net.stage = {"seed": Net.track_seed}
 	track = Track.from_stage(Net.stage)
 	th = THEMES[track.theme]
+	weather = str(Net.stage.get("weather", "clear"))
 	blind_mode = Net.blind and my_role == "driver" and not solo
 	if my_role == "navigator" or solo:
 		_build_ipad()
 	_build_environment()
 	_build_track()
 	_build_obstacles()
+	for o in track.obstacles:
+		_obst_at[int(o["index"])] = o
 	_build_teams()
 	_build_hud()
+	_build_weather_fx()
 	if not Net.dedicated:
 		director = ReplayDirector.new()
 		add_child(director)
@@ -226,6 +245,10 @@ func _im_ready() -> void:
 
 
 func _tname(idx: int) -> String:
+	if teams[idx].bot:
+		return teams[idx].bot_name
+	if not Net.bots.is_empty():
+		return str(Net.players.get(teams[idx].driver_id, Profile.pname))
 	if Net.ffa:
 		var ts := teams[idx]
 		return str(Net.players.get(ts.driver_id, "?"))
@@ -311,6 +334,7 @@ func all_done(order: Array, pcts: Array) -> void:
 	if not my.finished and not _rewarded:
 		var place := order.find(my_team) + 1
 		var rw := Profile.race_reward(place, Net.team_count, -1, track.theme == "mountain")
+		_career_apply(place, rw)
 		_rewarded = true
 		my_reward_line = _reward_line(rw)
 	if rematch_btn:
@@ -588,15 +612,15 @@ func _physics_process(delta: float) -> void:
 				_wreck(ts)
 		var active := state == State.RUNNING and not ts.finished and not ts.dnf
 		ts.car.hold = not active or ts.phase >= 1
-		if active:
+		if active and not ts.bot:
 			_update_damage(ts, delta)
 		if active and ts.phase == 0:
-			inp = ts.input
+			inp = _bot_input(ts, delta) if ts.bot else ts.input
 			if ts.disturb > 0.0:
 				ts.disturb -= delta
 				inp.x = clampf(inp.x + ts.disturb_dir * 0.9, -1.0, 1.0)
 			_update_progress(ts)
-			ts.car.set_grip(0.28 if (track.ice_at(ts.prog) and not ts.wrong) else 1.0)
+			ts.car.set_grip(0.28 if (track.ice_at(ts.prog) and not ts.wrong) else _weather_grip())
 			if ts.car.global_position.y < track.y_at(ts.prog) - 7.0:
 				ts.penalty += 5.0
 				_reset_team(ts)
@@ -902,6 +926,7 @@ func _server_reset(peer: int) -> void:
 # ====================================================================== local frame loop
 
 func _process(delta: float) -> void:
+	_weather_process(delta)
 	if director and not teams.is_empty():
 		var cars: Array = []
 		for ts in teams:
@@ -1395,10 +1420,171 @@ func _build_environment() -> void:
 		env.fog_light_color = th["hor"]
 		env.fog_density = th["fog"] * Gfx.fog_mul()
 		sun.light_energy = 1.0
+		_apply_weather(env, sm, sun)
+	_wx_env = env
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 	add_child(sun)
+
+
+# ====================================================================== weather + bots
+
+func _apply_weather(env: Environment, sm: ProceduralSkyMaterial, sun: DirectionalLight3D) -> void:
+	match weather:
+		"fog":
+			var g := Color(0.66, 0.69, 0.73)
+			sm.sky_top_color = g
+			sm.sky_horizon_color = g
+			sm.ground_horizon_color = g
+			sm.ground_bottom_color = g
+			env.fog_light_color = g
+			env.fog_density = 0.0125 * Gfx.fog_mul()
+			sun.light_energy = 0.6
+		"rain":
+			var g2 := Color(0.4, 0.43, 0.48)
+			sm.sky_top_color = g2
+			sm.sky_horizon_color = g2.lightened(0.1)
+			sm.ground_horizon_color = g2.lightened(0.1)
+			sm.ground_bottom_color = g2
+			env.fog_light_color = g2.lightened(0.1)
+			env.fog_density = 0.0065 * Gfx.fog_mul()
+			sun.light_energy = 0.5
+			env.ambient_light_energy = 0.75
+		"storm":
+			var g3 := Color(0.2, 0.22, 0.27)
+			sm.sky_top_color = g3
+			sm.sky_horizon_color = g3.lightened(0.08)
+			sm.ground_horizon_color = g3.lightened(0.08)
+			sm.ground_bottom_color = g3
+			env.fog_light_color = g3.lightened(0.08)
+			env.fog_density = 0.0095 * Gfx.fog_mul()
+			sun.light_energy = 0.25
+			env.ambient_light_energy = 0.55
+		"night":
+			sm.sky_top_color = Color(0.008, 0.012, 0.035)
+			sm.sky_horizon_color = Color(0.03, 0.04, 0.09)
+			sm.ground_horizon_color = Color(0.03, 0.04, 0.09)
+			sm.ground_bottom_color = Color(0.015, 0.02, 0.045)
+			env.fog_light_color = Color(0.02, 0.03, 0.07)
+			env.fog_density = 0.006 * Gfx.fog_mul()
+			env.ambient_light_energy = 0.28
+			sun.light_color = Color(0.55, 0.65, 1.0)
+			sun.light_energy = 0.12
+
+
+func _weather_grip() -> float:
+	return {"rain": 0.86, "storm": 0.78}.get(weather, 1.0)
+
+
+func _build_weather_fx() -> void:
+	if Net.dedicated or not (weather in ["rain", "storm"]):
+		return
+	_rain = CPUParticles3D.new()
+	_rain.amount = 700 if weather == "storm" else 450
+	_rain.lifetime = 0.9
+	_rain.preprocess = 1.0
+	_rain.top_level = true
+	_rain.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	_rain.emission_box_extents = Vector3(24, 0.5, 34)
+	_rain.direction = Vector3(0.12, -1, 0)
+	_rain.spread = 2.0
+	_rain.gravity = Vector3(0, -22, 0)
+	_rain.initial_velocity_min = 16.0
+	_rain.initial_velocity_max = 20.0
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.018, 0.75, 0.018)
+	var rm := StandardMaterial3D.new()
+	rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rm.albedo_color = Color(0.85, 0.9, 1.0, 0.6)
+	rm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_rain.mesh = bm
+	_rain.material_override = rm
+	add_child(_rain)
+	if weather == "storm" and hud_root:
+		_bolt = ColorRect.new()
+		_bolt.color = Color(0.85, 0.9, 1.0, 0.0)
+		_bolt.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_bolt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hud_root.add_child(_bolt)
+		hud_root.move_child(_bolt, 0)
+
+
+func _weather_process(delta: float) -> void:
+	if _rain and not teams.is_empty():
+		var c := teams[my_team].car
+		if is_instance_valid(c):
+			_rain.global_position = c.global_position + Vector3(0, 13, -8)
+			_rain.global_rotation = Vector3.ZERO
+	if _bolt:
+		_bolt_wait -= delta
+		if _bolt_wait <= 0.0:
+			_bolt_wait = randf_range(7.0, 16.0)
+			var tw := _bolt.create_tween()
+			tw.tween_property(_bolt, "color:a", 0.55, 0.05)
+			tw.tween_property(_bolt, "color:a", 0.05, 0.08)
+			tw.tween_property(_bolt, "color:a", 0.4, 0.05)
+			tw.tween_property(_bolt, "color:a", 0.0, 0.35)
+			Sfx.play("boom", -12.0, 0.45)
+
+
+## the server drives a bot car: follow the road ahead, brake for corners, make small mistakes at low skill
+func _bot_input(ts: TeamState, delta: float) -> Vector3:
+	var car := ts.car
+	var spd := car.speed_kmh
+	var n := track.points.size()
+	var ahead := clampi(int(spd / 20.0) + 2, 3, 11)
+	var ti := mini(ts.prog + ahead, n - 1)
+	var tgt := track.points[ti]
+	# obstacles: aim for the free side of the road, slow down for a bump
+	var bump := false
+	for k in range(maxi(0, ts.prog - 1), mini(n, ts.prog + ahead + 7)):
+		if _obst_at.has(k):
+			var o: Dictionary = _obst_at[k]
+			if o["kind"] == "bump":
+				bump = true
+			else:
+				tgt += Track.left_of(track.headings[ti]) * (-float(o["side"]) * 3.4)
+			break
+	var lp := car.global_transform.affine_inverse() * tgt
+	var steer := clampf(lp.x / maxf(absf(lp.z), 3.0) * 1.9, -1.0, 1.0)
+	# human-like mistakes: now and then a short wobble (more often and bigger for weak bots)
+	ts.wob_wait -= delta
+	if ts.wob_wait <= 0.0:
+		ts.wob_wait = randf_range(3.0, 8.0) * (0.5 + ts.bot_skill)
+		ts.wob_t = 0.5
+		ts.wob = randf_range(-1.0, 1.0) * (1.05 - ts.bot_skill) * 1.6
+	if ts.wob_t > 0.0:
+		ts.wob_t -= delta
+		steer = clampf(steer + ts.wob, -1.0, 1.0)
+	# corner speed: how much the road turns in the next ~50 m
+	var h0 := track.headings[ts.prog]
+	var h1 := track.headings[mini(ts.prog + 10, n - 1)]
+	var dh := absf(wrapf(h1 - h0, -PI, PI))
+	var vmax: float = car.top_speed
+	var vt := lerpf(vmax, 42.0, clampf(dh / 1.0, 0.0, 1.0)) * ts.bot_skill
+	if weather == "rain" or weather == "storm":
+		vt *= 0.88
+	elif weather == "fog" or weather == "night":
+		vt *= 0.94
+	if track.ice_at(mini(ts.prog + 6, n - 1)):
+		vt = minf(vt, 55.0)
+	if bump:
+		vt = minf(vt, 62.0)
+	var thr := 1.0 if spd < vt else 0.0
+	var brk := clampf((spd - vt - 4.0) / 25.0, 0.0, 1.0)
+	if ts.wrong:
+		thr = 0.4
+	# stuck on something: put the car back on the road
+	if spd < 4.0 and race_time > 3.0:
+		ts.stuck += delta
+		if ts.stuck > 3.0:
+			ts.stuck = 0.0
+			ts.resets += 1
+			_reset_team(ts)
+	else:
+		ts.stuck = 0.0
+	return Vector3(steer, thr, brk)
 
 
 func _add_road(pts: PackedVector3Array, avoid: PackedVector3Array, road: Array[Transform3D], dashes: Array[Transform3D], bank_vis: Array[Transform3D], banks: StaticBody3D, main := false) -> void:
@@ -1744,16 +1930,24 @@ func _build_teams() -> void:
 					ts.nav_id = id
 		var car := Car.new()
 		car.name = "Car%d" % t
-		car.setup(t, ts.color, not multiplayer.is_server(), Net.loadouts.get(ts.driver_id, {}))
+		var lo: Dictionary = Net.loadouts.get(ts.driver_id, {})
+		if Net.bots.has(t):
+			var b: Dictionary = Net.bots[t]
+			ts.bot = true
+			ts.bot_name = str(b["name"])
+			ts.bot_skill = float(b["skill"])
+			ts.bot_lo = b["lo"]
+			lo = ts.bot_lo
+		car.setup(t, ts.color, not multiplayer.is_server(), lo)
 		car.transform = _grid_transform(t)
 		add_child(car)
-		if Net.blind and not solo:
+		if (Net.blind and not solo) or weather in ["night", "storm"]:
 			car.add_lights()
 		ts.car = car
 		if t == my_team and not Net.dedicated:
 			car.enable_mirrors(my_role)
 			car.bind_radio()
-		car.set_plate_text(str(Net.players.get(ts.driver_id, char(65 + t))))
+		car.set_plate_text(ts.bot_name if ts.bot else str(Net.players.get(ts.driver_id, char(65 + t))))
 		ts.target = car.transform
 		teams.append(ts)
 		for id in [ts.driver_id, ts.nav_id]:
@@ -1872,7 +2066,7 @@ func _build_hud() -> void:
 	alert_label.add_theme_color_override("font_color", Color(1.0, 0.35, 0.3))
 	role_label = Label.new()
 	role_label.position = Vector2(14, 8)
-	var tname := (L.t("TEAMX") % char(65 + my_team)) + "  -  " if Net.team_count > 1 else ""
+	var tname := (L.t("TEAMX") % char(65 + my_team)) + "  -  " if (Net.team_count > 1 and Net.bots.is_empty()) else ""
 	role_label.text = tname + L.t("DRIVER" if my_role == "driver" else "CODRIVER")
 	if Net.ffa:
 		role_label.text = _tname(my_team)
@@ -2234,6 +2428,7 @@ func _show_result(place: int, t: float) -> void:
 			mi = i
 			break
 	var rw := Profile.race_reward(place, Net.team_count, mi, track.theme == "mountain")
+	_career_apply(place, rw)
 	_rewarded = true
 	my_reward_line = _reward_line(rw)
 	var solo_room := Net.required_players <= 1
@@ -2259,8 +2454,32 @@ func _show_result(place: int, t: float) -> void:
 	hud_root.add_child(result_panel)
 
 
+## career: stars, unlock, extra coins / gems / chest of the stage
+func _career_apply(place: int, rw: Dictionary) -> void:
+	var ci := int(Net.solo_cfg.get("career", -1))
+	if ci < 0:
+		return
+	var cr := Profile.career_result(ci, place)
+	rw["coins"] = int(rw["coins"]) + int(cr["coins"])
+	var lv := Career.level(ci)
+	var t := ""
+	if cr["passed"]:
+		t = UI.tx("STAGE %d CLEARED  -  %d/3 stars", "المرحلة %d اكتملت  -  %d/3 نجوم") % [ci + 1, int(cr["stars"])]
+		if int(cr["gems"]) > 0:
+			t += "    +%d %s" % [int(cr["gems"]), UI.tx("gems", "جواهر")]
+		if str(cr["chest"]) != "":
+			t += "    +1 " + UI.tx("chest", "صندوق")
+		if ci < Career.COUNT - 1 and bool(cr["first"]):
+			t += "    " + UI.tx("Next stage unlocked", "فُتحت المرحلة التالية")
+	else:
+		t = UI.tx("Finish top %d to pass stage %d", "أنهِ ضمن أول %d لتجتاز المرحلة %d") % [int(lv["need"]), ci + 1]
+	rw["career"] = t
+
+
 func _reward_line(rw: Dictionary) -> String:
 	var s := "+%d %s    +%d XP" % [int(rw["coins"]), UI.tx("coins", "عملة"), int(rw["xp"])]
+	if rw.has("career"):
+		s += "\n" + str(rw["career"])
 	if rw["chest"] != "":
 		s += "    +1 " + UI.tx("chest", "صندوق")
 	if rw["level_up"]:
@@ -2312,8 +2531,8 @@ func _start_ceremony() -> void:
 			if id != 0:
 				plist.append({"name": str(Net.players.get(id, "?")), "outfit": (Net.loadouts.get(id, {}) as Dictionary).get("outfit", {}), "role": Net.roles.get(id, "driver")})
 		entries.append({
-			"rank": i + 1, "name": _tname(ts.idx), "plate": str(Net.players.get(ts.driver_id, char(65 + ts.idx))),
-			"players": plist, "lo": Net.loadouts.get(ts.driver_id, {}), "time": ts.finish_time, "fin": ts.finished, "dnf": ts.dnf,
+			"rank": i + 1, "name": _tname(ts.idx), "plate": ts.bot_name if ts.bot else str(Net.players.get(ts.driver_id, char(65 + ts.idx))),
+			"players": plist, "lo": ts.bot_lo if ts.bot else Net.loadouts.get(ts.driver_id, {}), "time": ts.finish_time, "fin": ts.finished, "dnf": ts.dnf,
 			"pct": int(final_pcts[ts.idx]) if ts.idx < final_pcts.size() else 0, "color": ts.color, "place": _place(i), "mine": ts.idx == my_team})
 	var solo_room := Net.required_players <= 1
 	var c := Ceremony.new()

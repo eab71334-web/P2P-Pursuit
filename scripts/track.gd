@@ -45,6 +45,7 @@ var _h := 0.0
 
 
 const THEMES := ["mountain", "mountain", "mountain", "snow", "autumn"]
+const THEME_LIST := ["mountain", "snow", "autumn"]
 const ADJ := ["Misty", "Frozen", "Wild", "Hidden", "Black", "Silver", "Howling", "Broken", "Lonely", "Golden", "Thunder"]
 const NOUNS := {
 	"mountain": ["Pass", "Ridge", "Summit", "Gorge", "Col", "Peak"],
@@ -55,7 +56,7 @@ const NOUNS := {
 
 ## Offline "stage director": invents several stage candidates, builds them and keeps the most
 ## interesting one (many closed roads, tough corners, rare hazards, cliffs). Pure maths, no internet.
-static func design_stage(base_seed: int) -> Dictionary:
+static func design_stage(base_seed: int, theme_override := "", difficulty_override := -1.0) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = base_seed
 	var best := {}
@@ -68,6 +69,10 @@ static func design_stage(base_seed: int) -> Dictionary:
 			"obst_p": rng.randf_range(0.25, 0.45),
 			"seed": rng.randi(),
 		}
+		if theme_override != "" and THEME_LIST.has(theme_override):
+			st["theme"] = theme_override
+		if difficulty_override >= 0.0:
+			st["difficulty"] = difficulty_override
 		var mountain: bool = st["theme"] == "mountain"
 		st["relief"] = rng.randf_range(7.0, 13.0) if mountain else 0.0
 		st["open_p"] = rng.randf_range(0.35, 0.7) if mountain else 0.0

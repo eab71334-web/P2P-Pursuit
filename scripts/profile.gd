@@ -23,6 +23,8 @@ var quests := {"date": "", "list": []}
 var chests := {"bronze": 1, "silver": 0, "gold": 0}
 var login := {"last": "", "streak": 0}
 var stats := {"races": 0, "wins": 0, "fires": 0}
+var career := {}                # career level index (string) -> best stars 0..3
+var solo_pref := {"bots": 3, "level": 1, "weather": "clear", "theme": ""}
 var _busy_save := false
 
 
@@ -62,6 +64,10 @@ func _load() -> void:
 	chests = d.get("chests", chests)
 	login = d.get("login", login)
 	stats = d.get("stats", stats)
+	career = d.get("career", career)
+	var sp: Variant = d.get("solo_pref", solo_pref)
+	if sp is Dictionary:
+		solo_pref = sp
 	for cid in cars:
 		_grant_defaults(str(cid))
 	if not Catalog.CARS.has(car) or not cars.has(car):
@@ -72,7 +78,7 @@ func save() -> void:
 	var f := FileAccess.open(SAVE, FileAccess.WRITE)
 	if f:
 		f.store_string(JSON.stringify({"pname": pname, "steer_mode": steer_mode, "coins": coins, "gems": gems, "xp": xp, "level": level, "owned": owned, "cars": cars, "car": car,
-			"carset": carset, "up": up, "outfit": outfit, "quests": quests, "chests": chests, "login": login, "stats": stats}))
+			"carset": carset, "up": up, "outfit": outfit, "quests": quests, "chests": chests, "login": login, "stats": stats, "career": career, "solo_pref": solo_pref}))
 	changed.emit()
 
 
@@ -446,3 +452,35 @@ func race_reward(place: int, total: int, medal: int, mountain: bool) -> Dictiona
 	var lv0 := level
 	add_xp(xpv)
 	return {"coins": base, "xp": xpv, "chest": chest, "level_up": level > lv0}
+
+
+## career: called when the race of level `idx` is over. Returns what the player got.
+func career_result(idx: int, place: int) -> Dictionary:
+	var lv := Career.level(idx)
+	var stars := Career.stars_for(place)
+	var passed: bool = place <= int(lv["need"])
+	var key := str(idx)
+	var old := int(career.get(key, 0))
+	var out := {"passed": passed, "stars": stars, "coins": 0, "gems": 0, "chest": "", "first": false, "new_stars": 0}
+	if not passed:
+		return out
+	var first := old == 0
+	out["first"] = first
+	var coins := int(lv["coins"]) * (1.0 if first else 0.4) * (0.7 + 0.1 * stars)
+	out["coins"] = int(coins)
+	coins_add_raw(int(coins))
+	if first:
+		out["gems"] = int(lv["gems"])
+		gems += int(lv["gems"])
+		out["chest"] = str(lv["chest"])
+		if out["chest"] != "":
+			chests[out["chest"]] = int(chests.get(out["chest"], 0)) + 1
+	if stars > old:
+		career[key] = stars
+		out["new_stars"] = stars - old
+	save()
+	return out
+
+
+func coins_add_raw(n: int) -> void:
+	coins += n

@@ -38,6 +38,8 @@ var port := PORT
 var pending_message := ""
 var found_hosts := {}   # ip -> {name, count, required, time}
 var loadouts := {}      # peer -> cosmetic / car loadout (see Profile.loadout)
+var solo_cfg := {}      # solo race options from the menu: bots, level (0..3), weather, theme, career (level index or -1)
+var bots := {}          # team index -> {name, lo, skill}   (solo races only; the server drives these cars)
 var rdy := {}         # peer -> pressed READY in the room
 var present := {}       # peer -> is looking at the room screen right now
 var lobby_cd := -1.0    # >= 0 : the start countdown is running
@@ -256,6 +258,8 @@ func leave() -> void:
 		peer.close()
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	squads = 0
+	solo_cfg = {}
+	bots = {}
 	players.clear()
 	loadouts.clear()
 	rdy.clear()
@@ -508,7 +512,17 @@ func start_now() -> void:
 	for i in ids.size():
 		r[ids[i]] = "driver" if (ffa or i % 2 == 0) else "navigator"
 		tm[ids[i]] = i if ffa else ((i >> 1) if required_players > 1 else 0)
-	begin.rpc(Track.design_stage(randi()), r, tm, players, team_count, blind, ffa, loadouts, squads)
+	var st: Dictionary
+	bots = {}
+	if not dedicated and players.size() == 1 and not ffa and not solo_cfg.is_empty():
+		st = _solo_stage()
+		_make_bots()
+		team_count = 1 + bots.size()
+	else:
+		st = Track.design_stage(randi())
+		if players.size() == 1 and not ffa:
+			team_count = 1
+	begin.rpc(st, r, tm, players, team_count, blind, ffa, loadouts, squads)
 
 
 @rpc("authority", "call_local", "reliable")
@@ -594,3 +608,44 @@ func _on_peer_disconnected(id: int) -> void:
 	_broadcast_players()
 	if dedicated and players.is_empty() and in_game:
 		server_idle()
+
+
+const BOT_NAMES := ["Rami", "Omar", "Karim", "Sami", "Nour", "Zaid", "Hamza", "Yara", "Lina", "Adel", "Fares", "Dana"]
+const BOT_SKILL := [0.70, 0.82, 0.92, 1.0]      # fraction of the car's best speed the bots dare to use
+
+
+func _solo_stage() -> Dictionary:
+	var c := solo_cfg
+	var ci := int(c.get("career", -1))
+	var st: Dictionary
+	if ci >= 0:
+		var lv := Career.level(ci)
+		st = Track.design_stage(int(lv["seed"]), str(lv["theme"]), 0.25 + 0.05 * ci)
+		st["weather"] = lv["weather"]
+	else:
+		st = Track.design_stage(randi(), str(c.get("theme", "")))
+		st["weather"] = str(c.get("weather", "clear"))
+	return st
+
+
+func _make_bots() -> void:
+	var c := solo_cfg
+	var ci := int(c.get("career", -1))
+	var n := int(c.get("bots", 3))
+	var level := int(c.get("level", 1))
+	if ci >= 0:
+		var lv := Career.level(ci)
+		n = int(lv["bots"])
+		level = int(lv["level"])
+	level = clampi(level, 0, 3)
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var names := BOT_NAMES.duplicate()
+	names.shuffle()
+	var pool: Array = []
+	for id in Catalog.CARS:
+		if int((Catalog.CARS[id] as Dictionary).get("r", 0)) <= level + 1:
+			pool.append(id)
+	for i in n:
+		var car_id: String = pool[rng.randi() % pool.size()]
+		bots[i + 1] = {"name": names[i % names.size()], "lo": {"car": car_id}, "skill": clampf(BOT_SKILL[level] + rng.randf_range(-0.05, 0.03), 0.5, 1.02)}

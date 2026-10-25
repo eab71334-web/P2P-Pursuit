@@ -124,6 +124,9 @@ func build(place_txt: String, stage: String, time_txt: String, medal_idx: int, m
 	rr.add_child(t2)
 	if str(rw.get("chest", "")) != "":
 		rr.add_child(Tile.new("chest", "+1", UI.tx("Chest", "صندوق"), Color(0.95, 0.55, 0.2)))
+	if rw.has("career"):
+		var cl := UI.lbl(vb, str(rw["career"]), 20, UI.OK if "/3" in str(rw["career"]) else UI.TXT2, true)
+		cl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var coins := int(rw["coins"])
 	var xp := int(rw["xp"])
 	var tw := create_tween().set_parallel(true)
