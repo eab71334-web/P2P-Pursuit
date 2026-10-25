@@ -217,3 +217,11 @@
 
 ## Update 15 - studio rename
 Studio brand is now **Sabak Studios / سَبَك** (logo `art/sabak_logo.png`; replaced AVF, Vexora, Barq, Zhyrex and Qimma during naming). Used in the intro, LICENSE, settings credits, source headers and photo cards. The name has NOT been checked on TikTok/Instagram/App Store/Google Play - check before publishing.
+
+## Update 16 — Solo upgrade
+- Solo page: Career / Custom Race / Quick Start.
+- Custom race: opponents 0–5, level (Rookie/Pro/Expert/Legend), weather (clear/rain/fog/night/storm), track (random/mountain/snow/autumn). Choices are saved.
+- Career: 20 stages, boss every 5th, stars by finishing place, coins/gems/chests, stages unlock in order.
+- Bots: look-ahead steering, corner speed, obstacle avoidance, stuck reset.
+- Weather: rain particles, fog, night headlights, storm lightning, reduced grip in rain/storm.
+- Tested only on desktop (headless) — not on real phones, no audio heard.
