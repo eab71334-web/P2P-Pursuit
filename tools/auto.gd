@@ -293,6 +293,86 @@ func _process(d: float) -> void:
 			elif step == 2 and t > float(OS.get_environment("SHOT_AT")) :
 				step = 3; shot("pod_%s" % OS.get_environment("SHOT_AT"))
 				get_tree().quit()
+		"stk":
+			# every sticker above a car (stk_<n>.png) + the picker window in a solo race
+			if step == 0 and t > 1.5:
+				step = 1
+				sc.visible = false
+				_cars_setup()
+			elif step >= 1 and step <= 13 and t > 2.0 + step * 0.8:
+				if step == 1:
+					var lo := {"car": "hatch", "paint": "red", "stripe": "none", "rim": "steel", "glow": "none", "wheel": "stock"}
+					var car := Car.new()
+					car.setup(0, Color(0.2, 0.8, 0.3), false, lo, true)
+					get_tree().root.add_child(car)
+					_cs_car = car
+				else:
+					_cs_cam.position = Vector3(5.5, 3.4, 7.5)
+					_cs_cam.look_at(Vector3(0, 2.7, 0))
+					_cs_cam.fov = 42.0
+					_cs_cam.current = true
+				var cur := step
+				step += 1
+				if cur >= 2:
+					await shot("stk_%02d" % (cur - 2))
+				if cur <= 12:
+					Stickers.show_on(_cs_car, cur - 1, false)
+			elif step == 14 and t > 16.0:
+				step = 16
+				_cs_car.queue_free()
+				_cs_cam.current = false
+				sc.visible = true
+				L.tutorial_off = true
+				sc._on_solo()
+			elif step == 16 and t > 32.0:
+				step = 17
+				get_tree().current_scene._toggle_stickers()
+				var pk = get_tree().current_scene.sticker_picker
+				print("PICKER ", pk, " ", pk.position if pk else "-", " ", pk.size if pk else "-", " vis=", pk.is_visible_in_tree() if pk else "-")
+			elif step == 17 and t > 33.5:
+				step = 18
+				await shot("stk_picker")
+				get_tree().current_scene._send_sticker(6)
+			elif step == 18 and t > 34.5:
+				get_tree().quit()
+		"replay":
+			# solo race, drive a bit, blow the car up, then play the replay and take shots of it
+			if step == 0 and t > 2.0:
+				step = 1
+				L.tutorial_off = true
+				sc._on_solo()
+				Input.action_press("accel")
+			elif step == 1 and t > 17.0:
+				step = 2
+				var w = get_tree().current_scene
+				w._explode(w.teams[0])
+			elif step == 2 and t > 19.0:
+				step = 3
+				var w2 = get_tree().current_scene
+				print("REPLAY avail=", w2.director.available(), " frames=", w2.director.frames.size())
+				w2._play_replay()
+			elif step >= 3 and step <= 8 and t > 19.5 + (step - 3) * 1.1:
+				var cur2 := step
+				step += 1
+				await shot("replay_%d" % (cur2 - 3))
+			elif step == 9:
+				Input.action_release("accel")
+				get_tree().quit()
+		"photo":
+			# solo race, take a HUD photo card, then check the saved PNG
+			if step == 0 and t > 2.0:
+				step = 1
+				L.tutorial_off = true
+				sc._on_solo()
+				Input.action_press("accel")
+			elif step == 1 and t > 10.0:
+				step = 2
+				get_tree().current_scene._take_photo()
+			elif step == 2 and t > 13.0:
+				var sd := DirAccess.open("user://share")
+				print("PHOTOS ", sd.get_files() if sd else "none")
+				Input.action_release("accel")
+				get_tree().quit()
 		"repair":
 			# driver outside the car holding the extinguisher: right hand = body, left hand = nozzle (then covering the engine)
 			if step == 0 and t > 2.0:
@@ -328,8 +408,17 @@ func _process(d: float) -> void:
 				print("JOIN err=", e)
 			elif step == 1 and t > 22.0:
 				step = 2; shot("online_" + OS.get_environment("NAME") + "0")
+				if OS.get_environment("NAME") == "A":
+					get_tree().current_scene._send_sticker(6)
 				print("INGAME ", Net.in_game, " players=", Net.players)
 				Input.action_press("accel")
+			elif step == 2 and t > 23.5 and not _stk_seen:
+				_stk_seen = true
+				var ww := get_tree().current_scene
+				var seen := []
+				for tt in ww.teams:
+					seen.append(tt.car.get_node_or_null("Sticker") != null)
+				print("STICKERS_SEEN ", seen)
 			elif step == 2 and t > 30.0:
 				step = 3; shot("online_" + OS.get_environment("NAME") + "1")
 				var w := get_tree().current_scene
@@ -360,6 +449,7 @@ func _process(d: float) -> void:
 
 var _cs := {}
 var _cs_list: Array = []
+var _stk_seen := false
 var _cs_car: Node3D
 var _cs_cam: Camera3D
 

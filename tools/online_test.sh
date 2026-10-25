@@ -13,6 +13,6 @@ done
 wait %2 %3 || true
 sleep 1
 echo "--- server"; grep -v "^$" /tmp/srv.log | tail -15
-echo "--- A"; grep -E "JOIN|CLOSED|INGAME|SCENE|SCRIPT" /tmp/clA.log | head
-echo "--- B"; grep -E "JOIN|CLOSED|INGAME|SCENE|SCRIPT" /tmp/clB.log | head
+echo "--- A"; grep -E "JOIN|CLOSED|INGAME|SCENE|SCRIPT|STICKERS_SEEN" /tmp/clA.log | head
+echo "--- B"; grep -E "JOIN|CLOSED|INGAME|SCENE|SCRIPT|STICKERS_SEEN" /tmp/clB.log | head
 pkill -x godot || true
