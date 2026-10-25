@@ -46,6 +46,45 @@ func _process(d: float) -> void:
 				step = 7; shot("menu_online")
 			elif step == 7 and t > 6.5:
 				get_tree().quit()
+		"menu2":
+			# solo page, custom race page, career page
+			if step == 0 and t > 3.0:
+				step = 1; sc._show_solo(true)
+			elif step == 1 and t > 3.8:
+				step = 2; shot("solo_box")
+			elif step == 2 and t > 4.0:
+				step = 3; sc._go("custom")
+			elif step == 3 and t > 4.8:
+				step = 4; shot("custom")
+			elif step == 4 and t > 5.0:
+				step = 5; Profile.career = {"0": 3, "1": 2, "2": 1}; sc._open_career()
+			elif step == 5 and t > 5.8:
+				step = 6; shot("career")
+			elif step == 6 and t > 6.0:
+				get_tree().quit()
+		"bots":
+			# solo race with bots: BOTS="n,level,weather,career"
+			if step == 0 and t > 2.0:
+				step = 1
+				var a := OS.get_environment("BOTS").split(",")
+				var cfg := {"bots": int(a[0]), "level": int(a[1]), "weather": a[2], "theme": "", "career": int(a[3])}
+				Engine.time_scale = float(OS.get_environment("TS") if OS.get_environment("TS") != "" else "1")
+				sc._start_solo(cfg)
+			elif step == 1 and t > 9.0:
+				step = 2
+			elif step >= 2 and step < 40 and t > 9.0 + (step - 1) * 5.0:
+				var w = get_tree().current_scene
+				if w.get("teams") == null:
+					return
+				step += 1
+				var line := []
+				for ts in w.teams:
+					line.append("%s%s:%d/%d@%d%s r%d" % [("B" if ts.bot else "P"), ts.idx, ts.prog, w.track.points.size(), int(ts.speed), "F" if ts.finished else "", ts.resets])
+				print("BOTS t=%.0f %s state=%d weather=%s" % [t, " ".join(line), w.state, w.weather])
+				if step in [3, 6, 10]:
+					shot("bots_%d" % step)
+				if w.state == 3 or step >= 38:
+					get_tree().quit()
 		"garage":
 			if step == 0 and t > 2.5:
 				step = 1; Profile.level = 20; Profile.coins = 99999; Profile.cars["muscle"] = true; Profile.cars["gt3"] = true; Profile.car = "coupe"; Profile.cars["coupe"] = true
