@@ -1,4 +1,4 @@
-# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
+# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
 extends Node
 ## Autoload "Net": LAN networking (ENet), LAN discovery (UDP broadcast) and lobby logic.
 ## The game starts automatically when the number of connected players reaches `required_players`.

@@ -1,4 +1,4 @@
-# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
+# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
 class_name Preview3D
 extends SubViewportContainer
 ## A little 3D showroom (turntable) for cars and characters, used by the garage / workshop / character screens.

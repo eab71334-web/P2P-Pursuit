@@ -1,4 +1,4 @@
-# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
+# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
 class_name Checkout
 extends Control
 ## Buy-coins dialog: pack summary, payment methods, pay button. Payments are not connected yet (see Billing).

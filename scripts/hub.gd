@@ -1,4 +1,4 @@
-# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
+# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
 class_name Hub
 extends Control
 ## The "game hub": top bar (level, coins, gems) + tabs PLAY / GARAGE / WORKSHOP / CHARACTER / SHOP / QUESTS / CHESTS.
@@ -689,6 +689,9 @@ func _tab_garage() -> Control:
 		UI.lbl(iv, Catalog.nm(m), 30, Catalog.RARITY_COLOR[int(m["r"])], false)
 		UI.lbl(iv, Catalog.txt(m["d"]), 16, UI.TXT2, true)
 		UI.lbl(iv, Catalog.rar_name(int(m["r"])), 14, UI.TXT2, false)
+		UI.btn(av, UI.tx("PHOTO CARD", "بطاقة صورة"), UI.CARD2, func():
+			Sfx.play("click", -6.0)
+			Share.snap(self, "car_" + g_car, Catalog.nm(m)), 18, Vector2(210, 44))
 		if Profile.cars.has(g_car):
 			UI.btn(av, UI.tx("MODIFY", "تعديل"), UI.ACCENT, func():
 				Sfx.play("click")

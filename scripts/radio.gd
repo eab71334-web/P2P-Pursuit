@@ -1,4 +1,4 @@
-# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
+# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
 extends Node
 ## Autoload "Radio": the in-car radio. Five stations (synthesised loops in res://audio/radio), tuning static between
 ## stations, on/off + volume (Gfx.vol_radio). The world HUD and the dashboard unit just call next() / prev() / toggle().

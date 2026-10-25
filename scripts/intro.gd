@@ -1,4 +1,4 @@
-# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
+# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
 extends Node
 ## Start-up film: studio logo with a light sweep, then a cinematic car reveal, then the main menu.
 ## Any tap / key skips it.
@@ -123,7 +123,7 @@ func _build_ui() -> void:
 	_black.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	cl.add_child(_black)
 	_logo = TextureRect.new()
-	_logo.texture = load("res://art/avf_logo.png")
+	_logo.texture = load("res://art/sabak_logo.png")
 	_logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_logo.anchor_left = 0.5
@@ -158,7 +158,7 @@ func _build_ui() -> void:
 	_title.alignment = BoxContainer.ALIGNMENT_CENTER
 	_title.add_theme_constant_override("separation", 4)
 	cl.add_child(_title)
-	for e2 in [["هيربن راش", 50, Color(1, 0.58, 0.14)], ["HAIRPIN RUSH", 28, Color(0.9, 0.92, 0.97)], ["© 2026 AVF", 18, Color(0.55, 0.6, 0.68)]]:
+	for e2 in [["هيربن راش", 50, Color(1, 0.58, 0.14)], ["HAIRPIN RUSH", 28, Color(0.9, 0.92, 0.97)], ["© 2026 Sabak Studios", 18, Color(0.55, 0.6, 0.68)]]:
 		var l := Label.new()
 		l.text = e2[0]
 		l.add_theme_font_size_override("font_size", e2[1])

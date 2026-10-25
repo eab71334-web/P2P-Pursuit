@@ -1,4 +1,4 @@
-# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
+# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
 class_name Track
 extends RefCounted
 ## Procedural rally stage. The same seed always gives the same stage on every machine.

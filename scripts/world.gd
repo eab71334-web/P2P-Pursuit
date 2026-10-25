@@ -1,4 +1,4 @@
-# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
+# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
 extends Node3D
 ## The race. Server = authority (runs every car's physics). Clients send input and show the state.
 ## Each team = 1 car with 2 players: the DRIVER steers, the CO-DRIVER (map holder) reads the map,
@@ -177,6 +177,9 @@ func _ready() -> void:
 	_build_obstacles()
 	_build_teams()
 	_build_hud()
+	if not Net.dedicated:
+		director = ReplayDirector.new()
+		add_child(director)
 	Net.peer_left.connect(_on_peer_left)
 	if not Net.dedicated:
 		Radio.start_race()
@@ -741,6 +744,8 @@ func _set_phase(ts: TeamState, ph: int, who: int, cov: bool) -> void:
 @rpc("authority", "call_local", "reliable")
 func repair_state(team: int, ph: int, who: int, cov: bool) -> void:
 	var ts := teams[team]
+	if ph == 4 and director:
+		director.mark_boom(team)
 	ts.phase = ph
 	ts.repairer = who
 	ts.cover = cov
@@ -897,6 +902,13 @@ func _server_reset(peer: int) -> void:
 # ====================================================================== local frame loop
 
 func _process(delta: float) -> void:
+	if director and not teams.is_empty():
+		var cars: Array = []
+		for ts in teams:
+			cars.append(ts.car)
+		director.record(delta, cars)
+		if zones.has("replay"):
+			zones["replay"].visible = director.available() and state != State.ENDED
 	_map_tick += delta
 	if ipad_vp != null and Gfx.map_fps < 60 and _map_tick >= 1.0 / float(Gfx.map_fps):
 		_map_tick = 0.0
@@ -1035,6 +1047,85 @@ func _do_punch() -> void:
 		_server_punch(my_id)
 	else:
 		request_punch.rpc_id(1)
+
+
+# ---- stickers: pick one -> server -> every player sees it above the sender's car (and hears it, positional)
+var sticker_picker: Stickers.Picker
+var director: ReplayDirector
+var _sticker_cd := 0.0
+
+
+func _take_photo() -> void:
+	if Net.dedicated:
+		return
+	Share.snap(self, "race", tname_for_photo(), [hud])
+
+
+func tname_for_photo() -> String:
+	return "%s  %s" % [track.stage_name, "%d km/h" % int(teams[my_team].speed)]
+
+
+func _play_replay() -> void:
+	if director and director.available():
+		if sticker_picker and is_instance_valid(sticker_picker):
+			sticker_picker.queue_free()
+			sticker_picker = null
+		director.play(self, teams)
+
+
+func _toggle_stickers() -> void:
+	if state == State.ENDED or Net.dedicated:
+		return
+	if sticker_picker and is_instance_valid(sticker_picker):
+		sticker_picker.queue_free()
+		sticker_picker = null
+		return
+	sticker_picker = Stickers.Picker.new()
+	sticker_picker.z_index = 110
+	hud_root.add_child(sticker_picker)
+	var vs := get_viewport().get_visible_rect().size
+	var ms := sticker_picker.get_combined_minimum_size()
+	sticker_picker.position = Vector2(vs.x - ms.x - 160.0, 100.0)
+	sticker_picker.size = ms
+	sticker_picker.picked.connect(_send_sticker)
+
+
+func _send_sticker(idx: int) -> void:
+	if sticker_picker and is_instance_valid(sticker_picker):
+		sticker_picker.queue_free()
+		sticker_picker = null
+	var now := Time.get_ticks_msec() / 1000.0
+	if now < _sticker_cd:
+		return
+	_sticker_cd = now + Stickers.COOLDOWN
+	Sfx.play("click", -8.0)
+	if multiplayer.is_server():
+		_server_sticker(my_id, idx)
+	else:
+		request_sticker.rpc_id(1, idx)
+
+
+@rpc("any_peer", "reliable")
+func request_sticker(idx: int) -> void:
+	if multiplayer.is_server():
+		_server_sticker(multiplayer.get_remote_sender_id(), idx)
+
+
+func _server_sticker(peer: int, idx: int) -> void:
+	if idx < 0 or idx >= Stickers.LIST.size() or not Net.team_of.has(peer):
+		return
+	var now := Time.get_ticks_msec()
+	if now - int(last_punch.get(-1000 - peer, 0)) < int(Stickers.COOLDOWN * 900.0):
+		return
+	last_punch[-1000 - peer] = now
+	sticker_fx.rpc(int(Net.team_of[peer]), idx)
+
+
+@rpc("authority", "call_local", "reliable")
+func sticker_fx(team: int, idx: int) -> void:
+	if Net.dedicated or team < 0 or team >= teams.size() or idx < 0 or idx >= Stickers.LIST.size():
+		return
+	Stickers.show_on(teams[team].car, idx)
 
 
 func _do_emote() -> void:
@@ -1824,6 +1915,11 @@ func _build_hud() -> void:
 	_make_zone("emote", L.t("z_emote"), 1.0, 0.0, -150, 70, -14, 116, 20, _do_emote)
 	if not solo:
 		_make_zone("punch", L.t("z_punch"), 1.0, 0.0, -150, 126, -14, 172, 20, _do_punch)
+	var sy := 126 if solo else 182
+	_make_zone("stickers", UI.tx("STICKERS", "ملصقات"), 1.0, 0.0, -150, sy, -14, sy + 46, 20, _toggle_stickers)
+	_make_zone("replay", UI.tx("REPLAY", "إعادة سينمائية"), 1.0, 0.0, -150, sy + 56, -14, sy + 102, 17, _play_replay)
+	zones["replay"].visible = false
+	_make_zone("photo", UI.tx("PHOTO", "صورة"), 1.0, 0.0, -150, sy + 112, -14, sy + 158, 20, _take_photo)
 	# radio (bottom centre): < station >   (tap the name to switch it off / on)
 	_make_zone("radio_prev", "<", 0.5, 1.0, -142, -60, -92, -14, 22, Radio.prev)
 	_make_zone("radio_name", Radio.label(), 0.5, 1.0, -86, -60, 86, -14, 16, Radio.toggle)

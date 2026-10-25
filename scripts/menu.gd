@@ -1,4 +1,4 @@
-# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
+# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
 extends Control
 ## Main menu: sidebar hub (play / garage / workshop / ...) with a 3D showroom behind the PLAY page,
 ## game setup screen and the room (ready check + 5 s countdown).

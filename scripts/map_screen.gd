@@ -1,4 +1,4 @@
-# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
+# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
 class_name MapScreen
 extends Node3D
 ## The map "TV": a tablet that folds open with a flip animation, can be small / medium / large and can be

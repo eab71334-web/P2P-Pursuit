@@ -1,4 +1,4 @@
-# Copyright (c) 2026 AVF. All rights reserved. See LICENSE.
+# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
 class_name TScroll
 extends ScrollContainer
 ## ScrollContainer that scrolls by dragging a finger anywhere (also over buttons), with inertia and no
