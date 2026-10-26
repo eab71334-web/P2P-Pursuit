@@ -225,3 +225,16 @@ Studio brand is now **Sabak Studios / سَبَك** (logo `art/sabak_logo.png`; r
 - Bots: look-ahead steering, corner speed, obstacle avoidance, stuck reset.
 - Weather: rain particles, fog, night headlights, storm lightning, reduced grip in rain/storm.
 - Tested only on desktop (headless) — not on real phones, no audio heard.
+
+## Update 17 — Custom race & Career redesign
+- New `scripts/stage_art.gd`: animated stage picture drawn in code (sky, ridges, trees, scrolling road, car, rain, fog, night headlights, storm lightning). Not a game screenshot; it is a preview illustration.
+- Custom Race: big live preview in the centre that changes with track + weather; track list on one side, weather list on the other; opponents / level under the picture. "Random" track cycles the three themes.
+- Career: four championships (tabs), five poster cards each (stage art, number, name, stars, lock, final-event gold edge), info bar with rewards and START / RACE AGAIN. Career stages now have names.
+- Tested only as desktop screenshots; not on real phones.
+
+## Update 18 — Solo hub + Career map (Dirt 5 style, flat 2D)
+- `scripts/solo_hub.gd`: solo landing page, a tall Career tile + mosaic (Custom Race, Quick Start, Leaderboards and Weekly Challenge marked "coming soon").
+- `scripts/career_page.gd`: championship tabs, an event map (stage nodes joined by animated roads), a poster card with objectives/rewards, coin/gem/star chips.
+- Tested as desktop screenshots only.
+- Update 19: solo tiles separated with framed posters; cars removed from all stage covers; richer poster look (grade, rays, halftone, grain, vignette).
+- Update 20: display title font (bold, slanted for Latin), landmarks in stage art (village/bridge/tower/tunnel), entrance animations, contour map background; layouts checked at 1280x720, 1280x590 and 2340x1080.
