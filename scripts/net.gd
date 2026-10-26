@@ -622,6 +622,7 @@ func _solo_stage() -> Dictionary:
 		var lv := Career.level(ci)
 		st = Track.design_stage(int(lv["seed"]), str(lv["theme"]), 0.25 + 0.05 * ci)
 		st["weather"] = lv["weather"]
+		st["name"] = Career.stage_name(ci)
 	else:
 		st = Track.design_stage(randi(), str(c.get("theme", "")))
 		st["weather"] = str(c.get("weather", "clear"))

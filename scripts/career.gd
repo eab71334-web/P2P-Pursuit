@@ -12,6 +12,11 @@ const WEATHER_NAMES := {
 const THEME_NAMES := {
 	"mountain": ["Mountain", "جبل"], "snow": ["Snow", "ثلج"], "autumn": ["Autumn", "خريف"],
 }
+const TIER_NAMES := [["ROOKIE CUP", "كأس المبتدئين"], ["PRO SERIES", "سلسلة المحترفين"], ["EXPERT LEAGUE", "دوري الخبراء"], ["LEGEND CHAMPIONSHIP", "بطولة الأساطير"]]
+const PLACE := {"autumn": [["Maple", "القيقب"], ["Amber", "العنبر"], ["Harvest", "الحصاد"]], "snow": [["Frost", "الصقيع"], ["Glacier", "الجليد"], ["Aurora", "الشفق"]],
+	"mountain": [["Summit", "القمة"], ["Cliff", "الجرف"], ["Hairpin", "الدبوس"]]}
+const WX_ADJ := {"clear": ["Sunlit", "مشمس"], "fog": ["Misty", "ضبابي"], "rain": ["Rainy", "ماطر"], "night": ["Midnight", "ليلي"], "storm": ["Thunder", "عاصف"]}
+const SUFFIX := [["Run", "انطلاقة"], ["Pass", "ممر"], ["Ridge", "حافة"], ["Climb", "تسلق"], ["Circuit", "حلبة"]]
 const THEME_ORDER := ["autumn", "snow", "mountain", "mountain", "snow", "autumn", "mountain"]
 const WEATHER_ORDER := ["clear", "clear", "fog", "rain", "night", "clear", "rain", "fog", "storm", "night"]
 
@@ -32,6 +37,16 @@ static func level(i: int) -> Dictionary:
 		chest = "bronze" if i < 9 else ("silver" if i < 19 else "gold")
 	return {"i": i, "boss": boss, "tier": tier, "level": tier, "weather": weather, "theme": THEME_ORDER[i % THEME_ORDER.size()], "bots": bots, "need": need,
 		"seed": 4100 + i * 131, "coins": coins, "gems": gems, "chest": chest}
+
+
+static func stage_name(i: int) -> String:
+	var lv := level(i)
+	var pl: Array = PLACE[lv["theme"]][(i * 2 + i / 5) % 3]
+	var sf: Array = SUFFIX[i % 5]
+	var wa: Array = WX_ADJ[lv["weather"]]
+	if L.is_ar():
+		return "%s %s %s" % [sf[1], pl[1], wa[1]]
+	return "%s %s %s" % [wa[0], pl[0], sf[0]]
 
 
 static func stars_for(place: int) -> int:

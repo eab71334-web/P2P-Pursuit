@@ -184,10 +184,12 @@ var choose_box: VBoxContainer
 var online_box: VBoxContainer
 var online_addr: LineEdit
 var lan_box: VBoxContainer
-var solo_box: VBoxContainer
-var career_grid: GridContainer
-var career_stars_lbl: Label
+var solo_hub: SoloHub
+var career_page: CareerPage
 var custom_vals := {}
+var custom_art: StageArt
+var custom_cap1: Label
+var custom_cap2: Label
 
 
 class Spinner extends Control:
@@ -325,7 +327,18 @@ func _build_ui() -> void:
 	panels["setup"] = _build_setup()
 	panels["lobby"] = _build_lobby()
 	panels["custom"] = _build_custom()
-	panels["career"] = _build_career()
+	solo_hub = SoloHub.new()
+	solo_hub.back.connect(func(): _go("main"))
+	solo_hub.career.connect(func(): _open_career())
+	solo_hub.custom.connect(func(): _go("custom"))
+	solo_hub.quick.connect(func(): _start_solo({}))
+	solo_hub.soon.connect(func(): _say(UI.tx("Coming in a later update.", "قريباً في تحديث قادم.")))
+	panels["solo"] = solo_hub
+	career_page = CareerPage.new()
+	career_page.back.connect(func(): _go("solo"))
+	career_page.play.connect(func(idx: int): _start_solo({"career": idx}))
+	career_page.toast.connect(func(m: String): _say(m))
+	panels["career"] = career_page
 	if current == "lobby" and not Net.is_hosting and Net.players.is_empty():
 		current = "main"
 	if current == "room_garage" or not panels.has(current):
@@ -369,26 +382,10 @@ func _build_main() -> Control:
 	lan_box.add_theme_constant_override("separation", 8)
 	lan_box.visible = false
 	col.add_child(lan_box)
-	solo_box = VBoxContainer.new()
-	solo_box.add_theme_constant_override("separation", 10)
-	solo_box.visible = false
-	col.add_child(solo_box)
-	var sback := UI.btn(solo_box, "<  " + L.t("back"), UI.CARD2, func(): _show_solo(false), 18, Vector2(0, 40))
-	sback.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	var scap := UI.lbl(solo_box, UI.tx("SOLO  -  PICK HOW TO PLAY", "لعب فردي  -  اختر طريقة اللعب"), 16, UI.ACCENT, false)
-	scap.add_theme_constant_override("outline_size", 0)
-	var schoices := [
-		["career", UI.tx("CAREER", "المراحل"), UI.tx("20 stages: beat the opponents, earn stars, coins and chests", "20 مرحلة: اهزم المنافسين واكسب نجوماً وعملات وصناديق"), "", false, func(): _open_career()],
-		["custom", UI.tx("CUSTOM RACE", "سباق مخصّص"), UI.tx("Choose opponents, their level, weather and track", "اختر المنافسين ومستواهم والطقس والمضمار"), "", false, func(): _go("custom")],
-		["solo", UI.tx("QUICK START", "بداية سريعة"), UI.tx("Practice alone on a random stage", "تدرّب وحدك على مرحلة عشوائية"), "", false, func(): _start_solo({})],
-	]
-	for i in schoices.size():
-		var sd: Array = schoices[i]
-		solo_box.add_child(ChoiceCard.new(sd[0], sd[1], sd[2], sd[3], sd[4], sd[5]))
 	var cap0 := UI.lbl(choose_box, UI.tx("HOW DO YOU WANT TO PLAY?", "كيف تحب تلعب؟"), 16, UI.ACCENT, false)
 	cap0.add_theme_constant_override("outline_size", 0)
 	var choices := [
-		["solo", UI.tx("SOLO", "لعب فردي"), UI.tx("Practice the stage alone and beat the medals", "تدرّب على المرحلة وحدك وحقّق الميداليات"), "", false, func(): _show_solo(true)],
+		["solo", UI.tx("SOLO", "لعب فردي"), UI.tx("Practice the stage alone and beat the medals", "تدرّب على المرحلة وحدك وحقّق الميداليات"), "", false, func(): _open_solo()],
 		["online", UI.tx("ONLINE", "أونلاين"), UI.tx("Queue up - the race starts automatically", "ادخل الصف - والسباق يبدأ تلقائياً"), UI.tx("SERVER", "سيرفر"), false, func(): _show_online(true)],
 		["lan", UI.tx("LAN", "شبكة محلية LAN"), UI.tx("Friends on the same Wi-Fi  -  iPhone + Android", "مع أصدقائك على نفس الواي فاي  -  iPhone + Android"), "Wi-Fi", false, func(): _show_lan(true)],
 	]
@@ -861,22 +858,25 @@ func _start_solo(cfg: Dictionary) -> void:
 	_show_lobby()
 
 
-func _show_solo(on: bool) -> void:
-	if solo_box == null or not is_instance_valid(solo_box):
-		return
+func _open_solo() -> void:
 	Sfx.play("click", -8.0)
-	choose_box.visible = not on
-	solo_box.visible = on
+	solo_hub.build()
+	_go("solo")
 
 
-## segmented choice row: title + one toggle button per option
-func _seg(parent: Control, title: String, opts: Array, key: String, cur: Variant) -> void:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	parent.add_child(row)
-	var l := UI.lbl(row, title, 18, UI.TXT2, false)
-	l.custom_minimum_size = Vector2(190, 52)
-	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+## option list: small caps title + one toggle per option (vertical column or horizontal row)
+func _seg(parent: Control, title: String, opts: Array, key: String, cur: Variant, vertical := false) -> void:
+	var holder := VBoxContainer.new()
+	holder.add_theme_constant_override("separation", 6)
+	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(holder)
+	if title != "":
+		var tl := UI.lbl(holder, title, 14, UI.TXT2, false)
+		tl.add_theme_constant_override("outline_size", 0)
+	var row: BoxContainer = VBoxContainer.new() if vertical else HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	holder.add_child(row)
 	var group := ButtonGroup.new()
 	custom_vals[key] = cur
 	for o in opts:
@@ -884,172 +884,144 @@ func _seg(parent: Control, title: String, opts: Array, key: String, cur: Variant
 		b.toggle_mode = true
 		b.button_group = group
 		b.text = str(o[1])
-		b.custom_minimum_size = Vector2(0, 52)
+		b.custom_minimum_size = Vector2(0, 46 if vertical else 44)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.focus_mode = Control.FOCUS_NONE
+		b.alignment = HORIZONTAL_ALIGNMENT_CENTER
 		b.add_theme_font_size_override("font_size", 18)
-		b.add_theme_stylebox_override("normal", UI.sb(UI.CARD2, 8, UI.LINE, 1))
-		b.add_theme_stylebox_override("hover", UI.sb(UI.CARD2.lightened(0.1), 8, UI.LINE, 1))
-		b.add_theme_stylebox_override("pressed", UI.sb(UI.ACCENT, 8))
-		b.add_theme_stylebox_override("hover_pressed", UI.sb(UI.ACCENT, 8))
-		b.add_theme_color_override("font_pressed_color", Color.BLACK)
-		b.add_theme_color_override("font_hover_pressed_color", Color.BLACK)
+		var nb := UI.sb(Color(0.09, 0.098, 0.125, 0.92), 8, UI.LINE, 1)
+		var sel := UI.sb(Color(1.0, 0.47, 0.1, 0.16), 8, UI.ACCENT, 2)
+		b.add_theme_stylebox_override("normal", nb)
+		b.add_theme_stylebox_override("hover", UI.sb(Color(0.14, 0.15, 0.185, 0.95), 8, UI.LINE, 1))
+		b.add_theme_stylebox_override("pressed", sel)
+		b.add_theme_stylebox_override("hover_pressed", sel)
+		b.add_theme_stylebox_override("focus", nb)
+		b.add_theme_color_override("font_pressed_color", UI.ACCENT)
+		b.add_theme_color_override("font_hover_pressed_color", UI.ACCENT)
+		b.add_theme_color_override("font_color", UI.TXT2)
+		b.add_theme_color_override("font_hover_color", UI.TXT)
 		b.button_pressed = (o[0] == cur)
 		var val: Variant = o[0]
 		b.pressed.connect(func():
 			custom_vals[key] = val
-			Sfx.play("click", -10.0))
+			Sfx.play("click", -10.0)
+			_custom_refresh())
 		row.add_child(b)
 
 
 func _build_custom() -> Control:
-	var wrap := CenterContainer.new()
-	var p := UI.panel(null, UI.PANEL, 12)
-	p.custom_minimum_size = Vector2(900, 0)
-	wrap.add_child(p)
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 10)
-	p.add_child(vb)
-	var t := UI.lbl(vb, UI.tx("CUSTOM RACE", "سباق مخصّص"), 32, UI.TXT, false)
-	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var pref: Dictionary = Profile.solo_pref
-	var bots_opts := []
-	for i in 6:
-		bots_opts.append([i, str(i)])
-	_seg(vb, UI.tx("Opponents", "المنافسون"), bots_opts, "bots", int(pref.get("bots", 3)))
-	var lv_opts := []
-	for i in 4:
-		lv_opts.append([i, Career.nm(Career.LEVEL_NAMES[i])])
-	_seg(vb, UI.tx("Opponent level", "مستوى المنافسين"), lv_opts, "level", int(pref.get("level", 1)))
-	var w_opts := []
-	for w in ["clear", "fog", "rain", "night", "storm"]:
-		w_opts.append([w, Career.nm(Career.WEATHER_NAMES[w])])
-	_seg(vb, UI.tx("Weather", "الطقس"), w_opts, "weather", str(pref.get("weather", "clear")))
-	var th_opts := [["", UI.tx("Random", "عشوائي")]]
-	for th in ["mountain", "snow", "autumn"]:
-		th_opts.append([th, Career.nm(Career.THEME_NAMES[th])])
-	_seg(vb, UI.tx("Track", "المضمار"), th_opts, "theme", str(pref.get("theme", "")))
-	var note := UI.lbl(vb, UI.tx("Win a race against opponents to earn more coins.", "الفوز على المنافسين يعطيك عملات أكثر."), 15, UI.TXT2, false)
-	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	vb.add_child(row)
-	UI.btn(row, L.t("back"), UI.CARD2, func(): _go("main"), 22, Vector2(170, 56))
-	var go := UI.btn(row, UI.tx("START RACE", "ابدأ السباق"), UI.ACCENT, func():
-		var cfg := {"bots": int(custom_vals["bots"]), "level": int(custom_vals["level"]), "weather": str(custom_vals["weather"]), "theme": str(custom_vals["theme"]), "career": -1}
-		Profile.solo_pref = {"bots": cfg["bots"], "level": cfg["level"], "weather": cfg["weather"], "theme": cfg["theme"]}
-		Profile.save()
-		_start_solo(cfg), 24, Vector2(0, 56))
-	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	return wrap
-
-
-class StarRow extends Control:
-	var stars := 0
-
-	func _init(n := 0) -> void:
-		stars = n
-		custom_minimum_size = Vector2(96, 26)
-		mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-	func _draw() -> void:
-		for k in 3:
-			var c := Vector2(14 + k * 32, 13)
-			var pts := PackedVector2Array()
-			for i in 10:
-				var r := 12.0 if i % 2 == 0 else 5.2
-				var a := -PI / 2.0 + i * PI / 5.0
-				pts.append(c + Vector2(cos(a), sin(a)) * r)
-			draw_colored_polygon(pts, Color(1.0, 0.8, 0.25) if k < stars else Color(1, 1, 1, 0.12))
-
-
-func _build_career() -> Control:
 	var wrap := VBoxContainer.new()
 	wrap.add_theme_constant_override("separation", 10)
 	var top := HBoxContainer.new()
 	top.add_theme_constant_override("separation", 12)
 	wrap.add_child(top)
-	UI.btn(top, "<  " + L.t("back"), UI.CARD2, func(): _go("main"), 20, Vector2(150, 48))
-	var t := UI.lbl(top, UI.tx("CAREER", "المراحل"), 30, UI.TXT, false)
-	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	UI.btn(top, "<  " + L.t("back"), UI.CARD2, func(): _go("solo"), 20, Vector2(150, 48))
+	var t := UI.lbl(top, UI.tx("CUSTOM RACE", "سباق مخصّص"), 30, UI.TXT, false)
 	t.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	career_stars_lbl = UI.lbl(top, "", 20, UI.ACCENT, false)
-	career_stars_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	var sc := TScroll.new()
-	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	wrap.add_child(sc)
-	career_grid = GridContainer.new()
-	career_grid.columns = 5
-	career_grid.add_theme_constant_override("h_separation", 10)
-	career_grid.add_theme_constant_override("v_separation", 10)
-	career_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sc.add_child(career_grid)
+	var body := HBoxContainer.new()
+	body.add_theme_constant_override("separation", 12)
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	wrap.add_child(body)
+	# left: track
+	var left := PanelContainer.new()
+	left.add_theme_stylebox_override("panel", UI.sb(UI.PANEL, 12, UI.LINE, 1))
+	left.custom_minimum_size = Vector2(210, 0)
+	body.add_child(left)
+	var lm := MarginContainer.new()
+	for sd in ["left", "right", "top", "bottom"]:
+		lm.add_theme_constant_override("margin_" + sd, 12)
+	left.add_child(lm)
+	var lv := VBoxContainer.new()
+	lv.add_theme_constant_override("separation", 8)
+	lm.add_child(lv)
+	var th_opts := [["", UI.tx("Random", "عشوائي")]]
+	for th in ["mountain", "snow", "autumn"]:
+		th_opts.append([th, Career.nm(Career.THEME_NAMES[th])])
+	_seg(lv, UI.tx("TRACK", "المضمار"), th_opts, "theme", str(pref.get("theme", "")), true)
+	# centre: the picture
+	var mid := VBoxContainer.new()
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.add_theme_constant_override("separation", 10)
+	body.add_child(mid)
+	var frame := PanelContainer.new()
+	frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	frame.add_theme_stylebox_override("panel", UI.sb(Color(0.03, 0.035, 0.045), 12, Color(1, 1, 1, 0.14), 2))
+	mid.add_child(frame)
+	var art_holder := Control.new()
+	art_holder.clip_contents = true
+	frame.add_child(art_holder)
+	custom_art = StageArt.new(str(pref.get("theme", "")), str(pref.get("weather", "clear")))
+	custom_art.poster = true
+	custom_art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	art_holder.add_child(custom_art)
+	var cap := VBoxContainer.new()
+	cap.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	cap.offset_left = 18
+	cap.offset_right = -18
+	cap.offset_bottom = -12
+	cap.offset_top = -86
+	cap.alignment = BoxContainer.ALIGNMENT_END
+	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art_holder.add_child(cap)
+	custom_cap1 = UI.lbl(cap, "", 30, Color.WHITE, false)
+	custom_cap2 = UI.lbl(cap, "", 17, Color(0.85, 0.88, 0.94), false)
+	custom_cap1.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	custom_cap2.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bots_opts := []
+	for i in 6:
+		bots_opts.append([i, str(i)])
+	var lrow := HBoxContainer.new()
+	lrow.add_theme_constant_override("separation", 14)
+	mid.add_child(lrow)
+	_seg(lrow, UI.tx("OPPONENTS", "المنافسون"), bots_opts, "bots", int(pref.get("bots", 3)))
+	var lv_opts := []
+	for i in 4:
+		lv_opts.append([i, Career.nm(Career.LEVEL_NAMES[i])])
+	_seg(lrow, UI.tx("OPPONENT LEVEL", "مستوى المنافسين"), lv_opts, "level", int(pref.get("level", 1)))
+	var go := UI.btn(mid, UI.tx("START RACE", "ابدأ السباق"), UI.ACCENT, func():
+		var cfg := {"bots": int(custom_vals["bots"]), "level": int(custom_vals["level"]), "weather": str(custom_vals["weather"]), "theme": str(custom_vals["theme"]), "career": -1}
+		Profile.solo_pref = {"bots": cfg["bots"], "level": cfg["level"], "weather": cfg["weather"], "theme": cfg["theme"]}
+		Profile.save()
+		_start_solo(cfg), 26, Vector2(0, 60))
+	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# right: weather
+	var right := PanelContainer.new()
+	right.add_theme_stylebox_override("panel", UI.sb(UI.PANEL, 12, UI.LINE, 1))
+	right.custom_minimum_size = Vector2(210, 0)
+	body.add_child(right)
+	var rm := MarginContainer.new()
+	for sd in ["left", "right", "top", "bottom"]:
+		rm.add_theme_constant_override("margin_" + sd, 12)
+	right.add_child(rm)
+	var rv := VBoxContainer.new()
+	rv.add_theme_constant_override("separation", 8)
+	rm.add_child(rv)
+	var w_opts := []
+	for w in ["clear", "fog", "rain", "night", "storm"]:
+		w_opts.append([w, Career.nm(Career.WEATHER_NAMES[w])])
+	_seg(rv, UI.tx("WEATHER", "الطقس"), w_opts, "weather", str(pref.get("weather", "clear")), true)
+	_custom_refresh()
 	return wrap
 
 
+func _custom_refresh() -> void:
+	if custom_art == null or not is_instance_valid(custom_art) or not custom_vals.has("weather") or not custom_vals.has("theme"):
+		return
+	var th := str(custom_vals["theme"])
+	var wx := str(custom_vals["weather"])
+	custom_art.cycle = (th == "")
+	custom_art.set_scene("mountain" if th == "" else th, wx)
+	custom_cap1.text = UI.tx("Random track", "مضمار عشوائي") if th == "" else Career.nm(Career.THEME_NAMES[th])
+	var nb := int(custom_vals.get("bots", 3))
+	var lvn := Career.nm(Career.LEVEL_NAMES[int(custom_vals.get("level", 1))])
+	custom_cap2.text = "%s   |   %s   |   %s" % [Career.nm(Career.WEATHER_NAMES[wx]),
+		(UI.tx("%d opponents", "%d منافسين") % nb) if nb > 0 else UI.tx("Solo run", "بدون منافسين"), lvn if nb > 0 else UI.tx("Time trial", "ضد الزمن")]
+
+
 func _open_career() -> void:
-	_fill_career()
+	career_page.open_page()
 	_go("career")
-
-
-func _fill_career() -> void:
-	for c in career_grid.get_children():
-		c.queue_free()
-	var total := 0
-	for i in Career.COUNT:
-		var lv := Career.level(i)
-		var st := int(Profile.career.get(str(i), 0))
-		total += st
-		var open := Career.unlocked(i)
-		var b := Button.new()
-		b.custom_minimum_size = Vector2(0, 176)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.focus_mode = Control.FOCUS_NONE
-		var edge := Color(1.0, 0.8, 0.25) if bool(lv["boss"]) else UI.LINE
-		var n := UI.sb(Color(0.075, 0.08, 0.1, 0.94) if open else Color(0.05, 0.055, 0.07, 0.9), 12, edge if open else Color(1, 1, 1, 0.05), 2 if bool(lv["boss"]) else 1)
-		var hv := UI.sb(Color(0.12, 0.115, 0.115, 0.96), 12, UI.ACCENT, 2)
-		b.add_theme_stylebox_override("normal", n)
-		b.add_theme_stylebox_override("hover", hv if open else n)
-		b.add_theme_stylebox_override("pressed", hv if open else n)
-		b.add_theme_stylebox_override("focus", n)
-		var v := VBoxContainer.new()
-		v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		v.offset_left = 12
-		v.offset_right = -12
-		v.offset_top = 8
-		v.offset_bottom = -8
-		v.add_theme_constant_override("separation", 3)
-		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		b.add_child(v)
-		var head := UI.lbl(v, (UI.tx("STAGE %d", "المرحلة %d") % (i + 1)) + ("   BOSS" if bool(lv["boss"]) else ""), 18, Color(1.0, 0.8, 0.25) if bool(lv["boss"]) else UI.TXT, false)
-		head.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var l2 := UI.lbl(v, "%s  -  %s" % [Career.nm(Career.THEME_NAMES[lv["theme"]]), Career.nm(Career.WEATHER_NAMES[lv["weather"]])], 14, UI.TXT2, false)
-		l2.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var l3 := UI.lbl(v, UI.tx("%d opponents  -  %s", "%d منافسين  -  %s") % [int(lv["bots"]), Career.nm(Career.LEVEL_NAMES[lv["level"]])], 14, UI.TXT2, false)
-		l3.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var l4 := UI.lbl(v, UI.tx("Finish top %d", "أنهِ ضمن أول %d") % int(lv["need"]), 14, UI.ACCENT if open else UI.TXT2, false)
-		l4.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var sp := Control.new()
-		sp.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		sp.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		v.add_child(sp)
-		if open:
-			v.add_child(StarRow.new(st))
-			var l5 := UI.lbl(v, "+%d  %s" % [int(lv["coins"]), UI.tx("coins", "عملة")], 14, Color(1.0, 0.8, 0.25), false)
-			l5.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			var idx := i
-			b.pressed.connect(func():
-				Sfx.play("click", -6.0)
-				_start_solo({"career": idx}))
-		else:
-			var lk := UI.lbl(v, UI.tx("LOCKED", "مقفلة"), 16, UI.TXT2, false)
-			lk.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			b.disabled = false
-			b.pressed.connect(func(): _say(UI.tx("Finish the previous stage first.", "أنهِ المرحلة السابقة أولاً.")))
-		career_grid.add_child(b)
-	career_stars_lbl.text = UI.tx("Stars  %d / %d", "النجوم  %d / %d") % [total, Career.COUNT * 3]
 
 
 func _join(ip: String) -> void:
