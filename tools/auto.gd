@@ -49,18 +49,26 @@ func _process(d: float) -> void:
 		"menu2":
 			# solo page, custom race page, career page
 			if step == 0 and t > 3.0:
-				step = 1; sc._show_solo(true)
+				step = 1; sc._open_solo()
 			elif step == 1 and t > 3.8:
 				step = 2; shot("solo_box")
 			elif step == 2 and t > 4.0:
 				step = 3; sc._go("custom")
-			elif step == 3 and t > 4.8:
+			elif step == 3 and t > 5.2:
 				step = 4; shot("custom")
-			elif step == 4 and t > 5.0:
-				step = 5; Profile.career = {"0": 3, "1": 2, "2": 1}; sc._open_career()
-			elif step == 5 and t > 5.8:
-				step = 6; shot("career")
-			elif step == 6 and t > 6.0:
+				sc.custom_vals["weather"] = "night"; sc.custom_vals["theme"] = "snow"; sc._custom_refresh()
+			elif step == 4 and t > 6.2:
+				step = 5; shot("custom_night_snow")
+				sc.custom_vals["weather"] = "storm"; sc.custom_vals["theme"] = "autumn"; sc._custom_refresh()
+			elif step == 5 and t > 7.4:
+				step = 6; shot("custom_storm_autumn")
+				sc.custom_vals["weather"] = "fog"; sc.custom_vals["theme"] = "mountain"; sc._custom_refresh()
+			elif step == 6 and t > 8.4:
+				step = 7; shot("custom_fog_mountain")
+				Profile.career = {"0": 3, "1": 2, "2": 1, "3": 1}; sc._open_career()
+			elif step == 7 and t > 10.6:
+				step = 8; shot("career")
+			elif step == 8 and t > 10.8:
 				get_tree().quit()
 		"bots":
 			# solo race with bots: BOTS="n,level,weather,career"
