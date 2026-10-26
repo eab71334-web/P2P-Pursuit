@@ -27,6 +27,7 @@ var cycle := false  # rotate the theme every few seconds (random track)
 var speed := 3.0
 var dim := 0.0
 var show_car := false
+var landmark := ""  # "", "village", "bridge", "tower", "tunnel"
 var poster := false  # richer cover look: warm grade, light rays, halftone, grain, vignette
 var grade := Color(0, 0, 0, 0)
 var _scroll := 0.0
@@ -192,6 +193,8 @@ func _draw() -> void:
 		cols.append(col)
 		cols.append(col)
 		draw_polygon(pts, cols)
+		if li == 1 and landmark == "tower":
+			_tower(w, h, hz)
 	# ground
 	var g := _tc(th["ground"], 0.5)
 	var g2 := _tc(th["ground"], 0.0).darkened(0.12)
@@ -229,6 +232,10 @@ func _draw() -> void:
 			var d1 := h1 * 0.035
 			var dc := _tc(Color(0.95, 0.8, 0.3), 0.2 * (1.0 - t1))
 			draw_polygon(PackedVector2Array([Vector2(c0 - d0, y0), Vector2(c0 + d0, y0), Vector2(c1 + d1, y1), Vector2(c1 - d1, y1)]), PackedColorArray([dc, dc, dc, dc]))
+	if landmark == "tunnel":
+		_tunnel(w, h, hz, bend)
+	elif landmark == "village":
+		_village(w, h, hz, bend)
 	# headlights on dark scenes
 	if show_car and (weather == "night" or weather == "storm" or weather == "fog"):
 		var cp := 0.9
@@ -255,6 +262,8 @@ func _draw() -> void:
 		var x := _cx(p, w, bend) + float(tr["side"]) * (_hw(p, w) * float(tr["off"]) + w * 0.01)
 		var sz := h * 0.62 * p + 3.0
 		_tree(x, y, sz, int(tr["k"]), u)
+	if landmark == "bridge":
+		_bridge(w, h, hz, bend)
 	if show_car:
 		_car(w, h, hz, bend)
 	# haze at the horizon
@@ -358,3 +367,98 @@ func _poster_fx(w: float, h: float, hz: float) -> void:
 	draw_polygon(PackedVector2Array([Vector2(0, 0), Vector2(vw, 0), Vector2(vw, h), Vector2(0, h)]), PackedColorArray([Color(0, 0, 0, 0.4), Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0.4)]))
 	draw_polygon(PackedVector2Array([Vector2(w - vw, 0), Vector2(w, 0), Vector2(w, h), Vector2(w - vw, h)]), PackedColorArray([Color(0, 0, 0, 0), Color(0, 0, 0, 0.4), Color(0, 0, 0, 0.4), Color(0, 0, 0, 0)]))
 	draw_polygon(PackedVector2Array([Vector2(0, 0), Vector2(w, 0), Vector2(w, h * 0.18), Vector2(0, h * 0.18)]), PackedColorArray([Color(0, 0, 0, 0.4), Color(0, 0, 0, 0.4), Color(0, 0, 0, 0), Color(0, 0, 0, 0)]))
+
+
+func _lit() -> float:
+	return 1.0 if (weather == "night" or weather == "storm") else (0.5 if (weather == "fog" or weather == "rain") else 0.0)
+
+
+func _tower(w: float, h: float, hz: float) -> void:
+	var x := w * 0.72
+	var top := hz - h * 0.36
+	var col := _tc(Color(0.1, 0.11, 0.14), 0.7)
+	var bw := h * 0.045
+	draw_colored_polygon(PackedVector2Array([Vector2(x - bw, hz - h * 0.05), Vector2(x + bw, hz - h * 0.05), Vector2(x + 1.5, top), Vector2(x - 1.5, top)]), col)
+	for q in 5:
+		var yy := lerpf(hz - h * 0.05, top, (q + 1) / 6.0)
+		var ww := lerpf(bw, 1.5, (q + 1) / 6.0)
+		draw_line(Vector2(x - ww, yy), Vector2(x + ww, yy), col.lightened(0.15), 1.2)
+	var blink := 0.5 + 0.5 * sin(_t * 4.0)
+	draw_circle(Vector2(x, top), 7.0 * h / 340.0, Color(1, 0.15, 0.1, 0.18 + 0.2 * blink))
+	draw_circle(Vector2(x, top), 2.6 * h / 340.0, Color(1, 0.3, 0.2, 0.6 + 0.4 * blink))
+
+
+func _tunnel(w: float, h: float, hz: float, bend: float) -> void:
+	var p := 0.07
+	var y0 := hz + (h - hz) * p
+	var cx := _cx(p, w, bend)
+	var hw := _hw(p, w)
+	var rock := _tc(Color(0.2, 0.2, 0.23), 0.6)
+	var rw := hw * 3.4
+	var pts := PackedVector2Array([Vector2(cx - rw, y0 + 2.0), Vector2(cx - rw * 0.9, y0 - hw * 2.2)])
+	for k in 9:
+		var a := PI + PI * (k + 1) / 10.0
+		pts.append(Vector2(cx + cos(a) * rw * 0.9, y0 - hw * 2.2 + sin(a) * hw * 2.0))
+	pts.append(Vector2(cx + rw * 0.9, y0 - hw * 2.2))
+	pts.append(Vector2(cx + rw, y0 + 2.0))
+	draw_colored_polygon(pts, rock)
+	# arch opening with a warm glow inside
+	var ow := hw * 1.05
+	var arch := PackedVector2Array([Vector2(cx - ow, y0 + 2.0), Vector2(cx - ow, y0 - hw * 0.9)])
+	for k in 9:
+		var a2 := PI + PI * (k + 1) / 10.0
+		arch.append(Vector2(cx + cos(a2) * ow, y0 - hw * 0.9 + sin(a2) * ow * 1.05))
+	arch.append(Vector2(cx + ow, y0 - hw * 0.9))
+	arch.append(Vector2(cx + ow, y0 + 2.0))
+	draw_colored_polygon(arch, Color(0.02, 0.02, 0.03))
+	draw_circle(Vector2(cx, y0 - hw * 0.5), ow * 0.55, Color(1.0, 0.8, 0.45, 0.28))
+	draw_circle(Vector2(cx, y0 - hw * 0.5), ow * 0.25, Color(1.0, 0.9, 0.6, 0.5))
+	draw_arc(Vector2(cx, y0 - hw * 0.9), ow * 1.08, PI, TAU, 16, _tc(Color(0.75, 0.75, 0.78), 0.4), maxf(2.0, hw * 0.16))
+
+
+func _village(w: float, h: float, hz: float, bend: float) -> void:
+	var lit := _lit()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	for q in 9:
+		var side := 1.0 if q % 2 == 0 else -1.0
+		var p := 0.05 + 0.03 * (q / 2) + rng.randf() * 0.01
+		var y := hz + (h - hz) * p
+		var x := _cx(p, w, bend) + side * (_hw(p, w) * (2.3 + rng.randf() * 1.6) + w * 0.012)
+		var sz := h * 0.34 * p + 4.0
+		var wall := _tc(Color(0.82, 0.74, 0.62) if scene_theme != "snow" else Color(0.9, 0.86, 0.8), 0.7)
+		var roof := _tc(Color(0.62, 0.22, 0.14), 0.7)
+		draw_rect(Rect2(x - sz * 0.5, y - sz * 0.55, sz, sz * 0.55), wall)
+		draw_colored_polygon(PackedVector2Array([Vector2(x - sz * 0.62, y - sz * 0.55), Vector2(x + sz * 0.62, y - sz * 0.55), Vector2(x, y - sz * 1.05)]), roof)
+		if scene_theme == "snow":
+			draw_colored_polygon(PackedVector2Array([Vector2(x - sz * 0.45, y - sz * 0.66), Vector2(x + sz * 0.45, y - sz * 0.66), Vector2(x, y - sz * 1.0)]), Color(1, 1, 1, 0.9 * _mul + 0.1))
+		var wc := Color(1.0, 0.82, 0.4, 0.35 + 0.65 * lit)
+		draw_rect(Rect2(x - sz * 0.28, y - sz * 0.4, sz * 0.2, sz * 0.2), wc)
+		draw_rect(Rect2(x + sz * 0.08, y - sz * 0.4, sz * 0.2, sz * 0.2), wc)
+		if lit > 0.4:
+			draw_circle(Vector2(x, y - sz * 0.3), sz * 0.7, Color(1.0, 0.8, 0.4, 0.07))
+
+
+func _bridge(w: float, h: float, hz: float, bend: float) -> void:
+	var u := 0.22 + 0.52 * fposmod(_scroll / float(N) * 1.0 + 0.1, 1.0)
+	var p := u * u
+	var y := hz + (h - hz) * p
+	var cx := _cx(p, w, bend)
+	var hw := _hw(p, w)
+	var th := hw * 0.9
+	var stone := _tc(Color(0.46, 0.45, 0.47), 0.3)
+	var dark := stone.darkened(0.3)
+	# pillars + deck + arch underside
+	draw_rect(Rect2(cx - hw * 1.28, y - th * 1.35, hw * 0.2, th * 1.35), dark)
+	draw_rect(Rect2(cx + hw * 1.08, y - th * 1.35, hw * 0.2, th * 1.35), dark)
+	draw_rect(Rect2(cx - hw * 1.36, y - th * 1.62, hw * 2.72, th * 0.34), stone)
+	draw_rect(Rect2(cx - hw * 1.36, y - th * 1.34, hw * 2.72, th * 0.06), dark)
+	var arch := PackedVector2Array()
+	for k in 13:
+		var a := PI + PI * k / 12.0
+		arch.append(Vector2(cx + cos(a) * hw * 1.08, y - th * 0.3 + sin(a) * th * 1.0))
+	draw_polyline(arch, dark, maxf(2.0, hw * 0.12))
+	var rl := _tc(Color(0.85, 0.85, 0.88), 0.3)
+	for q in 7:
+		draw_rect(Rect2(cx - hw * 1.3 + q * hw * 0.43, y - th * 1.9, hw * 0.08, th * 0.3), rl)
+	draw_rect(Rect2(cx - hw * 1.36, y - th * 1.92, hw * 2.72, th * 0.06), rl)

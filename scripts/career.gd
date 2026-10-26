@@ -39,6 +39,13 @@ static func level(i: int) -> Dictionary:
 		"seed": 4100 + i * 131, "coins": coins, "gems": gems, "chest": chest}
 
 
+const LANDMARKS := ["village", "bridge", "tower", "bridge", "tunnel"]
+
+
+static func landmark(i: int) -> String:
+	return LANDMARKS[i % 5]
+
+
 static func stage_name(i: int) -> String:
 	var lv := level(i)
 	var pl: Array = PLACE[lv["theme"]][(i * 2 + i / 5) % 3]

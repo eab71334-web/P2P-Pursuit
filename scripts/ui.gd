@@ -51,6 +51,39 @@ static func lbl(parent: Node, text: String, fs: int, color := Color.WHITE, wrap 
 	return l
 
 
+static var _tfonts := {}
+
+
+## bold display font for titles and numbers (built from the bundled font); Latin is slanted, Arabic only emboldened
+static func title_font() -> Font:
+	var k := "ar" if L.is_ar() else "en"
+	if not _tfonts.has(k):
+		var fv := FontVariation.new()
+		fv.base_font = load("res://fonts/DejaVuSans-Bold.ttf")
+		fv.variation_embolden = 0.3
+		if k == "en":
+			fv.variation_transform = Transform2D(Vector2(1, 0), Vector2(-0.2, 1), Vector2.ZERO)
+			fv.spacing_glyph = 1
+		_tfonts[k] = fv
+	return _tfonts[k]
+
+
+static func title(parent: Node, text: String, fs: int, color := Color.WHITE) -> Label:
+	var l := lbl(parent, text, fs, color, false)
+	l.add_theme_font_override("font", title_font())
+	return l
+
+
+## fade + grow in, staggered
+static func enter(c: Control, delay := 0.0) -> void:
+	c.modulate.a = 0.0
+	c.pivot_offset = c.size * 0.5
+	c.scale = Vector2(0.93, 0.93)
+	var tw := c.create_tween().set_parallel(true)
+	tw.tween_property(c, "modulate:a", 1.0, 0.28).set_delay(delay)
+	tw.tween_property(c, "scale", Vector2.ONE, 0.34).set_delay(delay).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
 static func pop(c: Control, amount := 1.05) -> void:
 	c.resized.connect(func(): c.pivot_offset = c.size * 0.5)
 	c.mouse_entered.connect(func(): c.create_tween().tween_property(c, "scale", Vector2(amount, amount), 0.1))

@@ -7,7 +7,7 @@ signal back
 signal play(idx: int)
 signal toast(msg: String)
 
-const NODE_FRAC := [Vector2(0.11, 0.66), Vector2(0.31, 0.27), Vector2(0.5, 0.7), Vector2(0.69, 0.3), Vector2(0.89, 0.62)]
+const NODE_FRAC := [Vector2(0.12, 0.7), Vector2(0.3, 0.28), Vector2(0.5, 0.72), Vector2(0.69, 0.27), Vector2(0.87, 0.66)]
 
 var sel := 0
 var _title: Label
@@ -78,6 +78,16 @@ class Backdrop extends Control:
 		for k in 4:
 			var x0 := w * (0.1 + k * 0.28)
 			draw_colored_polygon(PackedVector2Array([Vector2(x0, 0), Vector2(x0 + w * 0.09, 0), Vector2(x0 - w * 0.14, h), Vector2(x0 - w * 0.23, h)]), Color(1, 1, 1, 0.018))
+		# topographic contour lines
+		for cc in [Vector2(w * 0.22, h * 0.3), Vector2(w * 0.78, h * 0.72)]:
+			for ring in 9:
+				var pts := PackedVector2Array()
+				var rr := 40.0 + ring * 34.0
+				for k in 61:
+					var a := TAU * k / 60.0
+					var wob := 1.0 + 0.12 * sin(a * 3.0 + ring * 0.7) + 0.07 * sin(a * 5.0 - ring)
+					pts.append(cc + Vector2(cos(a) * rr * 1.5, sin(a) * rr) * wob)
+				draw_polyline(pts, Color(1, 1, 1, 0.035), 1.2, true)
 		# halftone dots fading towards the top-right
 		var step := 15.0
 		var ny := int(h / step)
@@ -153,7 +163,7 @@ func _init() -> void:
 	top.add_theme_constant_override("separation", 12)
 	add_child(top)
 	UI.btn(top, "<  " + L.t("back"), UI.CARD2, func(): back.emit(), 20, Vector2(150, 48))
-	_title = UI.lbl(top, "", 32, UI.TXT, false)
+	_title = UI.title(top, "", 34, UI.TXT)
 	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_chips = HBoxContainer.new()
@@ -270,7 +280,7 @@ func _build_nodes(tier: int) -> void:
 		var st := _stars(i)
 		var op := Career.unlocked(i)
 		var boss := bool(lv["boss"])
-		var sz := Vector2(268, 112) if boss else Vector2(238, 98)
+		var sz := Vector2(300, 128) if boss else Vector2(264, 112)
 		var b := Button.new()
 		b.focus_mode = Control.FOCUS_NONE
 		b.size = sz
@@ -296,6 +306,7 @@ func _build_nodes(tier: int) -> void:
 		th.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		h.add_child(th)
 		var art := StageArt.new(str(lv["theme"]), str(lv["weather"]))
+		art.landmark = Career.landmark(i)
 		art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		art.speed = 2.4 if on else 0.9
 		art.dim = 0.0 if op else 0.7
@@ -314,7 +325,7 @@ func _build_nodes(tier: int) -> void:
 		v.add_theme_constant_override("separation", 1)
 		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		h.add_child(v)
-		var nl := UI.lbl(v, "%02d%s" % [i + 1, ("  " + UI.tx("FINAL", "النهائي")) if boss else ""], 22, Color(1.0, 0.8, 0.25) if boss else Color.WHITE, false)
+		var nl := UI.title(v, "%02d%s" % [i + 1, ("  " + UI.tx("FINAL", "النهائي")) if boss else ""], 24, Color(1.0, 0.8, 0.25) if boss else Color.WHITE)
 		nl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var nm := UI.lbl(v, Career.stage_name(i), 13, UI.TXT2 if op else Color(0.45, 0.48, 0.55), true)
 		nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -329,6 +340,7 @@ func _build_nodes(tier: int) -> void:
 			sel = idx
 			refresh())
 		_map.add_child(b)
+		UI.enter(b, 0.07 * j)
 		_map.pts.append(Vector2.ZERO)
 		_map.rects.append(Rect2())
 		_map.open.append(op)
@@ -384,6 +396,7 @@ func _build_poster() -> void:
 	art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	art.speed = 3.0
 	art.poster = true
+	art.landmark = Career.landmark(i)
 	ph.add_child(art)
 	var cap := VBoxContainer.new()
 	cap.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
@@ -396,7 +409,8 @@ func _build_poster() -> void:
 	ph.add_child(cap)
 	var k := UI.lbl(cap, "%s %02d%s" % [UI.tx("STAGE", "المرحلة"), i + 1, ("  -  " + UI.tx("FINAL EVENT", "الحدث النهائي")) if bool(lv["boss"]) else ""], 14, Color(1.0, 0.8, 0.25) if bool(lv["boss"]) else UI.ACCENT, false)
 	k.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var nl := UI.lbl(cap, Career.stage_name(i), 24, Color.WHITE, true)
+	var nl := UI.title(cap, Career.stage_name(i), 26, Color.WHITE)
+	nl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	nl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var tl := UI.lbl(cap, "%s  |  %s" % [Career.nm(Career.THEME_NAMES[lv["theme"]]), Career.nm(Career.WEATHER_NAMES[lv["weather"]])], 14, Color(0.85, 0.88, 0.94), false)
 	tl.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -425,4 +439,5 @@ func _build_poster() -> void:
 	var rl := UI.lbl(v, UI.tx("REWARD: ", "الجائزة: ") + rw, 15, Color(1.0, 0.8, 0.25), true)
 	rl.add_theme_constant_override("outline_size", 0)
 	var go := UI.btn(v, UI.tx("RACE AGAIN", "أعد السباق") if st > 0 else UI.tx("PLAY", "العب"), UI.ACCENT, func(): play.emit(sel), 26, Vector2(0, 60))
+	go.add_theme_font_override("font", UI.title_font())
 	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
