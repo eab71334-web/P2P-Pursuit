@@ -238,3 +238,10 @@ Studio brand is now **Sabak Studios / سَبَك** (logo `art/sabak_logo.png`; r
 - Tested as desktop screenshots only.
 - Update 19: solo tiles separated with framed posters; cars removed from all stage covers; richer poster look (grade, rays, halftone, grain, vignette).
 - Update 20: display title font (bold, slanted for Latin), landmarks in stage art (village/bridge/tower/tunnel), entrance animations, contour map background; layouts checked at 1280x720, 1280x590 and 2340x1080.
+
+## Update 21 — Tunnels, backend, admin app
+- Tunnels: mountain and snow stages get 1-2 real tunnels on long straights (arched tube with collision, ceiling lights, rock headwall). The co-driver calls "TUNNEL"; rain stops inside. Bots drive through them.
+- `backend/`: Python server (standard library + SQLite): redeem codes, events, card payments (Stripe adapter + test provider), error reports, admin API. `python3 backend/test_backend.py` runs 30 checks.
+- Game: `scripts/backend.gd` (autoload), `scripts/backend_ui.gd`. Shop tab: REDEEM CODE and EVENTS. Checkout pays by card through the backend. Crash/"unclean exit" and save-failure reports. Set `DEFAULT_URL` in backend.gd to your https server before exporting; empty = fully offline as before.
+- `admin-app/`: separate Godot mobile app "Sabak Admin" (portrait, Arabic): home, codes, events, payments, errors, game filter. Workflows: `.github/workflows/admin-android.yml`, `admin-ios.yml` (not run yet).
+- Not done / honest limits: real money was never charged (no gateway account/keys here); Godot 4.3 cannot capture script runtime errors automatically, only explicit reports + unclean-exit detection; player progress is still stored on the phone.
