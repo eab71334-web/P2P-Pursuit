@@ -93,6 +93,71 @@ func _process(d: float) -> void:
 					shot("bots_%d" % step)
 				if w.state == 3 or step >= 38:
 					get_tree().quit()
+		"tunnel":
+			# free camera views of the first tunnel; env WX=weather TH=theme
+			if step == 0 and t > 2.0:
+				step = 1
+				var wx := OS.get_environment("WX") if OS.get_environment("WX") != "" else "clear"
+				var th := OS.get_environment("TH") if OS.get_environment("TH") != "" else "mountain"
+				sc._start_solo({"bots": 0, "level": 1, "weather": wx, "theme": th, "career": -1})
+			elif step >= 1 and step < 8 and t > 9.0 + (step - 1) * 1.5:
+				var w = get_tree().current_scene
+				if w.get("teams") == null or w.track == null:
+					return
+				if w.track.tunnels.is_empty():
+					print("NO TUNNEL"); get_tree().quit(); return
+				var tn: Dictionary = w.track.tunnels[0]
+				var cam: Camera3D = w.get_node_or_null("TCam")
+				if cam == null:
+					cam = Camera3D.new(); cam.name = "TCam"; cam.far = 600.0; w.add_child(cam)
+				var views := [[-16, 5.0, 8], [-4, 2.2, 14], [4, 2.0, 16], [9, 2.0, 18], [20, 3.0, 12], [10, 40.0, 0]]
+				var k: int = step - 1
+				if k < views.size():
+					var v: Array = views[k]
+					var i0: int = int(tn["from"]) + int(v[0])
+					var i1: int = int(tn["from"]) + int(v[0]) + int(v[2])
+					cam.global_position = w.track.points[i0] + Vector3(0, v[1], 0)
+					cam.look_at(w.track.points[i1] + Vector3(0, 1.5, 0))
+					cam.make_current()
+					if k >= 1:
+						shot("tunnel_%d" % k)
+				else:
+					get_tree().quit()
+				step += 1
+		"backend":
+			# redeem code, events dialog, card payment (test provider) against a local backend; env CODE
+			if step == 0 and t > 3.0:
+				step = 1; print("BACKEND enabled=%s url=%s pid=%s" % [Backend.enabled(), Backend.url, Profile.pid]); sc.hub.select("shop")
+			elif step == 1 and t > 4.0:
+				step = 2; print("BACKEND config payments=%s provider=%s billing=%s events=%d" % [Backend.payments, Backend.provider, Billing.enabled, Backend.events.size()]); shot("shop_backend")
+				BackendUI.open_redeem(sc.hub)
+			elif step == 2 and t > 5.0:
+				step = 3; shot("redeem_dialog")
+				print("BACKEND coins_before=%d gems_before=%d" % [Profile.coins, Profile.gems])
+				Backend.redeem(OS.get_environment("CODE"), func(h, d): print("BACKEND redeem http=%d %s coins=%d gems=%d" % [h, d, Profile.coins, Profile.gems]))
+			elif step == 3 and t > 6.5:
+				step = 4; Backend.redeem(OS.get_environment("CODE"), func(h, d): print("BACKEND redeem again http=%d %s" % [h, d]))
+			elif step == 4 and t > 7.5:
+				step = 5; BackendUI.open_events(sc.hub)
+			elif step == 5 and t > 9.0:
+				step = 6; shot("events_dialog")
+			elif step == 6 and t > 9.5:
+				step = 7
+				var ck := Checkout.new(); ck.pack = Billing.pack("g80"); ck.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); sc.hub.add_child(ck); ck._build(Callable())
+				print("BACKEND gems_before_pay=%d" % Profile.gems)
+				ck._on_pay()
+				set_meta("ck", ck)
+			elif step == 7 and t > 11.0:
+				step = 8; shot("checkout_waiting")
+				# simulate the customer paying on the test page
+				var pay := HTTPRequest.new(); add_child(pay)
+				var ord := Profile.pending_order
+				print("BACKEND pending_order=%s" % ord)
+				pay.request(Backend.url + "/pay/test/" + ord, PackedStringArray(), HTTPClient.METHOD_POST, "")
+			elif step == 8 and t > 17.0:
+				step = 9; print("BACKEND gems_after_pay=%d pending=%s" % [Profile.gems, Profile.pending_order]); shot("checkout_done")
+			elif step == 9 and t > 17.5:
+				get_tree().quit()
 		"garage":
 			if step == 0 and t > 2.5:
 				step = 1; Profile.level = 20; Profile.coins = 99999; Profile.cars["muscle"] = true; Profile.cars["gt3"] = true; Profile.car = "coupe"; Profile.cars["coupe"] = true
