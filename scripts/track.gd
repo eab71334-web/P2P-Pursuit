@@ -28,6 +28,7 @@ var obstacles: Array[Dictionary] = []
 var edges: Array[Dictionary] = []
 ## slippery sections: {from, to}
 var ices: Array[Dictionary] = []
+var tunnels: Array[Dictionary] = []   # {from, to} point ranges that run inside a tunnel
 
 # stage parameters (filled by the stage director)
 var theme := "snow"
@@ -141,6 +142,20 @@ func is_open(i: int) -> bool:
 	return false
 
 
+func _near_tunnel(idx: int, margin: int) -> bool:
+	for t in tunnels:
+		if idx > int(t["from"]) - margin and idx < int(t["to"]) + margin:
+			return true
+	return false
+
+
+func in_tunnel(i: int) -> bool:
+	for t in tunnels:
+		if i >= int(t["from"]) - 1 and i <= int(t["to"]) + 1:
+			return true
+	return false
+
+
 func ice_at(i: int) -> bool:
 	for e in ices:
 		if i >= e["from"] and i <= e["to"]:
@@ -212,6 +227,7 @@ func _build(seed_value: int, validate: bool) -> bool:
 	obstacles.clear()
 	edges.clear()
 	ices.clear()
+	tunnels.clear()
 	_push()
 	_straight(70.0)
 	var total_turn := 0.0
@@ -231,6 +247,9 @@ func _build(seed_value: int, validate: bool) -> bool:
 			notes.append({"index": points.size() - 1 - int(s / STEP), "text": "Flat out", "dir": 0, "sev": 0, "len": int(s), "kind": "flat"})
 	_straight(60.0)
 
+	var trng := RandomNumberGenerator.new()
+	trng.seed = seed_value * 31 + 7
+	_add_tunnels(trng)
 	_add_forks(rng)
 	_add_obstacles(rng)
 	_apply_relief(rng)
@@ -270,6 +289,8 @@ func _add_forks(rng: RandomNumberGenerator) -> void:
 			continue
 		if not _is_straight(idx - 4, idx + 5):
 			continue
+		if _near_tunnel(idx, 14):
+			continue
 		if rng.randf() > fork_p:
 			continue
 		last = idx
@@ -306,7 +327,7 @@ func _add_obstacles(rng: RandomNumberGenerator) -> void:
 		for b in branches:
 			if absi(int(b["fork"]) - idx) < 14:
 				near_fork = true
-		if near_fork or rng.randf() > obst_p:
+		if near_fork or _near_tunnel(idx, 6) or rng.randf() > obst_p:
 			continue
 		last = idx
 		var side := 1 if rng.randf() < 0.5 else -1
@@ -363,6 +384,9 @@ func _near_special(idx: int, margin: int) -> bool:
 	for e in ices:
 		if idx > int(e["from"]) - margin and idx < int(e["to"]) + margin:
 			return true
+	for e in tunnels:
+		if idx > int(e["from"]) - margin and idx < int(e["to"]) + margin:
+			return true
 	return false
 
 
@@ -402,3 +426,34 @@ func _add_rare(rng: RandomNumberGenerator) -> void:
 			var side := 1 if rng.randf() < 0.5 else -1
 			obstacles.append({"index": idx, "kind": "rockfall", "side": side})
 			notes.append({"index": idx, "text": "Rockfall", "dir": side, "sev": 5, "len": 0, "kind": "rockfall"})
+
+
+## mountain and snow stages get one or two tunnels on long straights (40-80 m); the co-driver calls them out
+func _add_tunnels(rng: RandomNumberGenerator) -> void:
+	if theme == "autumn":
+		return
+	var n := points.size()
+	# straight runs (same heading) that are long enough and clear of other hazards
+	var runs: Array[Vector2i] = []
+	var i := 95
+	while i < n - 80:
+		var j := i
+		while j + 1 < n - 80 and absf(headings[j + 1] - headings[i]) < 0.001:
+			j += 1
+		if j - i >= 11:
+			runs.append(Vector2i(i, j))
+		i = j + 1
+	runs.shuffle()
+	var want := 2 if rng.randf() < 0.4 else 1
+	for r in runs:
+		if tunnels.size() >= want:
+			break
+		var len_pts := mini(16, r.y - r.x - 4)
+		if len_pts < 8:
+			continue
+		var from := r.x + (r.y - r.x - len_pts) / 2
+		var to := from + len_pts
+		if _near_special(from, 5) or _near_special(to, 5) or _near_special((from + to) / 2, 5):
+			continue
+		tunnels.append({"from": from, "to": to})
+		notes.append({"index": from, "text": "Tunnel", "dir": 0, "sev": 2, "len": len_pts * int(STEP), "kind": "tunnel"})

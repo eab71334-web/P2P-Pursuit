@@ -1516,6 +1516,7 @@ func _weather_process(delta: float) -> void:
 		if is_instance_valid(c):
 			_rain.global_position = c.global_position + Vector3(0, 13, -8)
 			_rain.global_rotation = Vector3.ZERO
+			_rain.emitting = not track.in_tunnel(teams[my_team].prog)
 	if _bolt:
 		_bolt_wait -= delta
 		if _bolt_wait <= 0.0:
@@ -1693,8 +1694,73 @@ func _build_track() -> void:
 
 	_build_gate(6, Color(0.2, 0.8, 0.3), "START")
 	_build_gate(track.points.size() - 4, Color(0.95, 0.95, 0.95), "FINISH")
+	_build_tunnels()
 	_build_trees()
 	_build_mountains()
+
+
+## tunnels: an arched tube around the road (with collision), light strips on the ceiling and a rock headwall at each mouth
+func _build_tunnels() -> void:
+	if track.tunnels.is_empty():
+		return
+	var W := Track.ROAD_WIDTH * 0.5 + 2.2
+	var wall_h := 3.6
+	var prof: Array[Vector2] = [Vector2(-W, -0.4), Vector2(-W, wall_h)]
+	for k in range(1, 12):
+		var a := PI - PI * k / 12.0
+		prof.append(Vector2(cos(a) * W, wall_h + sin(a) * W * 0.66))
+	prof.append(Vector2(W, wall_h))
+	prof.append(Vector2(W, -0.4))
+	var tube_mat := _mat(Color(0.3, 0.3, 0.33))
+	tube_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var lamp_mat := StandardMaterial3D.new()
+	lamp_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	lamp_mat.albedo_color = Color(1.0, 0.92, 0.7)
+	var lamps: Array[Transform3D] = []
+	var heads: Array[Transform3D] = []
+	var body := StaticBody3D.new()
+	add_child(body)
+	for t in track.tunnels:
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var f: int = t["from"]
+		var e: int = t["to"]
+		for i in range(f, e):
+			var pa := track.points[i]
+			var pb := track.points[i + 1]
+			var la := Track.left_of(track.headings[i])
+			var lb := Track.left_of(track.headings[i + 1])
+			for q in prof.size() - 1:
+				var a0 := pa + la * -prof[q].x + Vector3(0, prof[q].y, 0)
+				var a1 := pa + la * -prof[q + 1].x + Vector3(0, prof[q + 1].y, 0)
+				var b0 := pb + lb * -prof[q].x + Vector3(0, prof[q].y, 0)
+				var b1 := pb + lb * -prof[q + 1].x + Vector3(0, prof[q + 1].y, 0)
+				for v in [a0, a1, b1, a0, b1, b0]:
+					st.add_vertex(v)
+			if i % 2 == 0:
+				for side in [-1.0, 1.0]:
+					var lp: Vector3 = pa + la * side * W * 0.42 + Vector3(0, wall_h + W * 0.66 * 0.9, 0)
+					var yaw: float = atan2(-(pb - pa).x, -(pb - pa).z)
+					lamps.append(Transform3D(Basis(Vector3.UP, yaw) * Basis.from_scale(Vector3(0.5, 0.18, 1.6)), lp))
+		st.generate_normals()
+		var mesh := st.commit()
+		var mi := MeshInstance3D.new()
+		mi.mesh = mesh
+		mi.material_override = tube_mat
+		add_child(mi)
+		var cs := CollisionShape3D.new()
+		cs.shape = mesh.create_trimesh_shape()
+		body.add_child(cs)
+		# rock headwalls over both mouths
+		for idx in [f, e]:
+			var yaw2 := track.headings[idx]
+			var top: Vector3 = track.points[idx] + Vector3(0, wall_h + W * 0.66 + 4.0, 0)
+			heads.append(Transform3D(Basis(Vector3.UP, yaw2) * Basis.from_scale(Vector3(W * 2.0 + 22.0, 9.0, 4.0)), top))
+			for side in [-1.0, 1.0]:
+				var le: Vector3 = Track.left_of(yaw2)
+				heads.append(Transform3D(Basis(Vector3.UP, yaw2) * Basis.from_scale(Vector3(11.0, wall_h + 6.0, 4.0)), track.points[idx] + le * side * (W + 5.5) + Vector3(0, (wall_h + 6.0) * 0.5 - 0.4, 0)))
+	_multimesh(_unit_box(), lamp_mat, lamps)
+	_multimesh(_unit_box(), _mat(th.get("bank", Color(0.35, 0.34, 0.36))), heads)
 
 
 func _build_dead_end(b: Dictionary) -> void:
@@ -1825,6 +1891,8 @@ func _build_trees() -> void:
 	var min_d2 := pow(Track.ROAD_WIDTH * 0.5 + (3.4 if mountain else 6.0), 2.0)
 	for i in range(4, n - 2, 2):
 		if mountain and track.is_open(i):
+			continue
+		if track.in_tunnel(i):
 			continue
 		for side in [-1.0, 1.0]:
 			if rng.randf() > (0.55 if mountain else 0.8) * Gfx.trees:

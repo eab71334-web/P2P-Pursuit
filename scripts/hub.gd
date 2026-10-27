@@ -1103,6 +1103,13 @@ func _tab_shop() -> Control:
 	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vb.add_theme_constant_override("separation", 12)
 	sc.add_child(vb)
+	var extras := HBoxContainer.new()
+	extras.add_theme_constant_override("separation", 12)
+	vb.add_child(extras)
+	var bc := UI.btn(extras, UI.tx("REDEEM CODE", "إدخال كود"), UI.CARD2, func(): BackendUI.open_redeem(self), 22, Vector2(0, 54))
+	bc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var be := UI.btn(extras, UI.tx("EVENTS", "الفعاليات") + ("  (%d)" % Backend.events.size() if Backend.events.size() > 0 else ""), UI.CARD2, func(): BackendUI.open_events(self), 22, Vector2(0, 54))
+	be.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_pack_section(vb, UI.tx("COINS", "العملات"), Billing.COIN_PACKS, false)
 	_pack_section(vb, UI.tx("GEMS", "الجواهر"), Billing.GEM_PACKS, true)
 	UI.lbl(vb, UI.tx("DAILY DEALS  -30%", "عروض اليوم  -30%"), 28, UI.GOLD, false)

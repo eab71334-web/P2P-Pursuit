@@ -75,7 +75,7 @@ func _note_label(n: Dictionary) -> String:
 			return L.t("n_cliff") % n["len"]
 		"rockfall":
 			return L.t("n_rockfall") + L.t("n_left" if n["dir"] > 0 else "n_right")
-		"bump", "crest", "ice", "rock", "log":
+		"bump", "crest", "ice", "rock", "log", "tunnel":
 			var lab := L.t("n_" + n["kind"])
 			if n["len"] > 0:
 				lab += "  %dm" % n["len"]
@@ -146,7 +146,7 @@ func _draw() -> void:
 			col = Color(1.0, 0.35, 0.3)
 		elif n["kind"] in ["cliff", "rockfall", "crest"]:
 			col = Color(1.0, 0.6, 0.2)
-		elif n["kind"] == "ice":
+		elif n["kind"] == "ice" or n["kind"] == "tunnel":
 			col = Color(0.5, 0.95, 1.0)
 		elif n["kind"] in ["rock", "log", "bump"]:
 			col = Color(0.5, 0.8, 1.0)

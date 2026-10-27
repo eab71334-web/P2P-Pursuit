@@ -8,6 +8,7 @@ var method := "card"
 var _pay: Button
 var _note: Label
 var _rows := {}
+var _busy := false
 
 
 class CoinStack extends Control:
@@ -86,6 +87,8 @@ func _build(on_close: Callable) -> void:
 	# methods
 	UI.lbl(vb, UI.tx("Payment method", "طريقة الدفع"), 16, UI.TXT2, false)
 	for m in Billing.METHODS:
+		if Backend.enabled() and m["id"] != "card":
+			continue
 		var b := Button.new()
 		b.custom_minimum_size = Vector2(0, 62)
 		b.focus_mode = Control.FOCUS_NONE
@@ -147,8 +150,9 @@ func _refresh() -> void:
 		(_rows[id][1] as Control).queue_redraw()
 	if Billing.enabled:
 		_pay.text = UI.tx("Pay $%s", "ادفع $%s") % str(pack["price"])
-		_pay.disabled = false
-		_note.text = ""
+		_pay.disabled = _busy
+		if not _busy:
+			_note.text = UI.tx("TEST MODE - no real money is charged.", "وضع تجربة - لا يُسحب مال حقيقي.") if Backend.provider == "test" else ""
 	else:
 		_pay.text = UI.tx("Coming soon", "قريباً")
 		_pay.disabled = true
@@ -156,6 +160,36 @@ func _refresh() -> void:
 
 
 func _on_pay() -> void:
-	if not Billing.enabled:
+	if not Billing.enabled or _busy:
 		return
-	# the store plugin starts the purchase here and calls Billing.grant(pack["id"]) once it is verified
+	if not Backend.enabled():
+		return
+	_busy = true
+	_pay.disabled = true
+	_note.text = UI.tx("Opening the payment page...", "جارٍ فتح صفحة الدفع...")
+	Backend.buy(str(pack["id"]), _on_buy_state)
+
+
+func _on_buy_state(st: Dictionary) -> void:
+	if not is_instance_valid(self):
+		return
+	var state := str(st.get("state", ""))
+	if state == "waiting":
+		_note.text = UI.tx("Finish the payment in your browser, then come back here. It is added automatically.", "أكمل الدفع في المتصفح ثم ارجع هنا. تُضاف المشتريات تلقائياً.")
+	elif state == "granted":
+		_busy = false
+		_note.text = UI.tx("Done! Added to your account.", "تم! أُضيفت إلى حسابك.")
+		_note.add_theme_color_override("font_color", UI.OK)
+		_pay.text = UI.tx("Close", "إغلاق")
+		_pay.disabled = false
+		_pay.pressed.disconnect(_on_pay)
+		_pay.pressed.connect(func(): queue_free())
+		Sfx.play("success")
+	elif state == "timeout":
+		_busy = false
+		_note.text = UI.tx("Still waiting. If you paid, it will be added when you reopen the game.", "ما زال بالانتظار. إن دفعت فستُضاف عند إعادة فتح اللعبة.")
+	else:
+		_busy = false
+		_note.text = UI.tx("The payment could not be started. Try again later.", "تعذر بدء الدفع. حاول لاحقاً.")
+		Backend.report("error", "Payment start failed: " + str(st.get("error", "")))
+		_pay.disabled = false

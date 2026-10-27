@@ -145,6 +145,8 @@ const T := {
 	"n_flat": ["FLAT OUT", "بأقصى سرعة"],
 	"n_crest": ["OVER CREST", "قمة"],
 	"n_ice": ["ICE", "جليد"],
+	"n_tunnel": ["TUNNEL", "نفق"],
+	"n_Tunnel": ["TUNNEL", "نفق"],
 	"n_rock": ["ROCK", "صخرة"],
 	"n_log": ["LOG", "جذع"],
 	"n_bump": ["BIG BUMP", "مطب كبير"],

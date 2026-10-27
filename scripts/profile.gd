@@ -25,6 +25,8 @@ var login := {"last": "", "streak": 0}
 var stats := {"races": 0, "wins": 0, "fires": 0}
 var career := {}                # career level index (string) -> best stars 0..3
 var solo_pref := {"bots": 3, "level": 1, "weather": "clear", "theme": ""}
+var pid := ""                   # anonymous player id used by the backend
+var pending_order := ""         # card payment started but not yet credited
 var _busy_save := false
 
 
@@ -32,6 +34,9 @@ func _ready() -> void:
 	_load()
 	if pname == "":
 		pname = "Player%d" % (randi() % 900 + 100)
+		save()
+	if pid == "":
+		pid = Crypto.new().generate_random_bytes(10).hex_encode()
 		save()
 	refresh_quests()
 
@@ -47,6 +52,8 @@ func _load() -> void:
 	if not (d is Dictionary):
 		return
 	pname = str(d.get("pname", pname))
+	pid = str(d.get("pid", ""))
+	pending_order = str(d.get("pending_order", ""))
 	steer_mode = str(d.get("steer_mode", ""))
 	coins = int(d.get("coins", coins))
 	gems = int(d.get("gems", gems))
@@ -76,8 +83,10 @@ func _load() -> void:
 
 func save() -> void:
 	var f := FileAccess.open(SAVE, FileAccess.WRITE)
+	if f == null and has_node("/root/Backend"):
+		Backend.report("error", "Could not write the save file (%s)" % error_string(FileAccess.get_open_error()))
 	if f:
-		f.store_string(JSON.stringify({"pname": pname, "steer_mode": steer_mode, "coins": coins, "gems": gems, "xp": xp, "level": level, "owned": owned, "cars": cars, "car": car,
+		f.store_string(JSON.stringify({"pid": pid, "pending_order": pending_order, "pname": pname, "steer_mode": steer_mode, "coins": coins, "gems": gems, "xp": xp, "level": level, "owned": owned, "cars": cars, "car": car,
 			"carset": carset, "up": up, "outfit": outfit, "quests": quests, "chests": chests, "login": login, "stats": stats, "career": career, "solo_pref": solo_pref}))
 	changed.emit()
 
