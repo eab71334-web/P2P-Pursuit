@@ -239,7 +239,7 @@ func _on_sdk_ready(_st: Dictionary) -> void:
 	sdk_ready = true
 	_trace("sdk ready")
 	status = "ready (" + units_text() + ")"
-	_sdk.call("set_ios_app_pause_on_background", false)
+	# keep the plugin/Godot default for app pause: forcing it off is suspected of a crash when the ad closes
 	_connect_rewarded()
 	_load_rewarded()
 	changed.emit()
