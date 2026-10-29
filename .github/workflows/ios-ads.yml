@@ -113,12 +113,19 @@ jobs:
           SCHEME=$(basename "$WS" .xcworkspace)
           echo "Workspace: $WS  Scheme: $SCHEME"
           ls build/ios
-          xcodebuild -workspace "$WS" -scheme "$SCHEME" -configuration Release \
-            -sdk iphoneos -destination "generic/platform=iOS" \
-            -archivePath build/app.xcarchive archive \
-            IPHONEOS_DEPLOYMENT_TARGET=13.0 \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            DEVELOPMENT_TEAM=""
+          build() {
+            xcodebuild -workspace "$WS" -scheme "$SCHEME" -configuration Release \
+              -sdk iphoneos -destination "generic/platform=iOS" \
+              -archivePath build/app.xcarchive archive \
+              IPHONEOS_DEPLOYMENT_TARGET=13.0 \
+              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+              DEVELOPMENT_TEAM=""
+          }
+          if ! build; then
+            echo "=== First build failed. Downloading iOS platform and retrying ==="
+            sudo xcodebuild -downloadPlatform iOS
+            build
+          fi
 
       - name: Package IPA
         run: |
