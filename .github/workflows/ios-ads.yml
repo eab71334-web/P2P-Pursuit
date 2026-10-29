@@ -119,13 +119,40 @@ jobs:
               -archivePath build/app.xcarchive archive \
               IPHONEOS_DEPLOYMENT_TARGET=15.0 \
               CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-              DEVELOPMENT_TEAM=""
+              DEVELOPMENT_TEAM="" \
+              STRIP_INSTALLED_PRODUCT=NO COPY_PHASE_STRIP=NO STRIP_STYLE=debugging
           }
           if ! build; then
             echo "=== First build failed. Downloading iOS platform and retrying ==="
             sudo xcodebuild -downloadPlatform iOS
             build
           fi
+
+      - name: Name the crash frames (diagnostic only)
+        continue-on-error: true
+        run: |
+          BIN=$(ls build/app.xcarchive/Products/Applications/*.app/CoDriverRally)
+          echo "binary: $BIN"
+          otool -l "$BIN" | grep -A4 "segname __TEXT" | head -8
+          nm -n "$BIN" 2>/dev/null | grep -i " [tT] " > /tmp/syms.txt || true
+          wc -l /tmp/syms.txt
+          python3 - <<'PY'
+          import bisect, subprocess
+          rows=[]
+          for l in open('/tmp/syms.txt'):
+              a=l.split()
+              if len(a)>=3:
+                  try: rows.append((int(a[0],16),a[2]))
+                  except: pass
+          addrs=[r[0] for r in rows]
+          base=0x100000000
+          offs=[44195576,17617284,17616992,8094748,7603728,8094332,44205924,41588088,44215688,19362620,46425840,799432,800444,1203784,1202580,1199632,850100,849680,847420]
+          for o in offs:
+              i=bisect.bisect_right(addrs,base+o)-1
+              name=rows[i][1] if i>=0 else '?'
+              d=subprocess.run(['c++filt',name],capture_output=True,text=True).stdout.strip() or name
+              print(o, hex(o), d[:200])
+          PY
 
       - name: Package IPA
         run: |
