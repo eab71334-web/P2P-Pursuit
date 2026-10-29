@@ -119,6 +119,7 @@ var grace_label: Label
 var skip_wait_btn: Button
 var ceremony: Ceremony
 var _rewarded := false
+var my_coins := 0                    # coins of this race (the "double" ad button doubles them)
 var my_reward_line := ""
 const PTS := [12, 9, 7, 5, 4, 3, 2, 1]     # team race: points per place
 var net_tick := 0
@@ -337,6 +338,7 @@ func all_done(order: Array, pcts: Array) -> void:
 		_career_apply(place, rw)
 		_rewarded = true
 		my_reward_line = _reward_line(rw)
+		my_coins = int(rw["coins"])
 	if rematch_btn:
 		rematch_btn.text = UI.tx("Rematch", "إعادة المباراة") if Net.required_players > 1 else UI.tx("Race again", "سباق جديد")
 	_update_result_buttons()
@@ -2499,6 +2501,7 @@ func _show_result(place: int, t: float) -> void:
 	_career_apply(place, rw)
 	_rewarded = true
 	my_reward_line = _reward_line(rw)
+	my_coins = int(rw["coins"])
 	var solo_room := Net.required_players <= 1
 	var card := ResultCard.new()
 	card.build(str(place) if Net.team_count > 1 else "", track.stage_name, _fmt(t), mi, medal, rw, Profile.level, Net.team_count > 1, solo_room,
@@ -2607,6 +2610,7 @@ func _start_ceremony() -> void:
 	c.entries = entries
 	c.squad_rows = _squad_rows()
 	c.info_line = my_reward_line
+	c.double_coins = my_coins
 	c.stage_name = track.stage_name
 	c.again_text = UI.tx("Race again", "سباق جديد") if solo_room else UI.tx("Rematch", "إعادة المباراة")
 	c.exit_text = UI.tx("Main menu", "القائمة الرئيسية") if solo_room else UI.tx("Back to room", "الرجوع للغرفة")

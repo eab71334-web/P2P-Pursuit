@@ -31,6 +31,28 @@ var _toast_tw: Tween
 var _pending_levelups: Array = []
 
 
+var _ad_btn: Button
+
+
+## three dots = the three ad chests of the day
+class AdDots extends Control:
+	var used := 0
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(120, 40)
+
+	func _draw() -> void:
+		for i in 3:
+			var c := Vector2(20 + i * 40, size.y * 0.5)
+			draw_circle(c, 15, Color(1, 1, 1, 0.12))
+			if i < used:
+				draw_circle(c, 15, UI.ACCENT)
+				draw_line(c + Vector2(-6, 0), c + Vector2(-2, 5), Color(0.08, 0.05, 0.02), 3.0, true)
+				draw_line(c + Vector2(-2, 5), c + Vector2(7, -5), Color(0.08, 0.05, 0.02), 3.0, true)
+			else:
+				draw_arc(c, 15, 0, TAU, 24, Color(1, 1, 1, 0.35), 2.0, true)
+
+
 class LevelBadge extends Control:
 	var level := 1
 	var t := 0.0
@@ -131,8 +153,15 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	Profile.changed.connect(_update_top)
 	Profile.leveled.connect(_on_leveled)
+	Ads.changed.connect(_refresh_ad_btn)
 	_build()
 	select(tab_ids[0])
+
+
+func _exit_tree() -> void:
+	if Ads.changed.is_connected(_refresh_ad_btn):
+		Ads.changed.disconnect(_refresh_ad_btn)
+	Ads.want_banner(false)
 
 
 func _on_leveled(lv: int, r: Dictionary) -> void:
@@ -311,6 +340,8 @@ func select(id: String) -> void:
 	preview = null
 	browser_box = null
 	cur = id
+	_ad_btn = null
+	Ads.want_banner(id == "chests")
 	for k in nav_btns:
 		(nav_btns[k] as NavItem).active = (k == id or (id == "modify" and k == "garage"))
 	var p: Control
@@ -1255,6 +1286,7 @@ func _tab_chests() -> Control:
 	vb.add_theme_constant_override("separation", 12)
 	UI.lbl(vb, UI.tx("YOUR CHESTS", "صناديقك"), 30, UI.GOLD, false)
 	UI.lbl(vb, UI.tx("Win races, finish quests and level up to earn chests. Legendary items can only come from chests or the gem shop!", "اربح السباقات وأنهِ المهام وارتقِ بالمستويات لتحصل على صناديق. العناصر الأسطورية من الصناديق أو بالجواهر فقط!"), 17, UI.TXT2)
+	_ad_box_panel(vb)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
 	vb.add_child(row)
@@ -1276,7 +1308,65 @@ func _tab_chests() -> Control:
 		any = any or n > 0
 	if not any:
 		UI.lbl(vb, UI.tx("No chests right now - go race!", "ما عندك صناديق الحين - روح تسابق!"), 20, UI.TXT2)
+	if Ads.offered():
+		var gap := Control.new()          # room for the banner at the bottom of the screen
+		gap.custom_minimum_size = Vector2(0, 76)
+		vb.add_child(gap)
 	return vb
+
+
+## "daily chests": watch a rewarded ad, get a chest (3 per day, the third one is silver)
+func _ad_box_panel(parent: Control) -> void:
+	if not Ads.offered():
+		return
+	var p := UI.panel(parent, UI.CARD, 16)
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 18)
+	p.add_child(h)
+	var dots := AdDots.new()
+	dots.used = Profile.adbox_used()
+	dots.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(dots)
+	var tv := VBoxContainer.new()
+	tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tv.add_theme_constant_override("separation", 2)
+	h.add_child(tv)
+	UI.lbl(tv, UI.tx("DAILY CHESTS", "صناديق اليوم"), 22, UI.GOLD, false)
+	UI.lbl(tv, UI.tx("Watch a short ad to get a free chest. 3 a day - the 3rd is silver.", "شاهد إعلاناً قصيراً واحصل على صندوق مجاني. 3 كل يوم - والثالث فضي."), 15, UI.TXT2, false)
+	_ad_btn = UI.btn(h, "", UI.GREEN, _on_ad_box, 20, Vector2(250, 54))
+	_refresh_ad_btn()
+
+
+func _refresh_ad_btn() -> void:
+	if _ad_btn == null or not is_instance_valid(_ad_btn):
+		return
+	var left := Profile.adbox_left()
+	if left <= 0:
+		_ad_btn.text = UI.tx("Come back tomorrow", "ارجع بكرة")
+		_ad_btn.disabled = true
+	elif Ads.can_show():
+		_ad_btn.text = UI.tx("Watch ad  (%d left)", "شاهد إعلان  (باقي %d)") % left
+		_ad_btn.disabled = false
+	else:
+		var t := Ads.label_for_button()
+		_ad_btn.text = t if t != "" else UI.tx("Ad not ready", "الإعلان غير جاهز")
+		_ad_btn.disabled = true
+
+
+func _on_ad_box() -> void:
+	_ad_btn.disabled = true
+	if not Ads.show_rewarded(_ad_box_reward):
+		_refresh_ad_btn()
+
+
+func _ad_box_reward() -> void:
+	var kind := Profile.claim_adbox()
+	if kind == "":
+		return
+	Sfx.play("success", 2.0)
+	say(UI.tx("+1 chest!", "+1 صندوق!"))
+	if is_inside_tree() and cur == "chests":
+		select("chests")
 
 
 func _open_chest(kind: String, art: Control) -> void:

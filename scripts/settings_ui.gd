@@ -85,6 +85,19 @@ func _build() -> void:
 	if weak:
 		var tip := UI.lbl(_box, UI.tx("Tip: close other apps, and set the phone to battery-saver off for steady FPS.", "نصيحة: سكّر التطبيقات الثانية وأوقف وضع توفير الطاقة عشان تثبت الفريمات."), 15, UI.TXT2)
 		tip.custom_minimum_size = Vector2(300, 0)
+	if Ads.offered():
+		_head(UI.tx("ADS & PRIVACY", "الإعلانات والخصوصية"))
+		var st := Ads.status + ("   -   " + Ads.last_error if Ads.last_error != "" else "")
+		var stl := UI.lbl(_box, UI.tx("Ads: ", "الإعلانات: ") + st, 15, UI.TXT2)
+		stl.custom_minimum_size = Vector2(300, 0)
+		var pr := UI.btn(null, UI.tx("Privacy choices", "خيارات الخصوصية"), UI.CARD2, func(): Ads.show_privacy_options(), 18, Vector2(220, 44))
+		var rf := UI.btn(null, UI.tx("Refresh", "تحديث"), UI.CARD2, func(): _rebuild(), 18, Vector2(120, 44))
+		var pb := HBoxContainer.new()
+		pb.add_theme_constant_override("separation", 10)
+		pb.add_child(rf)
+		if Ads.enabled:
+			pb.add_child(pr)
+		_row(UI.tx("Ad status", "حالة الإعلانات"), UI.tx("Rewarded ads are optional and only start when you press a button.", "إعلانات المكافأة اختيارية وتبدأ فقط عندما تضغط زراً."), pb)
 	_head(UI.tx("ABOUT & LICENSE", "حول اللعبة والرخصة"))
 	var lic := UI.lbl(_box, UI.tx("Hairpin Rush  (c) 2026 Sabak Studios. All rights reserved.\nThis game, its code, art, sounds and all files are the exclusive property of Sabak Studios. Copying, modifying, redistributing, re-publishing, selling, extracting assets or removing this notice is prohibited without written permission.", "هيربن راش  (c) 2026 Sabak Studios. جميع الحقوق محفوظة.\nهذه اللعبة وكودها وصورها وأصواتها وكل ملفاتها ملكٌ حصريٌّ لـ Sabak Studios. يُمنع النسخ أو التعديل أو إعادة التوزيع أو النشر أو البيع أو استخراج الملفات أو إزالة هذا الإشعار دون إذن كتابي."), 14, UI.TXT2)
 	lic.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

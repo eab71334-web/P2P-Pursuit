@@ -21,6 +21,7 @@ var up := {}                    # car id -> {engine: 0..5, ...}
 var outfit := Catalog.DEFAULT_OUTFIT.duplicate()
 var quests := {"date": "", "list": []}
 var chests := {"bronze": 1, "silver": 0, "gold": 0}
+var adbox := {"date": "", "n": 0}       # daily chests earned by watching a rewarded ad
 var login := {"last": "", "streak": 0}
 var stats := {"races": 0, "wins": 0, "fires": 0}
 var career := {}                # career level index (string) -> best stars 0..3
@@ -69,6 +70,7 @@ func _load() -> void:
 		outfit[k] = o[k]
 	quests = d.get("quests", quests)
 	chests = d.get("chests", chests)
+	adbox = d.get("adbox", adbox)
 	login = d.get("login", login)
 	stats = d.get("stats", stats)
 	career = d.get("career", career)
@@ -87,7 +89,7 @@ func save() -> void:
 		Backend.report("error", "Could not write the save file (%s)" % error_string(FileAccess.get_open_error()))
 	if f:
 		f.store_string(JSON.stringify({"pid": pid, "pending_order": pending_order, "pname": pname, "steer_mode": steer_mode, "coins": coins, "gems": gems, "xp": xp, "level": level, "owned": owned, "cars": cars, "car": car,
-			"carset": carset, "up": up, "outfit": outfit, "quests": quests, "chests": chests, "login": login, "stats": stats, "career": career, "solo_pref": solo_pref}))
+			"carset": carset, "up": up, "outfit": outfit, "quests": quests, "chests": chests, "adbox": adbox, "login": login, "stats": stats, "career": career, "solo_pref": solo_pref}))
 	changed.emit()
 
 
@@ -342,6 +344,31 @@ func claim_quest(i: int) -> bool:
 
 
 # ---------------------------------------------------------------- chests
+const AD_BOXES_PER_DAY := 3
+
+
+func adbox_used() -> int:
+	if str(adbox.get("date", "")) != _today():
+		return 0
+	return int(adbox.get("n", 0))
+
+
+func adbox_left() -> int:
+	return maxi(0, AD_BOXES_PER_DAY - adbox_used())
+
+
+## called after a rewarded ad was really watched: returns the chest kind that was added ("" = none left today)
+func claim_adbox() -> String:
+	if adbox_left() <= 0:
+		return ""
+	var n := adbox_used() + 1
+	adbox = {"date": _today(), "n": n}
+	var kind := "silver" if n == AD_BOXES_PER_DAY else "bronze"
+	chests[kind] = int(chests.get(kind, 0)) + 1
+	save()
+	return kind
+
+
 func give_chest(kind: String) -> void:
 	chests[kind] = int(chests.get(kind, 0)) + 1
 	save()

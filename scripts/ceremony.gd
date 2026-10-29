@@ -18,6 +18,7 @@ const BRONZE := Color(0.8, 0.5, 0.22)
 var entries: Array = []        # rank order: {name, plate, players:[{name,outfit,role}], lo, time, fin, dnf, pct, color, place}
 var squad_rows: Array = []     # team race: [{name, pts, color, members}] best first
 var info_line := ""            # your reward etc.
+var double_coins := 0          # > 0: offer "watch an ad, get this many extra coins"
 var stage_name := ""
 var on_again: Callable
 var on_exit: Callable
@@ -690,11 +691,42 @@ func _build_final_overlay() -> void:
 	b1.name = "again"
 	var b2 := _action_btn(row, "exit", exit_text, "", false, func(): on_exit.call())
 	b2.name = "exit"
+	if double_coins > 0 and Ads.offered():
+		_add_double_button(row)
 	_final_box.modulate.a = 0.0
 	_final_box.create_tween().tween_property(_final_box, "modulate:a", 1.0, 0.6)
 
 
-## icon drawn with code (no textures): "replay" = circular arrow, "exit" = door with arrow
+func _add_double_button(row: HBoxContainer) -> void:
+	var n := double_coins
+	var btn: Button
+	var refresh := func():
+		if btn == null or not is_instance_valid(btn) or btn.has_meta("done"):
+			return
+		btn.disabled = not Ads.can_show()
+		btn.modulate.a = 1.0 if Ads.can_show() else 0.55
+	btn = _action_btn(row, "ad", UI.tx("Double  +%d", "ضاعف  +%d") % n, "", false, func():
+		btn.disabled = true
+		var started := Ads.show_rewarded(func():
+			Profile.add_coins(n)
+			Sfx.play("success", 2.0)
+			btn.set_meta("done", true)
+			for l in btn.find_children("*", "Label", true, false):
+				(l as Label).text = UI.tx("Doubled!", "تمت المضاعفة!")
+			btn.disabled = true
+			btn.modulate.a = 0.8)
+		if not started:
+			refresh.call())
+	btn.name = "double"
+	btn.custom_minimum_size = Vector2(300, 68)
+	Ads.changed.connect(refresh)
+	btn.tree_exiting.connect(func():
+		if Ads.changed.is_connected(refresh):
+			Ads.changed.disconnect(refresh))
+	refresh.call()
+
+
+## icon drawn with code (no textures): "replay" = circular arrow, "exit" = door with arrow, "ad" = play triangle
 class _Ic extends Control:
 	var kind := "replay"
 	var col := Color.WHITE
@@ -702,7 +734,10 @@ class _Ic extends Control:
 	func _draw() -> void:
 		var c := size * 0.5
 		var r := minf(size.x, size.y) * 0.34
-		if kind == "replay":
+		if kind == "ad":
+			draw_arc(c, r + 2, 0, TAU, 28, col, 3.0, true)
+			draw_colored_polygon(PackedVector2Array([c + Vector2(-5, -9), c + Vector2(10, 0), c + Vector2(-5, 9)]), col)
+		elif kind == "replay":
 			draw_arc(c, r, deg_to_rad(-60), deg_to_rad(230), 28, col, 3.5, true)
 			var a := deg_to_rad(230)
 			var tip := c + Vector2(cos(a), sin(a)) * r
