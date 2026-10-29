@@ -245,3 +245,13 @@ Studio brand is now **Sabak Studios / سَبَك** (logo `art/sabak_logo.png`; r
 - Game: `scripts/backend.gd` (autoload), `scripts/backend_ui.gd`. Shop tab: REDEEM CODE and EVENTS. Checkout pays by card through the backend. Crash/"unclean exit" and save-failure reports. Set `DEFAULT_URL` in backend.gd to your https server before exporting; empty = fully offline as before.
 - `admin-app/`: separate Godot mobile app "Sabak Admin" (portrait, Arabic): home, codes, events, payments, errors, game filter. Workflows: `.github/workflows/admin-android.yml`, `admin-ios.yml` (not run yet).
 - Not done / honest limits: real money was never charged (no gateway account/keys here); Godot 4.3 cannot capture script runtime errors automatically, only explicit reports + unclean-exit detection; player progress is still stored on the phone.
+
+## Update 22 - AdMob (iOS only for now)
+
+- `scripts/ads.gd` (autoload **Ads**): rewarded video + one test banner + consent form (UMP). Does nothing on builds without the AdMob plugin, so desktop and Android are untouched.
+- Where ads appear (always started by a button the player pressed, never during a race): **Double** button on the finish screen (doubles the race coins), **Daily chests** in the Chests tab (3 a day, the 3rd is silver), and one banner shown only on the Chests tab.
+- `ads_config.json`: `"live": false` = Google test ads (safe). Set `"live": true` only for the store build; never click your own live ads.
+- Build: run the workflow **iOS IPA with AdMob** (`.github/workflows/ios-ads.yml`, manual). It downloads the plugin built for Godot 4.3 (poing-godot-admob-ios v3.1.5), installs the Google SDK with CocoaPods and builds. `ios.yml` is unchanged, so the old build still works.
+- Put `ios_admob/app-ads.txt` at the root of the developer website that is set on the App Store page (https://yourdomain/app-ads.txt).
+- Firebase `GoogleService-Info.plist` is NOT needed for ads; it is only used if the Firebase SDK is added (analytics), which this update does not do.
+- Not tested: the real iOS build (no Mac here), real or test ads on a phone, the consent form. Only the desktop simulation was run.

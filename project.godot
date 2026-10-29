@@ -18,6 +18,7 @@ Sfx="*res://scripts/sfx.gd"
 Net="*res://scripts/net.gd"
 Profile="*res://scripts/profile.gd"
 Backend="*res://scripts/backend.gd"
+Ads="*res://scripts/ads.gd"
 Radio="*res://scripts/radio.gd"
 
 [display]
