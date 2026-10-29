@@ -5,8 +5,14 @@ on:
 
 jobs:
   ios:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
+      - name: Use Xcode 16 (needed by Google Mobile Ads SDK 12)
+        run: |
+          ls /Applications | grep -i xcode
+          sudo xcode-select -s /Applications/Xcode_16.2.app || sudo xcode-select -s /Applications/Xcode_16.app
+          xcodebuild -version
+
       - uses: actions/checkout@v4
 
       - name: Install Godot 4.3 + export templates
