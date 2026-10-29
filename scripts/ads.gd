@@ -20,7 +20,9 @@ const AD_POS_BOTTOM := 1
 
 var enabled := false                 # the native AdMob plugin exists in this build
 var sdk_ready := false               # SDK finished initialising
-var live := false                    # real ad units in use
+var live := false                    # at least one real ad unit in use
+var live_banner := false
+var live_rewarded := false
 var status := "off"                  # short text for the settings page
 var last_error := ""
 var units := {}
@@ -77,6 +79,8 @@ func _ready() -> void:
 func _load_cfg() -> void:
 	units = TEST_UNITS.duplicate()
 	live = false
+	live_banner = false
+	live_rewarded = false
 	if not FileAccess.file_exists(CFG_PATH):
 		return
 	var f := FileAccess.open(CFG_PATH, FileAccess.READ)
@@ -85,12 +89,20 @@ func _load_cfg() -> void:
 	var d: Variant = JSON.parse_string(f.get_as_text())
 	if not (d is Dictionary):
 		return
-	if bool(d.get("live", false)):
-		var b := str(d.get("banner", ""))
-		var r := str(d.get("rewarded", ""))
-		if b.begins_with("ca-app-pub-") and r.begins_with("ca-app-pub-"):
-			units = {"banner": b, "rewarded": r}
-			live = true
+	var all_live := bool(d.get("live", false))
+	var b := str(d.get("banner", ""))
+	var r := str(d.get("rewarded", ""))
+	if (all_live or bool(d.get("live_banner", false))) and b.begins_with("ca-app-pub-"):
+		units["banner"] = b
+		live_banner = true
+	if (all_live or bool(d.get("live_rewarded", false))) and r.begins_with("ca-app-pub-"):
+		units["rewarded"] = r
+		live_rewarded = true
+	live = live_banner or live_rewarded
+
+
+func units_text() -> String:
+	return "banner:%s  rewarded:%s" % ["LIVE" if live_banner else "test", "LIVE" if live_rewarded else "test"]
 
 
 ## true when pressing a "watch an ad" button can work right now
@@ -187,7 +199,7 @@ func _init_sdk() -> void:
 
 func _on_sdk_ready(_st: Dictionary) -> void:
 	sdk_ready = true
-	status = "ready (" + ("LIVE" if live else "test ads") + ")"
+	status = "ready (" + units_text() + ")"
 	_sdk.call("set_ios_app_pause_on_background", false)
 	_connect_rewarded()
 	_load_rewarded()
