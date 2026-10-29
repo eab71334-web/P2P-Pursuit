@@ -54,11 +54,43 @@ var _init_started := false
 var _muted_before := false
 
 
+const TRACE := "user://ads_trace.txt"
+const GUARD := "user://ads_guard.flag"
+
+
+func _trace(msg: String) -> void:
+	var f := FileAccess.open(TRACE, FileAccess.READ_WRITE if FileAccess.file_exists(TRACE) else FileAccess.WRITE)
+	if f:
+		f.seek_end()
+		f.store_line("%s  %s" % [Time.get_time_string_from_system(), msg])
+		f.flush()
+		f.close()
+
+
+func _guard_set(on: bool) -> void:
+	if on:
+		var f := FileAccess.open(GUARD, FileAccess.WRITE)
+		if f:
+			f.store_string("1")
+			f.close()
+	elif FileAccess.file_exists(GUARD):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(GUARD))
+
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_load_cfg()
+	if OS.get_name() == "iOS":
+		_trace("launch")
 	sim = OS.has_feature("editor") or OS.get_environment("ADS_SIM") == "1"
-	if OS.get_name() == "iOS" and Engine.has_singleton("PoingGodotAdMob"):
+	if OS.get_name() == "iOS" and FileAccess.file_exists(GUARD):
+		# the previous run died while ads were starting: stay in safe mode (no native ad calls)
+		_trace("SAFE MODE: previous launch crashed during ad start-up")
+		status = "safe mode (ads crashed last time)"
+		last_error = "ads disabled after a crash - see ads_trace.txt"
+		_guard_set(false)
+	elif OS.get_name() == "iOS" and Engine.has_singleton("PoingGodotAdMob"):
+		_trace("plugin singleton found")
 		_sdk = Engine.get_singleton("PoingGodotAdMob")
 		_rew = Engine.get_singleton("PoingGodotAdMobRewardedAd") if Engine.has_singleton("PoingGodotAdMobRewardedAd") else null
 		_ban = Engine.get_singleton("PoingGodotAdMobAdView") if Engine.has_singleton("PoingGodotAdMobAdView") else null
@@ -127,6 +159,11 @@ func label_for_button() -> String:
 
 # ------------------------------------------------------------------ start up: consent, then SDK
 func _begin() -> void:
+	_guard_set(true)
+	_trace("begin (consent)")
+	get_tree().create_timer(25.0).timeout.connect(func():
+		_trace("survived 25s - guard cleared")
+		_guard_set(false))
 	if _cinfo == null:
 		_init_sdk()
 		return
@@ -186,6 +223,7 @@ func _init_sdk() -> void:
 	if _init_started or _sdk == null:
 		return
 	_init_started = true
+	_trace("init sdk")
 	status = "init"
 	_sdk.call("set_request_configuration", {"max_ad_content_rating": "T", "tag_for_child_directed_treatment": -1, "tag_for_under_age_of_consent": -1}, PackedStringArray())
 	_sdk.connect("on_initialization_complete", _on_sdk_ready)
@@ -199,6 +237,7 @@ func _init_sdk() -> void:
 
 func _on_sdk_ready(_st: Dictionary) -> void:
 	sdk_ready = true
+	_trace("sdk ready")
 	status = "ready (" + units_text() + ")"
 	_sdk.call("set_ios_app_pause_on_background", false)
 	_connect_rewarded()
