@@ -1,5 +1,6 @@
 {
-  "live": false,
-  "banner": "ca-app-pub-6030062289185991/2876857961",
+  "live_banner": false,
+  "live_rewarded": false,
+  "banner": "ca-app-pub-6030062289185991/5949455854",
   "rewarded": "ca-app-pub-6030062289185991/5969925167"
 }
