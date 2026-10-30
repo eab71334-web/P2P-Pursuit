@@ -699,24 +699,33 @@ func _build_final_overlay() -> void:
 
 func _add_double_button(row: HBoxContainer) -> void:
 	var n := double_coins
-	var btn: Button
+	# lambdas copy plain variables when they are created, so the button is kept in a Dictionary (shared by reference)
+	var h := {"btn": null}
 	var refresh := func():
-		if btn == null or not is_instance_valid(btn) or btn.has_meta("done"):
+		var b: Variant = h["btn"]
+		if b == null or not is_instance_valid(b) or (b as Button).has_meta("done"):
 			return
-		btn.disabled = not Ads.can_show()
-		btn.modulate.a = 1.0 if Ads.can_show() else 0.55
-	btn = _action_btn(row, "ad", UI.tx("Double  +%d", "ضاعف  +%d") % n, "", false, func():
-		btn.disabled = true
+		(b as Button).disabled = not Ads.can_show()
+		(b as Button).modulate.a = 1.0 if Ads.can_show() else 0.55
+	var btn: Button = _action_btn(row, "ad", UI.tx("Double  +%d", "ضاعف  +%d") % n, "", false, func():
+		var b: Variant = h["btn"]
+		if b == null or not is_instance_valid(b):
+			return
+		(b as Button).disabled = true
 		var started := Ads.show_rewarded(func():
 			Profile.add_coins(n)
 			Sfx.play("success", 2.0)
-			btn.set_meta("done", true)
-			for l in btn.find_children("*", "Label", true, false):
-				(l as Label).text = UI.tx("Doubled!", "تمت المضاعفة!")
-			btn.disabled = true
-			btn.modulate.a = 0.8)
+			var b2: Variant = h["btn"]
+			if b2 != null and is_instance_valid(b2):
+				var bb := b2 as Button
+				bb.set_meta("done", true)
+				for l in bb.find_children("*", "Label", true, false):
+					(l as Label).text = UI.tx("Doubled!", "تمت المضاعفة!")
+				bb.disabled = true
+				bb.modulate.a = 0.8)
 		if not started:
 			refresh.call())
+	h["btn"] = btn
 	btn.name = "double"
 	btn.custom_minimum_size = Vector2(300, 68)
 	Ads.changed.connect(refresh)
