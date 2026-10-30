@@ -7,7 +7,7 @@ extends Node
 signal config_ready
 signal wallet_changed(kind: String, amount: int)
 
-const DEFAULT_URL := ""
+const DEFAULT_URL := "https://sabak-backend.onrender.com"
 const GAME := "hairpin"
 const VERSION := "1.0"
 const FLAG := "user://session.flag"
