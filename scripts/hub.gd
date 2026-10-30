@@ -1382,6 +1382,7 @@ func _open_chest(kind: String, art: Control) -> void:
 	ov.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	ov.z_index = 30
 	add_child(ov)
+	Ads.want_banner(false)   # the native banner sits above everything and would hide the Collect button
 	create_tween().tween_property(ov, "color:a", 0.92, 0.25)
 	var cc := CenterContainer.new()
 	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
