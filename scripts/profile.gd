@@ -332,19 +332,23 @@ func claim_quest(i: int) -> bool:
 		return false
 	q["claimed"] = true
 	var d := quest_def(q["id"])
-	coins += int(d["coins"])
+	coins += int(int(d["coins"]) * Backend.rc("quest_mult"))
 	var all_done := true
 	for o in quests["list"]:
 		if not o["claimed"]:
 			all_done = false
 	if all_done:
 		chests["silver"] = int(chests.get("silver", 0)) + 1     # bonus for finishing every daily quest
-	add_xp(int(d["xp"]))
+	add_xp(int(int(d["xp"]) * Backend.rc("quest_mult")))
 	return true
 
 
 # ---------------------------------------------------------------- chests
 const AD_BOXES_PER_DAY := 3
+
+
+func adbox_cap() -> int:
+	return maxi(0, int(Backend.rc("adbox_per_day", float(AD_BOXES_PER_DAY))))
 
 
 func adbox_used() -> int:
@@ -354,7 +358,7 @@ func adbox_used() -> int:
 
 
 func adbox_left() -> int:
-	return maxi(0, AD_BOXES_PER_DAY - adbox_used())
+	return maxi(0, adbox_cap() - adbox_used())
 
 
 ## called after a rewarded ad was really watched: returns the chest kind that was added ("" = none left today)
@@ -363,7 +367,7 @@ func claim_adbox() -> String:
 		return ""
 	var n := adbox_used() + 1
 	adbox = {"date": _today(), "n": n}
-	var kind := "silver" if n == AD_BOXES_PER_DAY else "bronze"
+	var kind := "silver" if n == adbox_cap() else "bronze"
 	chests[kind] = int(chests.get(kind, 0)) + 1
 	save()
 	return kind
@@ -390,7 +394,8 @@ func open_chest(kind: String) -> Dictionary:
 			rar = i
 			break
 		roll -= int(w[i])
-	var res := {"kind": kind, "coins": 100 + randi() % 200 * (rar + 1), "gems": (randi() % 5 + 1) * (1 if rar < 2 else 3) if rar >= 1 else 0}
+	var cm := Backend.rc("chest_mult")
+	var res := {"kind": kind, "coins": int((100 + randi() % 200 * (rar + 1)) * cm), "gems": int(((randi() % 5 + 1) * (1 if rar < 2 else 3) if rar >= 1 else 0) * cm)}
 	var pool: Array = []
 	for it in Catalog.all_items():
 		var e: Dictionary = it["e"]
@@ -468,6 +473,8 @@ func race_reward(place: int, total: int, medal: int, mountain: bool) -> Dictiona
 		xpv += 25
 	if mountain:
 		base = int(base * 1.2)
+	base = int(base * Backend.rc("reward_mult"))
+	xpv = int(xpv * Backend.rc("reward_mult"))
 	var chest := ""
 	if total > 1 and place == 1:
 		chest = "bronze"
