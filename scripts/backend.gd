@@ -19,6 +19,10 @@ var events: Array = []
 var _sent := {}
 var _report_count := 0
 var _polling := ""
+var banned := false
+var _notices: Array = []          # [{title, text}] shown one by one
+var _showing := false
+const SEEN := "user://seen_announcements.json"
 
 
 func _ready() -> void:
@@ -85,7 +89,30 @@ func call_api(method: int, path: String, body: Variant, cb: Callable) -> void:
 
 
 func hello() -> void:
-	call_api(HTTPClient.METHOD_POST, "/api/player/hello", {"player_id": Profile.pid, "name": Profile.pname, "game": GAME, "platform": OS.get_name(), "version": VERSION}, Callable())
+	call_api(HTTPClient.METHOD_POST, "/api/player/hello", {"player_id": Profile.pid, "name": Profile.pname, "game": GAME, "platform": OS.get_name(), "version": VERSION}, func(code: int, d: Dictionary):
+		if code != 200 or not d.get("ok", false):
+			return
+		if bool(d.get("banned", false)):
+			banned = true
+			_show_ban()
+			return
+		for g in d.get("grants", []):
+			var c := int(g.get("coins", 0))
+			var gm := int(g.get("gems", 0))
+			if c > 0:
+				_credit("coins", c)
+			if gm > 0:
+				_credit("gems", gm)
+			call_api(HTTPClient.METHOD_POST, "/api/grant/ack", {"player_id": Profile.pid, "id": int(g.get("id", 0))}, Callable())
+			var parts: Array = []
+			if c > 0:
+				parts.append(str(c) + (" عملة" if L.is_ar() else " coins"))
+			if gm > 0:
+				parts.append(str(gm) + (" جوهرة" if L.is_ar() else " gems"))
+			var txt := (" + ").join(parts)
+			if str(g.get("note", "")) != "":
+				txt += "\n" + str(g["note"])
+			_notify("وصلتك هدية!" if L.is_ar() else "You got a gift!", txt))
 
 
 func fetch_config() -> void:
@@ -95,6 +122,7 @@ func fetch_config() -> void:
 			provider = str(d.get("provider", ""))
 			events = d.get("events", [])
 			Billing.enabled = payments
+			_announce(d.get("announcements", []))
 			config_ready.emit())
 
 
@@ -189,3 +217,117 @@ func report(kind: String, message: String, stack := "") -> void:
 	_sent[message] = true
 	_report_count += 1
 	call_api(HTTPClient.METHOD_POST, "/api/report", {"game": GAME, "version": VERSION, "player_id": Profile.pid, "kind": kind, "message": message, "stack": stack, "platform": OS.get_name()}, Callable())
+
+
+# ---------------------------------------------------------------- announcements, gifts, ban screen
+func _seen() -> Array:
+	var f := FileAccess.open(SEEN, FileAccess.READ)
+	if f:
+		var d: Variant = JSON.parse_string(f.get_as_text())
+		if d is Array:
+			return d
+	return []
+
+
+func _announce(list: Array) -> void:
+	var seen := _seen()
+	var changed := false
+	for a in list:
+		var id := int(a.get("id", 0))
+		if seen.has(id):
+			continue
+		seen.append(id)
+		changed = true
+		var txt := str(a.get("text_ar", "")) if L.is_ar() else str(a.get("text", ""))
+		if txt == "":
+			txt = str(a.get("text", "")) if L.is_ar() else str(a.get("text_ar", ""))
+		if txt != "":
+			_notify("إعلان" if L.is_ar() else "Announcement", txt)
+	if changed:
+		var f := FileAccess.open(SEEN, FileAccess.WRITE)
+		if f:
+			f.store_string(JSON.stringify(seen))
+
+
+func _notify(title: String, text: String) -> void:
+	_notices.append({"title": title, "text": text})
+	if not _showing:
+		_next_notice()
+
+
+func _next_notice() -> void:
+	if _notices.is_empty():
+		_showing = false
+		return
+	_showing = true
+	await get_tree().create_timer(1.2).timeout
+	var n: Dictionary = _notices.pop_front()
+	_overlay(str(n["title"]), str(n["text"]), "حسناً" if L.is_ar() else "OK", func(): _next_notice())
+
+
+func _show_ban() -> void:
+	_overlay("تم حظر حسابك" if L.is_ar() else "Account banned",
+		"تم منع هذا الحساب من اللعبة. إذا كان هذا خطأ تواصل مع الدعم." if L.is_ar() else "This account is blocked from the game. If this is a mistake, contact support.", "", Callable())
+
+
+func _overlay(title: String, text: String, btn_text: String, on_close: Callable) -> CanvasLayer:
+	var layer := CanvasLayer.new()
+	layer.layer = 120
+	add_child(layer)
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(root)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.8)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(dim)
+	var cc := CenterContainer.new()
+	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(cc)
+	var pnl := PanelContainer.new()
+	pnl.custom_minimum_size = Vector2(560, 0)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.09, 0.1, 0.13)
+	sb.set_corner_radius_all(20)
+	sb.set_border_width_all(2)
+	sb.border_color = Color(1.0, 0.5, 0.1, 0.8)
+	sb.content_margin_left = 28
+	sb.content_margin_right = 28
+	sb.content_margin_top = 22
+	sb.content_margin_bottom = 22
+	pnl.add_theme_stylebox_override("panel", sb)
+	cc.add_child(pnl)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 14)
+	pnl.add_child(v)
+	var t := Label.new()
+	t.text = title
+	t.add_theme_font_size_override("font_size", 30)
+	t.add_theme_color_override("font_color", Color(1.0, 0.55, 0.15))
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(t)
+	var m := Label.new()
+	m.text = text
+	m.add_theme_font_size_override("font_size", 24)
+	m.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	m.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	m.custom_minimum_size = Vector2(500, 0)
+	v.add_child(m)
+	if btn_text != "":
+		var b := Button.new()
+		b.text = btn_text
+		b.custom_minimum_size = Vector2(0, 58)
+		b.add_theme_font_size_override("font_size", 24)
+		b.add_theme_color_override("font_color", Color(0.1, 0.06, 0.02))
+		for k in ["normal", "hover", "pressed"]:
+			var bs := StyleBoxFlat.new()
+			bs.bg_color = Color(1.0, 0.5, 0.1) if k != "pressed" else Color(0.85, 0.4, 0.05)
+			bs.set_corner_radius_all(14)
+			b.add_theme_stylebox_override(k, bs)
+		b.pressed.connect(func():
+			layer.queue_free()
+			if on_close.is_valid():
+				on_close.call())
+		v.add_child(b)
+	return layer
