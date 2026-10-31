@@ -1104,7 +1104,8 @@ func _pack_section(vb: VBoxContainer, title: String, list: Array, gems: bool) ->
 	var packs := HBoxContainer.new()
 	packs.add_theme_constant_override("separation", 10)
 	vb.add_child(packs)
-	for pk in list:
+	for pk0 in list:
+		var pk := Billing.pack(str(pk0["id"]))
 		var pp := UI.panel(packs, UI.CARD, 16)
 		pp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var best: bool = str(pk["tag"]) != ""
