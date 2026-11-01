@@ -333,6 +333,23 @@ func _process(d: float) -> void:
 				shot("race2_" + who)
 			elif step == 4 and t > 41.0:
 				get_tree().quit()
+		"ads":
+			if step == 0 and t > 2.5:
+				step = 1; sc.hub.select("chests")
+			elif step == 1 and t > 3.6:
+				step = 2; shot("ads0")
+			elif step == 2 and t > 4.2:
+				step = 3; print("ADS offered=%s can=%s status=%s used=%d left=%d chests=%s" % [Ads.offered(), Ads.can_show(), Ads.status, Profile.adbox_used(), Profile.adbox_left(), Profile.chests])
+				sc.hub._on_ad_box()
+			elif step == 3 and t > 99.0:
+				step = 3; shot("ads1"); print("ADS after-1 used=%d chests=%s" % [Profile.adbox_used(), Profile.chests])
+				sc.hub._on_ad_box()
+			elif step == 3 and t > 6.2:
+				step = 4; sc.hub._on_ad_box()
+			elif step == 4 and t > 8.0:
+				step = 5; shot("ads2"); print("ADS after-3 used=%d left=%d chests=%s" % [Profile.adbox_used(), Profile.adbox_left(), Profile.chests]); sc.hub.select("settings")
+			elif step == 5 and t > 9.0:
+				step = 6; shot("ads_settings"); get_tree().quit()
 		"settings":
 			if step == 0 and t > 2.5:
 				step = 1; sc.hub.select("settings")
@@ -397,14 +414,33 @@ func _process(d: float) -> void:
 			elif step == 1 and t > 6.0:
 				step = 2
 				var w = get_tree().current_scene
+				if OS.get_environment("ADSTEST") != "":
+					w.set("my_coins", 800)
 				if w.has_method("_end_race"):
 					w.results.append(0)
 					w.teams[0].finished = true
 					w.teams[0].finish_time = 88.0
 					w._end_race()
 			elif step == 2 and t > float(OS.get_environment("SHOT_AT")) :
-				step = 3; shot("pod_%s" % OS.get_environment("SHOT_AT"))
-				get_tree().quit()
+				if OS.get_environment("ADSTEST") != "":
+					var coins0: int = Profile.coins
+					var dbtn = get_tree().root.find_child("double", true, false)
+					print("DOUBLE found=%s coins=%d" % [dbtn != null, coins0])
+					if dbtn != null:
+						dbtn.pressed.emit()
+					step = 4
+					get_tree().create_timer(3.0).timeout.connect(func():
+						var d2 = get_tree().root.find_child("double", true, false)
+						var txt := ""
+						if d2 != null:
+							for l in d2.find_children("*", "Label", true, false):
+								txt += (l as Label).text
+						print("DOUBLE after: coins=%d (was %d) label=%s done=%s" % [Profile.coins, coins0, txt, d2 != null and d2.has_meta("done")])
+						await shot("pod_after")
+						get_tree().quit())
+				else:
+					step = 3; shot("pod_%s" % OS.get_environment("SHOT_AT"))
+					get_tree().quit()
 		"stk":
 			# every sticker above a car (stk_<n>.png) + the picker window in a solo race
 			if step == 0 and t > 1.5:
