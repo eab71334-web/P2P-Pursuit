@@ -1239,6 +1239,18 @@ func _map_near() -> void:
 func _input(event: InputEvent) -> void:
 	if _picker != null and is_instance_valid(_picker):
 		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		match event.keycode:
+			KEY_H:
+				_cabin("horn")
+			KEY_L:
+				_cabin("lights")
+			KEY_K:
+				_cabin("wipers")
+			KEY_BRACKETLEFT:
+				_cabin("mirror_left")
+			KEY_BRACKETRIGHT:
+				_cabin("mirror_right")
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			_touch_press(event.index, event.position)
@@ -1296,9 +1308,9 @@ func _input(event: InputEvent) -> void:
 	elif event.is_action_pressed("map_near"):
 		_map_near()
 	elif event.is_action_pressed("radio_next"):
-		Radio.next()
+		_radio_step(1)
 	elif event.is_action_pressed("radio_prev"):
-		Radio.prev()
+		_radio_step(-1)
 	elif event.is_action_pressed("radio_toggle"):
 		Radio.toggle()
 
@@ -2184,10 +2196,16 @@ func _build_hud() -> void:
 	_make_zone("replay", UI.tx("REPLAY", "إعادة سينمائية"), 1.0, 0.0, -150, sy + 56, -14, sy + 102, 17, _play_replay)
 	zones["replay"].visible = false
 	_make_zone("photo", UI.tx("PHOTO", "صورة"), 1.0, 0.0, -150, sy + 112, -14, sy + 158, 20, _take_photo)
+	# driver cabin controls (his own hand does them): horn / lights / wipers / wing mirrors
+	if my_role == "driver":
+		var cx := 14.0
+		for it in [["c_horn", UI.tx("HORN", "بوق"), "horn"], ["c_lights", UI.tx("LIGHTS", "إضاءة"), "lights"], ["c_wipers", UI.tx("WIPER", "مساحات"), "wipers"], ["c_mirl", UI.tx("MIR L", "مرآة ي"), "mirror_left"], ["c_mirr", UI.tx("MIR R", "مرآة ن"), "mirror_right"]]:
+			_make_zone(it[0], it[1], 0.0, 0.0, cx, 98, cx + 74, 140, 14, _cabin.bind(it[2]))
+			cx += 80.0
 	# radio (bottom centre): < station >   (tap the name to switch it off / on)
-	_make_zone("radio_prev", "<", 0.5, 1.0, -142, -60, -92, -14, 22, Radio.prev)
+	_make_zone("radio_prev", "<", 0.5, 1.0, -142, -60, -92, -14, 22, _radio_step.bind(-1))
 	_make_zone("radio_name", Radio.label(), 0.5, 1.0, -86, -60, 86, -14, 16, Radio.toggle)
-	_make_zone("radio_next", ">", 0.5, 1.0, 92, -60, 142, -14, 22, Radio.next)
+	_make_zone("radio_next", ">", 0.5, 1.0, 92, -60, 142, -14, 22, _radio_step.bind(1))
 	Radio.changed.connect(_update_radio_hud)
 	if show_touch:
 		_apply_steer_mode()
@@ -2222,6 +2240,31 @@ func _build_hud() -> void:
 			clipboard.my_color = teams[my_team].color
 			clipboard.set_track(track)
 			hud_root.add_child(clipboard)
+
+
+func _my_actions() -> CarActions:
+	if my_role != "driver" or teams.is_empty() or my_team >= teams.size():
+		return null
+	var c = teams[my_team].car
+	if c == null or not is_instance_valid(c):
+		return null
+	return c.actions
+
+
+func _cabin(what: String) -> void:
+	var a := _my_actions()
+	if a:
+		a.do(what)
+
+
+func _radio_step(d: int) -> void:
+	var a := _my_actions()
+	if a and a.car.driver_avatar != null:
+		a.do("radio_next" if d > 0 else "radio_prev")
+	elif d > 0:
+		Radio.next()
+	else:
+		Radio.prev()
 
 
 func _update_radio_hud() -> void:
