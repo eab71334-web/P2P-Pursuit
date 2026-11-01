@@ -76,6 +76,10 @@ var _wheel_l := Vector3(-0.2, 0.1, -0.6)
 var _wheel_r := Vector3(0.2, 0.1, -0.6)
 var _shift_r := Vector3.ZERO
 var _shift_k := 0.0
+var lean := 0.0                # body leans forward (reaching the radio); set by CarActions
+var _lean_prev := 0.0
+var _aux := {"L": Vector3.ZERO, "R": Vector3.ZERO}     # extra hand targets (horn, stalks, mirrors, radio, drink), avatar space
+var _aux_k := {"L": 0.0, "R": 0.0}                      # 0 = hand on the wheel .. 1 = hand on the target
 
 
 func _mat(c: Color) -> StandardMaterial3D:
@@ -386,6 +390,12 @@ func set_shift_hand(car_pos: Vector3, k: float) -> void:
 	_shift_k = k
 
 
+## a hand leaves the wheel and goes to car_pos (side "L" / "R", k = 0..1)
+func set_aux_hand(side: String, car_pos: Vector3, k: float) -> void:
+	_aux[side] = car_pos - position
+	_aux_k[side] = k
+
+
 ## Car space -> avatar space (the avatar only has a translation).
 func set_wheel_hands(left_car: Vector3, right_car: Vector3) -> void:
 	_wheel_l = left_car - position
@@ -512,6 +522,14 @@ func _process(delta: float) -> void:
 			var pt := _podium_targets()
 			dl = pt[0]
 			dr = pt[1]
+	if lean != _lean_prev:
+		position.z -= lean - _lean_prev
+		_lean_prev = lean
+	if role == "driver" and not outside:
+		if float(_aux_k["L"]) > 0.001:
+			dl = dl.lerp(_aux["L"], float(_aux_k["L"]))
+		if float(_aux_k["R"]) > 0.001:
+			dr = dr.lerp(_aux["R"], float(_aux_k["R"]))
 	if emote != "" and not outside:
 		var et := _emote_targets(dl, dr)
 		dl = et[0]
