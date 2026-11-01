@@ -1249,6 +1249,10 @@ func _input(event: InputEvent) -> void:
 				_cabin("wipers")
 			KEY_G:
 				_cabin("drink")
+			KEY_COMMA:
+				_cabin("signal_left")
+			KEY_PERIOD:
+				_cabin("signal_right")
 			KEY_BRACKETLEFT:
 				_cabin("mirror_left")
 			KEY_BRACKETRIGHT:
@@ -2072,6 +2076,8 @@ func _make_avatar(ts: TeamState, id: int) -> void:
 	avatars[id] = av
 	if role == "driver":
 		ts.car.driver_avatar = av
+		if av.is_local and ts.car.actions != null and not ts.car.actions.changed.is_connected(_sig_hud):
+			ts.car.actions.changed.connect(_sig_hud)
 	if av.is_local:
 		local_avatar = av
 
@@ -2205,6 +2211,8 @@ func _build_hud() -> void:
 			_make_zone(it[0], it[1], 0.0, 0.0, cx, 98, cx + 74, 140, 14, _cabin.bind(it[2]))
 			cx += 80.0
 		_make_zone("c_drink", UI.tx("DRINK", "اشرب"), 0.0, 0.0, 14, 146, 88, 188, 14, _cabin.bind("drink"))
+		_make_zone("c_sigl", "<", 0.0, 0.0, 174, 146, 224, 188, 22, _cabin.bind("signal_left"))
+		_make_zone("c_sigr", ">", 0.0, 0.0, 230, 146, 280, 188, 22, _cabin.bind("signal_right"))
 		_make_zone("c_kind", UI.tx("JUICE", "عصير"), 0.0, 0.0, 94, 146, 168, 188, 14, _toggle_drink)
 	# radio (bottom centre): < station >   (tap the name to switch it off / on)
 	_make_zone("radio_prev", "<", 0.5, 1.0, -142, -60, -92, -14, 22, _radio_step.bind(-1))
@@ -2259,6 +2267,20 @@ func _cabin(what: String) -> void:
 	var a := _my_actions()
 	if a:
 		a.do(what)
+
+
+func _sig_hud() -> void:
+	var a := _my_actions()
+	if a == null:
+		return
+	for pair in [["c_sigl", -1], ["c_sigr", 1]]:
+		if zones.has(pair[0]):
+			var sb := StyleBoxFlat.new()
+			sb.bg_color = Color(1.0, 0.6, 0.05, 0.75) if a.signal_dir == int(pair[1]) else Color(1, 1, 1, 0.18)
+			sb.set_corner_radius_all(14)
+			sb.border_color = Color(1, 1, 1, 0.5)
+			sb.set_border_width_all(3)
+			(zones[pair[0]] as Panel).add_theme_stylebox_override("panel", sb)
 
 
 func _toggle_drink() -> void:

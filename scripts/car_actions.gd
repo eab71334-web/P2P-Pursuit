@@ -11,16 +11,16 @@ signal changed                       # lights / wipers state changed (HUD button
 # horn: press | thumb | double | hold      lights: stalk | knob | switch      wipers: stalk | knob | switch
 # radio: knob | button                     mirror: joy | lever
 const STYLE := {
-	"hatch":   {"horn": "press",  "lights": "stalk",  "wipers": "knob",   "radio": "knob",   "mirror": "lever", "pitch": 1.00},
-	"buggy":   {"horn": "thumb",  "lights": "switch", "wipers": "switch", "radio": "knob",   "mirror": "lever", "pitch": 1.12},
-	"muscle":  {"horn": "double", "lights": "knob",   "wipers": "switch", "radio": "knob",   "mirror": "lever", "pitch": 0.80},
-	"sierra":  {"horn": "press",  "lights": "knob",   "wipers": "stalk",  "radio": "knob",   "mirror": "lever", "pitch": 0.95},
-	"pickup":  {"horn": "hold",   "lights": "knob",   "wipers": "knob",   "radio": "knob",   "mirror": "lever", "pitch": 0.72},
-	"charger": {"horn": "double", "lights": "stalk",  "wipers": "switch", "radio": "button", "mirror": "joy",   "pitch": 0.78},
-	"coupe":   {"horn": "thumb",  "lights": "stalk",  "wipers": "stalk",  "radio": "button", "mirror": "joy",   "pitch": 1.05},
-	"m4":      {"horn": "thumb",  "lights": "stalk",  "wipers": "stalk",  "radio": "button", "mirror": "joy",   "pitch": 1.00},
-	"gt3":     {"horn": "thumb",  "lights": "switch", "wipers": "stalk",  "radio": "button", "mirror": "joy",   "pitch": 1.25},
-	"hyper":   {"horn": "thumb",  "lights": "switch", "wipers": "switch", "radio": "button", "mirror": "joy",   "pitch": 1.18},
+	"hatch":   {"sig": "sig_relay", "sp": 1.00, "horn": "press",  "lights": "stalk",  "wipers": "knob",   "radio": "knob",   "mirror": "lever", "pitch": 1.00},
+	"buggy":   {"sig": "sig_relay", "sp": 1.25, "horn": "thumb",  "lights": "switch", "wipers": "switch", "radio": "knob",   "mirror": "lever", "pitch": 1.12},
+	"muscle":  {"sig": "sig_heavy", "sp": 1.05, "horn": "double", "lights": "knob",   "wipers": "switch", "radio": "knob",   "mirror": "lever", "pitch": 0.80},
+	"sierra":  {"sig": "sig_relay", "sp": 0.80, "horn": "press",  "lights": "knob",   "wipers": "stalk",  "radio": "knob",   "mirror": "lever", "pitch": 0.95},
+	"pickup":  {"sig": "sig_heavy", "sp": 0.80, "horn": "hold",   "lights": "knob",   "wipers": "knob",   "radio": "knob",   "mirror": "lever", "pitch": 0.72},
+	"charger": {"sig": "sig_heavy", "sp": 1.30, "horn": "double", "lights": "stalk",  "wipers": "switch", "radio": "button", "mirror": "joy",   "pitch": 0.78},
+	"coupe":   {"sig": "sig_soft", "sp": 1.00, "horn": "thumb",  "lights": "stalk",  "wipers": "stalk",  "radio": "button", "mirror": "joy",   "pitch": 1.05},
+	"m4":      {"sig": "sig_soft", "sp": 0.85, "horn": "thumb",  "lights": "stalk",  "wipers": "stalk",  "radio": "button", "mirror": "joy",   "pitch": 1.00},
+	"gt3":     {"sig": "sig_beep", "sp": 1.00, "horn": "thumb",  "lights": "switch", "wipers": "stalk",  "radio": "button", "mirror": "joy",   "pitch": 1.25},
+	"hyper":   {"sig": "sig_beep", "sp": 0.80, "horn": "thumb",  "lights": "switch", "wipers": "switch", "radio": "button", "mirror": "joy",   "pitch": 1.18},
 }
 const MIRROR_STEPS := [0.0, 6.0, 12.0, -6.0, -12.0]
 const APPROACH := 0.3
@@ -45,6 +45,16 @@ var _knob_l: Node3D          # lights knob / switch on the left of the wheel
 var _knob_w: Node3D          # wiper knob / switch on the right of the wheel
 var _joy: Node3D
 var _joy_pos := Vector3.ZERO
+var signal_dir := 0              # -1 left, 0 off, 1 right
+var _sig_t := 0.0
+var _sig_age := 0.0
+var _sig_seen := false
+var _sig_on := false
+var _sig_stalk: Node3D
+var _sig_tip: Node3D
+var _sig_lamps := {"left": [], "right": []}
+var _sig_mat_on: StandardMaterial3D
+var _sig_mat_off: StandardMaterial3D
 var drink_kind := "juice"        # juice | energy
 var _can: Node3D
 var _can_body: MeshInstance3D
@@ -66,6 +76,7 @@ func setup(p_car: Car) -> void:
 	_build_controls()
 	_build_wipers()
 	_build_can()
+	_build_signals()
 
 
 # ------------------------------------------------------------------ public
@@ -193,6 +204,93 @@ func _build_wipers() -> void:
 		_wipers.append(arm)
 
 
+# ------------------------------------------------------------------ turn signals
+func _build_signals() -> void:
+	_sig_mat_on = _mat(Color(1.0, 0.55, 0.0), 0.0, 0.3, 4.0)
+	_sig_mat_off = _mat(Color(0.45, 0.22, 0.02), 0.0, 0.5, 0.0)
+	var spots := [Vector3(0.72, 0.62, -2.2), Vector3(0.78, 0.72, 2.18), Vector3(0.99, 0.95, -0.95)]
+	for side in ["left", "right"]:
+		var sx := -1.0 if side == "left" else 1.0
+		for sp in spots:
+			var sz := Vector3(0.24, 0.1, 0.05) if absf(sp.z) > 1.5 else Vector3(0.03, 0.06, 0.16)
+			var m := CarStyle.box(car, sz, Vector3(sp.x * sx, sp.y, sp.z), _sig_mat_off)
+			_sig_lamps[side].append(m)
+	# its own stalk under the lights stalk (left of the column)
+	var piv := Node3D.new()
+	piv.transform = Transform3D(_pv.basis, _w(Vector3(-0.06, -0.11, 0.03)))
+	car.add_child(piv)
+	var dark := _mat(Color(0.03, 0.03, 0.04), 0.2, 0.5)
+	CarStyle.box(piv, Vector3(0.14, 0.016, 0.016), Vector3(-0.07, 0, 0), dark)
+	CarStyle.cyl(piv, 0.015, 0.028, Vector3(-0.14, 0, 0), dark)
+	var tip := Node3D.new()
+	tip.position = Vector3(-0.14, 0, 0)
+	piv.add_child(tip)
+	_sig_stalk = piv
+	_sig_tip = tip
+
+
+## dir: -1 left, +1 right. Pressing the same side again switches it off.
+func _signal_act(dir: int) -> Dictionary:
+	var sp := _sig_stalk
+	var tip := _sig_tip
+	var fire := func():
+		signal_dir = 0 if signal_dir == dir else dir
+		_sig_age = 0.0
+		_sig_seen = false
+		_sig_t = 0.0
+		_sig_on = false
+		if signal_dir != 0:
+			_sig_on = true
+			_sig_sound(true)
+		_sig_lights()
+		changed.emit()
+	var base := _pv.basis
+	var sgn := float(dir)
+	return {"side": "L", "dur": 0.7, "lean": 0.0, "events": [_ev(0.28, fire)],
+		"pose": func(t: float) -> Vector3:
+			var f := smoothstep(0.15, 0.28, t) * (1.0 - smoothstep(0.45, 0.6, t))
+			sp.transform = Transform3D(base * Basis(Vector3(1, 0, 0), deg_to_rad(-13.0 * sgn * f)), sp.position)
+			return car.to_local(tip.global_position)}
+
+
+func _sig_sound(tick: bool) -> void:
+	Sfx.play3d(str(st["sig"]), car, -4.0, float(st["sp"]) * (1.0 if tick else 0.82))
+
+
+func _sig_lights() -> void:
+	for side in ["left", "right"]:
+		var on: bool = _sig_on and ((side == "left" and signal_dir < 0) or (side == "right" and signal_dir > 0))
+		for m in _sig_lamps[side]:
+			(m as MeshInstance3D).material_override = _sig_mat_on if on else _sig_mat_off
+
+
+func _tick_signal(delta: float) -> void:
+	if signal_dir == 0:
+		return
+	_sig_age += delta
+	_sig_t += delta
+	if _sig_t >= 0.36:
+		_sig_t = 0.0
+		_sig_on = not _sig_on
+		_sig_sound(_sig_on)
+		_sig_lights()
+	# like a real car it cancels itself after the turn (wheel turned the way of the signal, then straight again)
+	var s: float = car.steer_target * float(-signal_dir)
+	if s < -0.45:
+		_sig_seen = true
+	elif _sig_seen and absf(s) < 0.12:
+		_cancel_signal()
+	elif _sig_age > 25.0:
+		_cancel_signal()
+
+
+func _cancel_signal() -> void:
+	signal_dir = 0
+	_sig_on = false
+	_sig_lights()
+	changed.emit()
+
+
 func _cup_holder() -> Vector3:
 	return Vector3(0.0, 0.93, 0.42)
 
@@ -301,6 +399,10 @@ func _start(name: String) -> void:
 			_a = _radio(1.0)
 		"radio_prev":
 			_a = _radio(0.0)
+		"signal_left":
+			_a = _signal_act(-1)
+		"signal_right":
+			_a = _signal_act(1)
 		"drink":
 			_a = _drink()
 		"mirror_left":
@@ -473,6 +575,7 @@ func _process(delta: float) -> void:
 		return
 	_tick_wipers(delta)
 	_tick_can()
+	_tick_signal(delta)
 	if not _busy:
 		return
 	var w := car.driver_avatar
