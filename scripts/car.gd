@@ -112,11 +112,12 @@ func seat_origin(role: String) -> Vector3:
 
 
 func _ready() -> void:
+	hd = HANDLING.get(model, HANDLING["hatch"])
 	mass = 450.0
 	linear_damp = 0.12
 	angular_damp = 1.5
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
-	center_of_mass = Vector3(0, 0.15, 0)
+	center_of_mass = Vector3(0, float(hd["com"]), 0)
 	if is_remote:
 		freeze = true
 		freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
@@ -155,12 +156,12 @@ func _add_wheels() -> void:
 			w.wheel_radius = 0.4
 			w.wheel_rest_length = 0.2
 			w.suspension_travel = 0.3
-			w.suspension_stiffness = 38.0
-			w.suspension_max_force = 7000.0
-			w.damping_compression = 1.0
-			w.damping_relaxation = 1.3
-			w.wheel_friction_slip = 3.2 * grip_base
-			w.wheel_roll_influence = 0.25
+			w.suspension_stiffness = float(hd["stiff"])
+			w.suspension_max_force = 9000.0
+			w.damping_compression = float(hd["damp"])
+			w.damping_relaxation = float(hd["damp"]) * 1.3
+			w.wheel_friction_slip = 3.2 * grip_base * (1.0 if z < 0.0 else float(hd["rear"]))
+			w.wheel_roll_influence = float(hd["roll"])
 			w.use_as_traction = true
 			w.use_as_steering = z < 0.0
 			add_child(w)
@@ -172,7 +173,9 @@ func _add_wheels() -> void:
 func set_controls(steer: float, throttle: float, brk: float) -> void:
 	var fs := -global_transform.basis.z.dot(linear_velocity)
 	speed_kmh = absf(fs) * 3.6
-	var lim := lerpf(0.42, 0.08, clampf(speed_kmh / 120.0, 0.0, 1.0))
+	# steering lock shrinks smoothly with speed (no snap-oversteer at 200 km/h)
+	var lim := (0.42 / (1.0 + pow(speed_kmh / 70.0, 1.7)) + 0.035) * float(hd["steer"])
+	var srate := lerpf(2.4, 0.9, clampf(speed_kmh / 160.0, 0.0, 1.0)) * float(hd["rate"])
 	steer_target = steer
 	throttle_in = throttle
 	brake_in = brk
@@ -181,7 +184,7 @@ func set_controls(steer: float, throttle: float, brk: float) -> void:
 		brake = BRAKE_FORCE
 		steering = move_toward(steering, 0.0, get_physics_process_delta_time() * 3.5)
 		return
-	steering = move_toward(steering, -steer * lim, get_physics_process_delta_time() * 2.2)
+	steering = move_toward(steering, -steer * lim, get_physics_process_delta_time() * srate)
 	if brk > 0.0 and fs < 0.5:
 		engine_force = brk * 600.0
 		brake = 0.0
@@ -196,7 +199,7 @@ func set_grip(f: float) -> void:
 		return
 	_grip = f
 	for w in wheel_list:
-		w.wheel_friction_slip = 3.2 * f * grip_base
+		w.wheel_friction_slip = 3.2 * f * grip_base * (1.0 if w.use_as_steering else float(hd["rear"]))
 
 
 ## dark-mode lights: headlights + a dim cabin light so the blind driver can see the co-driver
@@ -439,16 +442,69 @@ func _build_audio() -> void:
 		(_snd[k] as AudioStreamPlayer3D).stream.resource_local_to_scene = false
 
 
+## Per-car handling feel (realistic weight transfer, grip balance and stability).
+## roll = body-roll influence (lower = harder to flip) | steer = lock multiplier | rate = steering speed
+## rear = rear grip vs front (<1 oversteer / tail slides, >1 understeer) | down = downforce | stiff/damp = suspension | com = centre of mass height
+const HANDLING := {
+	"hatch":   {"roll": 0.10, "steer": 1.00, "rate": 1.0, "rear": 0.96, "down": 0.9, "stiff": 38.0, "damp": 1.0, "com": 0.10},
+	"buggy":   {"roll": 0.12, "steer": 1.10, "rate": 1.2, "rear": 0.92, "down": 0.6, "stiff": 30.0, "damp": 0.8, "com": 0.12},
+	"muscle":  {"roll": 0.08, "steer": 0.90, "rate": 0.85, "rear": 0.80, "down": 1.0, "stiff": 40.0, "damp": 1.1, "com": 0.05},
+	"sierra":  {"roll": 0.08, "steer": 0.95, "rate": 0.95, "rear": 0.88, "down": 1.0, "stiff": 40.0, "damp": 1.1, "com": 0.05},
+	"charger": {"roll": 0.07, "steer": 0.85, "rate": 0.8, "rear": 0.82, "down": 1.2, "stiff": 42.0, "damp": 1.2, "com": 0.04},
+	"pickup":  {"roll": 0.14, "steer": 0.90, "rate": 0.8, "rear": 1.05, "down": 0.6, "stiff": 32.0, "damp": 0.9, "com": 0.14},
+	"coupe":   {"roll": 0.06, "steer": 1.00, "rate": 1.1, "rear": 1.00, "down": 1.8, "stiff": 46.0, "damp": 1.3, "com": 0.02},
+	"m4":      {"roll": 0.06, "steer": 1.00, "rate": 1.1, "rear": 0.93, "down": 1.8, "stiff": 46.0, "damp": 1.3, "com": 0.02},
+	"gt3":     {"roll": 0.04, "steer": 1.05, "rate": 1.15, "rear": 1.00, "down": 2.8, "stiff": 52.0, "damp": 1.5, "com": 0.0},
+	"hyper":   {"roll": 0.04, "steer": 0.95, "rate": 1.0, "rear": 1.02, "down": 3.2, "stiff": 54.0, "damp": 1.5, "com": 0.0},
+}
+var hd: Dictionary = HANDLING["hatch"]
+
 const GEARS := [0.0, 36.0, 68.0, 100.0, 133.0, 170.0]
 
 
 func _physics_process(delta: float) -> void:
 	if is_remote:
 		return
+	_stabilize(delta)
 	var dv := (_prev_vel - linear_velocity).length()
 	if dv > 3.5:
 		impact_acc = maxf(impact_acc, dv)
 	_prev_vel = linear_velocity
+
+
+## Downforce + anti-roll + anti-flip so fast cars stay planted and never flip out of nowhere.
+func _stabilize(delta: float) -> void:
+	if preview or freeze:
+		return
+	var b := global_transform.basis
+	var v := linear_velocity
+	var fwd := -b.z
+	var up := b.y
+	var sp := v.length()
+	var on_ground := 0
+	for w in wheel_list:
+		if w.is_in_contact():
+			on_ground += 1
+	# aerodynamic downforce (grows with speed squared) presses the car onto the road
+	if on_ground >= 2 and sp > 12.0:
+		apply_central_force(-up * float(hd["down"]) * 0.9 * sp * sp * 0.55)
+	# anti-roll: kill the roll spin around the car's long axis and pitch spin around its side axis
+	var av := angular_velocity
+	var roll_av := fwd * av.dot(fwd)
+	var pitch_av := b.x * av.dot(b.x)
+	var k := 1.0 + 0.8 * clampf(sp / 40.0, 0.0, 1.0)
+	if on_ground >= 1:
+		apply_torque(-roll_av * mass * 4.0 * k)
+		apply_torque(-pitch_av * mass * 1.5 * k)
+	# leaning more than ~25 degrees on the road: gently push the body back to level
+	var lean := up.cross(Vector3.UP)
+	if on_ground >= 2 and up.y < 0.9 and up.y > 0.2:
+		apply_torque(lean * mass * 14.0)
+	# hard limit on spin speeds so a bump can never launch the car into a flip
+	if absf(roll_av.length()) > 2.6:
+		angular_velocity -= roll_av * 0.25
+	if pitch_av.length() > 2.2:
+		angular_velocity -= pitch_av * 0.25
 
 
 ## server: returns and clears the strongest impact since the last call
