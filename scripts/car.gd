@@ -77,6 +77,9 @@ var _wheel_pivot: Node3D
 var _wheel_mesh: Node3D
 var _mirror_nodes := {}          # "rear" / "left" / "right" -> Node3D (housing, glass child "glass")
 var _mirror_vps: Array[SubViewport] = []
+var _mirror_marks := {}          # "left"/"right"/"rear" -> RemoteTransform3D of the mirror camera
+var _mirror_base := {}           # base yaw of the mirror housing / camera
+var actions: CarActions
 var _mirror_t := 0.0
 
 
@@ -132,6 +135,10 @@ func _ready() -> void:
 	_build_fx()
 	if not preview:
 		_build_audio()
+		actions = CarActions.new()
+		actions.name = "Actions"
+		add_child(actions)
+		actions.setup(self)
 
 
 func rim_color() -> Color:
@@ -889,6 +896,8 @@ func _mirror_cam(which: String, pos: Vector3, rot_deg: Vector3, fov: float, px: 
 	mark.use_global_coordinates = true
 	add_child(mark)
 	mark.remote_path = mark.get_path_to(cam)
+	_mirror_marks[which] = mark
+	_mirror_base[which] = mark.rotation_degrees.y
 	_mirror_vps.append(vp)
 	var glass := (_mirror_nodes[which] as Node3D).get_node("glass") as MeshInstance3D
 	var m := glass.material_override as StandardMaterial3D
@@ -896,6 +905,18 @@ func _mirror_cam(which: String, pos: Vector3, rot_deg: Vector3, fov: float, px: 
 	m.albedo_texture = vp.get_texture()
 	m.uv1_scale = Vector3(-1, 1, 1)      # a mirror image is flipped left <-> right
 	m.uv1_offset = Vector3(1, 0, 0)
+
+
+## the driver turns a wing mirror (degrees, + = outward on the right / left): housing and the reflected view move together
+func set_mirror_offset(which: String, deg: float) -> void:
+	if _mirror_nodes.has(which) and which != "rear":
+		var nd: Node3D = _mirror_nodes[which]
+		var sx := -1.0 if which == "left" else 1.0
+		nd.rotation_degrees.y = -sx * 24.0 + deg * sx
+	if _mirror_marks.has(which):
+		var mk: RemoteTransform3D = _mirror_marks[which]
+		var sx2 := -1.0 if which == "left" else 1.0
+		mk.rotation_degrees.y = float(_mirror_base[which]) + deg * sx2 * 2.0
 
 
 func _tick_mirrors(delta: float) -> void:
