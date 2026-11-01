@@ -285,6 +285,19 @@ class SwatchArt extends Control:
 			if selected:
 				draw_style_box(UI.sb(Color.TRANSPARENT, 10, UI.ACCENT, 3), r)
 			return
+		if slot == "flag":
+			draw_style_box(UI.sb(Color(0.08, 0.09, 0.12), 10), r)
+			var ft: Texture2D = Flags.tex(kit_id)
+			if ft != null:
+				var fw := size.x - 16.0
+				var fh := minf(fw * 2.0 / 3.0, size.y - 10.0)
+				fw = fh * 1.5
+				draw_texture_rect(ft, Rect2((size.x - fw) * 0.5, (size.y - fh) * 0.5, fw, fh), false)
+			else:
+				draw_line(Vector2(cx - 18, cy), Vector2(cx + 18, cy), Color(1, 1, 1, 0.5), 4.0)
+			if selected:
+				draw_style_box(UI.sb(Color.TRANSPARENT, 10, UI.ACCENT, 3), r)
+			return
 		match slot:
 			"paint":
 				var st := UI.sb(col, 10)

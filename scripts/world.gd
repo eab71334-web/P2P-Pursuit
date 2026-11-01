@@ -1247,6 +1247,8 @@ func _input(event: InputEvent) -> void:
 				_cabin("lights")
 			KEY_K:
 				_cabin("wipers")
+			KEY_G:
+				_cabin("drink")
 			KEY_BRACKETLEFT:
 				_cabin("mirror_left")
 			KEY_BRACKETRIGHT:
@@ -2202,6 +2204,8 @@ func _build_hud() -> void:
 		for it in [["c_horn", UI.tx("HORN", "بوق"), "horn"], ["c_lights", UI.tx("LIGHTS", "إضاءة"), "lights"], ["c_wipers", UI.tx("WIPER", "مساحات"), "wipers"], ["c_mirl", UI.tx("MIR L", "مرآة ي"), "mirror_left"], ["c_mirr", UI.tx("MIR R", "مرآة ن"), "mirror_right"]]:
 			_make_zone(it[0], it[1], 0.0, 0.0, cx, 98, cx + 74, 140, 14, _cabin.bind(it[2]))
 			cx += 80.0
+		_make_zone("c_drink", UI.tx("DRINK", "اشرب"), 0.0, 0.0, 14, 146, 88, 188, 14, _cabin.bind("drink"))
+		_make_zone("c_kind", UI.tx("JUICE", "عصير"), 0.0, 0.0, 94, 146, 168, 188, 14, _toggle_drink)
 	# radio (bottom centre): < station >   (tap the name to switch it off / on)
 	_make_zone("radio_prev", "<", 0.5, 1.0, -142, -60, -92, -14, 22, _radio_step.bind(-1))
 	_make_zone("radio_name", Radio.label(), 0.5, 1.0, -86, -60, 86, -14, 16, Radio.toggle)
@@ -2255,6 +2259,15 @@ func _cabin(what: String) -> void:
 	var a := _my_actions()
 	if a:
 		a.do(what)
+
+
+func _toggle_drink() -> void:
+	var a := _my_actions()
+	if a == null:
+		return
+	a.toggle_drink()
+	if zones.has("c_kind"):
+		((zones["c_kind"] as Control).get_child(0) as Label).text = UI.tx("ENERGY", "طاقة") if a.drink_kind == "energy" else UI.tx("JUICE", "عصير")
 
 
 func _radio_step(d: int) -> void:

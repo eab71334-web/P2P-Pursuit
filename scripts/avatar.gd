@@ -396,6 +396,11 @@ func set_aux_hand(side: String, car_pos: Vector3, k: float) -> void:
 	_aux_k[side] = k
 
 
+## where a hand really is (car space)
+func hand_car(side: String) -> Vector3:
+	return position + (_limbs[side]["hand"] as MeshInstance3D).position
+
+
 ## Car space -> avatar space (the avatar only has a translation).
 func set_wheel_hands(left_car: Vector3, right_car: Vector3) -> void:
 	_wheel_l = left_car - position

@@ -221,9 +221,9 @@ static func has_part(car_id: String, slot: String) -> bool:
 	return (tech(car_id)["slots"] as Array).has(slot)
 
 
-const CAR_SLOTS := {"paint": PAINTS, "stripe": STRIPES, "rim": RIMS, "glow": GLOWS, "decal": DECALS,
+const CAR_SLOTS := {"paint": PAINTS, "stripe": STRIPES, "rim": RIMS, "glow": GLOWS, "decal": DECALS, "flag": Flags.TABLE,
 	"spoiler": SPOILERS, "front": FRONTS, "hood": HOODS, "skirts": SKIRTS, "wheel": WHEELS}
-const CAR_SLOT_ORDER := {"paint": PAINT_ORDER, "stripe": STRIPE_ORDER, "rim": RIM_ORDER, "glow": GLOW_ORDER, "decal": DECAL_ORDER,
+const CAR_SLOT_ORDER := {"paint": PAINT_ORDER, "stripe": STRIPE_ORDER, "rim": RIM_ORDER, "glow": GLOW_ORDER, "decal": DECAL_ORDER, "flag": Flags.ORDER,
 	"spoiler": ["none", "lip", "duck", "gt", "twin"], "front": ["none", "splitter", "canards", "bullbar"], "hood": ["none", "scoop", "vents", "carbon"], "skirts": ["none", "skirts", "wide"], "wheel": WHEEL_ORDER}
 
 # ---------------------------------------------------------------- character
@@ -283,7 +283,7 @@ const GLASSES := {
 const OUTFIT_SLOTS := {"skin": SKINS, "shirt": SHIRTS, "pants": PANTS, "shoes": SHOES, "hat": HATS, "glasses": GLASSES}
 const OUTFIT_ORDER := ["skin", "hat", "glasses", "shirt", "pants", "shoes"]
 const SLOT_NAME := {
-	"paint": ["Paint", "الطلاء"], "stripe": ["Stripes", "الخطوط"], "rim": ["Rims", "الجنوط"], "glow": ["Underglow", "إضاءة سفلية"], "decal": ["Stickers", "ملصقات"], "spoiler": ["Rear", "المؤخرة"], "front": ["Front", "المقدمة"], "hood": ["Hood", "الغطاء"], "skirts": ["Sides", "الجوانب"], "wheel": ["Wheel design", "تصميم الجنط"],
+	"paint": ["Paint", "الطلاء"], "stripe": ["Stripes", "الخطوط"], "rim": ["Rims", "الجنوط"], "glow": ["Underglow", "إضاءة سفلية"], "decal": ["Stickers", "ملصقات"], "flag": ["Flag", "علم"], "spoiler": ["Rear", "المؤخرة"], "front": ["Front", "المقدمة"], "hood": ["Hood", "الغطاء"], "skirts": ["Sides", "الجوانب"], "wheel": ["Wheel design", "تصميم الجنط"],
 	"skin": ["Skin", "البشرة"], "hat": ["Hat", "القبعة"], "glasses": ["Glasses", "النظارة"], "shirt": ["T-shirt", "التيشيرت"],
 	"pants": ["Pants", "السروال"], "shoes": ["Shoes", "الحذاء"], "emote": ["Emote", "الحركة"],
 }

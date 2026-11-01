@@ -424,7 +424,7 @@ func _stats(parent: Node, car_id: String) -> void:
 
 func _lo_for(car_id: String, over := {}) -> Dictionary:
 	var cs: Dictionary = Profile.car_set(car_id)
-	var lo := {"car": car_id, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"], "spoiler": cs["spoiler"], "front": cs["front"], "hood": cs["hood"], "skirts": cs["skirts"], "wheel": cs["wheel"], "up": Profile.up.get(car_id, {}), "outfit": Profile.outfit}
+	var lo := {"car": car_id, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"], "flag": cs["flag"], "spoiler": cs["spoiler"], "front": cs["front"], "hood": cs["hood"], "skirts": cs["skirts"], "wheel": cs["wheel"], "up": Profile.up.get(car_id, {}), "outfit": Profile.outfit}
 	for k in over:
 		lo[k] = over[k]
 	return lo
@@ -640,8 +640,8 @@ func _rerender() -> void:
 # ====================================================================== GARAGE
 const DOCK_H := 188
 const MOD_SECTIONS := ["paint", "body", "mods", "wheels", "engine"]
-const MOD_SUBS := {"paint": ["paint", "stripe", "decal", "glow"], "body": ["spoiler", "front", "hood", "skirts"], "mods": ["aero", "susp", "kit", "armor"], "wheels": ["wheel", "rim", "tires"], "engine": ["engine", "turbo", "exhaust", "cooling"]}
-const MOD_NAMES := {"paint": ["Colour", "اللون"], "stripe": ["Stripes", "الخطوط"], "decal": ["Stickers", "الملصقات"], "glow": ["Underglow", "الإضاءة السفلية"], "rim": ["Rim colour", "لون الجنوط"], "wheel": ["Wheel design", "تصميم الجنط"],
+const MOD_SUBS := {"paint": ["paint", "stripe", "decal", "flag", "glow"], "body": ["spoiler", "front", "hood", "skirts"], "mods": ["aero", "susp", "kit", "armor"], "wheels": ["wheel", "rim", "tires"], "engine": ["engine", "turbo", "exhaust", "cooling"]}
+const MOD_NAMES := {"paint": ["Colour", "اللون"], "stripe": ["Stripes", "الخطوط"], "decal": ["Stickers", "الملصقات"], "flag": ["Flag", "العلم"], "glow": ["Underglow", "الإضاءة السفلية"], "rim": ["Rim colour", "لون الجنوط"], "wheel": ["Wheel design", "تصميم الجنط"],
 	"spoiler": ["Rear wing", "المؤخرة"], "front": ["Front", "المقدمة"], "hood": ["Hood", "الغطاء"], "skirts": ["Sides", "الجوانب"]}
 const SEC_NAMES := {"paint": ["PAINT", "الطلاء"], "body": ["BODY", "الشكل"], "mods": ["MODS", "التعديلات"], "wheels": ["WHEELS", "العجلات"], "engine": ["ENGINE", "المحرك"]}
 var mod_section := "paint"

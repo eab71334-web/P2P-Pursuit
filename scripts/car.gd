@@ -80,6 +80,7 @@ var _mirror_vps: Array[SubViewport] = []
 var _mirror_marks := {}          # "left"/"right"/"rear" -> RemoteTransform3D of the mirror camera
 var _mirror_base := {}           # base yaw of the mirror housing / camera
 var actions: CarActions
+var _flag_mat: ShaderMaterial
 var _mirror_t := 0.0
 
 
@@ -133,6 +134,9 @@ func _ready() -> void:
 	_add_wheels()
 	_build_visuals()
 	_build_fx()
+	var fcode := str(lo.get("flag", "none"))
+	if Flags.valid(fcode):
+		_flag_mat = Flags.attach(self, fcode, _mat(Color(0.75, 0.77, 0.82)))
 	if not preview:
 		_build_audio()
 		actions = CarActions.new()
@@ -541,6 +545,9 @@ func _vol(db: float, on: bool) -> float:
 
 
 func _process(delta: float) -> void:
+	if _flag_mat != null:
+		# the flag hangs at a standstill and streams out straight behind the car with speed
+		_flag_mat.set_shader_parameter("wind", clampf(maxf(speed_kmh, 18.0 if preview else 0.0) / 75.0, 0.0, 1.0))
 	if not _holders.is_empty():
 		_spin -= (speed_kmh / 3.6) * delta / 0.4
 		if preview:
