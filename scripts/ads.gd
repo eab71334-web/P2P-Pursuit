@@ -16,7 +16,19 @@ const TEST_UNITS := {
 	"banner": "ca-app-pub-3940256099942544/2934735716",
 	"rewarded": "ca-app-pub-3940256099942544/1712485313",
 }
+const TEST_UNITS_ANDROID := {
+	"banner": "ca-app-pub-3940256099942544/6300978111",
+	"rewarded": "ca-app-pub-3940256099942544/5224354917",
+}
 const AD_POS_BOTTOM := 1
+
+
+func _mobile() -> bool:
+	return OS.get_name() == "iOS" or OS.get_name() == "Android"
+
+
+func _is_android() -> bool:
+	return OS.get_name() == "Android"
 
 var enabled := false                 # the native AdMob plugin exists in this build
 var sdk_ready := false               # SDK finished initialising
@@ -26,6 +38,7 @@ var live_rewarded := false
 var status := "off"                  # short text for the settings page
 var last_error := ""
 var units := {}
+var remote_off := false              # the admin app switched ads off
 var sim := false                     # desktop test mode: fake ad overlay so the flow can be tried
 
 var _sdk: Object
@@ -80,16 +93,16 @@ func _guard_set(on: bool) -> void:
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_load_cfg()
-	if OS.get_name() == "iOS":
+	if _mobile():
 		_trace("launch")
 	sim = OS.has_feature("editor") or OS.get_environment("ADS_SIM") == "1"
-	if OS.get_name() == "iOS" and FileAccess.file_exists(GUARD):
+	if _mobile() and FileAccess.file_exists(GUARD):
 		# the previous run died while ads were starting: stay in safe mode (no native ad calls)
 		_trace("SAFE MODE: previous launch crashed during ad start-up")
 		status = "safe mode (ads crashed last time)"
 		last_error = "ads disabled after a crash - see ads_trace.txt"
 		_guard_set(false)
-	elif OS.get_name() == "iOS" and Engine.has_singleton("PoingGodotAdMob"):
+	elif _mobile() and Engine.has_singleton("PoingGodotAdMob"):
 		_trace("plugin singleton found")
 		_sdk = Engine.get_singleton("PoingGodotAdMob")
 		_rew = Engine.get_singleton("PoingGodotAdMobRewardedAd") if Engine.has_singleton("PoingGodotAdMobRewardedAd") else null
@@ -109,7 +122,7 @@ func _ready() -> void:
 
 
 func _load_cfg() -> void:
-	units = TEST_UNITS.duplicate()
+	units = (TEST_UNITS_ANDROID if _is_android() else TEST_UNITS).duplicate()
 	live = false
 	live_banner = false
 	live_rewarded = false
@@ -122,12 +135,26 @@ func _load_cfg() -> void:
 	if not (d is Dictionary):
 		return
 	var all_live := bool(d.get("live", false))
-	var b := str(d.get("banner", ""))
-	var r := str(d.get("rewarded", ""))
-	if (all_live or bool(d.get("live_banner", false))) and b.begins_with("ca-app-pub-"):
+	var pre := "android_" if _is_android() else ""
+	var b := str(d.get(pre + "banner", ""))
+	var r := str(d.get(pre + "rewarded", ""))
+	var want_b := all_live or bool(d.get("live_banner", false))
+	var want_r := all_live or bool(d.get("live_rewarded", false))
+	# the admin app can override both switches (read from the last config the game downloaded)
+	var rf := FileAccess.open("user://remote_cfg.json", FileAccess.READ)
+	if rf:
+		var rd: Variant = JSON.parse_string(rf.get_as_text())
+		if rd is Dictionary and rd.get("ads", null) is Dictionary:
+			var ra: Dictionary = rd["ads"]
+			if ra.has("live_banner"):
+				want_b = bool(ra["live_banner"])
+			if ra.has("live_rewarded"):
+				want_r = bool(ra["live_rewarded"])
+			remote_off = not bool(ra.get("enabled", true))
+	if want_b and b.begins_with("ca-app-pub-"):
 		units["banner"] = b
 		live_banner = true
-	if (all_live or bool(d.get("live_rewarded", false))) and r.begins_with("ca-app-pub-"):
+	if want_r and r.begins_with("ca-app-pub-"):
 		units["rewarded"] = r
 		live_rewarded = true
 	live = live_banner or live_rewarded
@@ -139,6 +166,8 @@ func units_text() -> String:
 
 ## true when pressing a "watch an ad" button can work right now
 func can_show() -> bool:
+	if remote_off:
+		return false
 	if _showing:
 		return false
 	if enabled:
@@ -148,7 +177,7 @@ func can_show() -> bool:
 
 ## the button should exist at all (hidden on builds without AdMob)
 func offered() -> bool:
-	return enabled or sim
+	return (enabled or sim) and not remote_off
 
 
 func label_for_button() -> String:
@@ -350,7 +379,7 @@ func _mute(on: bool) -> void:
 
 # ------------------------------------------------------------------ banner (shown only where the page asks for it)
 func want_banner(on: bool) -> void:
-	_ban_want = on
+	_ban_want = on and not remote_off
 	_apply_banner()
 
 

@@ -98,6 +98,15 @@ func _build() -> void:
 		if Ads.enabled:
 			pb.add_child(pr)
 		_row(UI.tx("Ad status", "حالة الإعلانات"), UI.tx("Rewarded ads are optional and only start when you press a button.", "إعلانات المكافأة اختيارية وتبدأ فقط عندما تضغط زراً."), pb)
+	if Backend.enabled():
+		_head(UI.tx("COMMUNITY", "المجتمع"))
+		var cb1 := UI.btn(null, UI.tx("Leaderboard", "لوحة الصدارة"), UI.CARD2, func(): Backend.open_board(), 18, Vector2(200, 44))
+		var cb2 := UI.btn(null, UI.tx("Contact support", "اتصل بالدعم"), UI.CARD2, func(): Backend.open_support(), 18, Vector2(220, 44))
+		var cbx := HBoxContainer.new()
+		cbx.add_theme_constant_override("separation", 10)
+		cbx.add_child(cb1)
+		cbx.add_child(cb2)
+		_row(UI.tx("Ranking & help", "الترتيب والمساعدة"), UI.tx("See the top players, or send us a message.", "شاهد أفضل اللاعبين أو أرسل لنا رسالة."), cbx)
 	_head(UI.tx("ABOUT & LICENSE", "حول اللعبة والرخصة"))
 	var lic := UI.lbl(_box, UI.tx("Hairpin Rush  (c) 2026 Sabak Studios. All rights reserved.\nThis game, its code, art, sounds and all files are the exclusive property of Sabak Studios. Copying, modifying, redistributing, re-publishing, selling, extracting assets or removing this notice is prohibited without written permission.", "هيربن راش  (c) 2026 Sabak Studios. جميع الحقوق محفوظة.\nهذه اللعبة وكودها وصورها وأصواتها وكل ملفاتها ملكٌ حصريٌّ لـ Sabak Studios. يُمنع النسخ أو التعديل أو إعادة التوزيع أو النشر أو البيع أو استخراج الملفات أو إزالة هذا الإشعار دون إذن كتابي."), 14, UI.TXT2)
 	lic.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

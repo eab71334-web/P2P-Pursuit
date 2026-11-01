@@ -7,6 +7,7 @@ extends RefCounted
 ## When the store plugin confirms a purchase, call Billing.grant(pack_id) - it is the ONLY place coins are credited.
 
 static var enabled := false
+static var over := {}      # id -> {amount, price_usd} sent by the admin app
 
 ## coins: $1 = 10,000 (mid-range economy)
 const COIN_PACKS := [
@@ -35,7 +36,11 @@ const METHODS := [
 static func pack(id: String) -> Dictionary:
 	for p in COIN_PACKS + GEM_PACKS:
 		if p["id"] == id:
-			return p
+			var q: Dictionary = (p as Dictionary).duplicate()
+			if over.has(id):
+				q["amount"] = int(over[id].get("amount", q["amount"]))
+				q["price"] = "%.2f" % float(over[id].get("price_usd", float(q["price"])))
+			return q
 	return {}
 
 
