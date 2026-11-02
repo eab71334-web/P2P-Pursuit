@@ -5,7 +5,7 @@ on:
 
 jobs:
   ios:
-    runs-on: macos-15
+    runs-on: macos-16
     steps:
       - name: Use Xcode 16 (needed by Google Mobile Ads SDK 12)
         run: |
