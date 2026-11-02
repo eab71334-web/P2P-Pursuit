@@ -11,6 +11,7 @@ var _sel := ""
 var _drag := false
 var _grab := Vector2.ZERO
 var _info: Label
+var _slot_bar: HBoxContainer
 
 
 func _ready() -> void:
@@ -52,7 +53,7 @@ func _ready() -> void:
 		_mock[id] = p
 		HudLayout.place(p, id)
 	_style_all()
-	# bottom bar
+	# top bars: tools, then the saved presets
 	var bar := HBoxContainer.new()
 	bar.add_theme_constant_override("separation", 8)
 	bar.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
@@ -68,7 +69,66 @@ func _ready() -> void:
 	UI.btn(bar, UI.tx("Rotate >", "لفّ >"), UI.CARD2, _rot.bind(15.0), 18, Vector2(100, 48))
 	UI.btn(bar, UI.tx("Reset button", "إعادة الزر"), UI.CARD2, _reset_one, 18, Vector2(130, 48))
 	UI.btn(bar, UI.tx("Reset all", "إعادة الكل"), UI.CARD2, _reset_all, 18, Vector2(120, 48))
-	UI.btn(bar, UI.tx("Done", "تم"), UI.ACCENT, _done, 20, Vector2(96, 48))
+	_slot_bar = HBoxContainer.new()
+	_slot_bar.add_theme_constant_override("separation", 8)
+	_slot_bar.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	_slot_bar.offset_top = 136
+	_slot_bar.offset_bottom = 184
+	_slot_bar.offset_left = -500
+	_slot_bar.offset_right = 500
+	_slot_bar.alignment = BoxContainer.ALIGNMENT_CENTER
+	add_child(_slot_bar)
+	_build_slots()
+
+
+func _build_slots() -> void:
+	for c in _slot_bar.get_children():
+		_slot_bar.remove_child(c)
+		c.queue_free()
+	var cap := UI.lbl(_slot_bar, UI.tx("Layouts:", "التخصيصات:"), 18, UI.TXT2, false)
+	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for i in HudLayout.slot_count():
+		var on: bool = i == HudLayout.active
+		var filled := HudLayout.slot_filled(i)
+		var b := Button.new()
+		b.text = str(i + 1) + (" *" if filled else "")
+		b.custom_minimum_size = Vector2(62, 48)
+		b.add_theme_font_size_override("font_size", 20)
+		var col := UI.ACCENT if on else (Color(0.22, 0.3, 0.22) if filled else UI.CARD2)
+		for st in ["normal", "hover", "pressed", "focus"]:
+			b.add_theme_stylebox_override(st, UI.sb(col, 10, Color(1, 1, 1, 0.5) if on else Color.TRANSPARENT, 2))
+		b.add_theme_color_override("font_color", Color(0.08, 0.06, 0.04) if on else UI.TXT)
+		var idx := i
+		b.pressed.connect(func():
+			HudLayout.select_slot(idx)
+			_refresh()
+			_say(UI.tx("Layout %d loaded" % (idx + 1), "تم تحميل التخصيص %d" % (idx + 1)) if HudLayout.slot_filled(idx) else UI.tx("Layout %d is empty - arrange the buttons, then press Save" % (idx + 1), "التخصيص %d فارغ - رتّب الأزرار ثم اضغط حفظ" % (idx + 1))))
+		_slot_bar.add_child(b)
+	if HudLayout.all_filled():        # all slots used: a "+" appears to add another one (no limit)
+		UI.btn(_slot_bar, "+", Color(0.18, 0.42, 0.25), func():
+			HudLayout.add_slot()
+			_refresh()
+			_say(UI.tx("New layout added", "تمت إضافة تخصيص جديد")), 26, Vector2(62, 48))
+	UI.btn(_slot_bar, UI.tx("Save", "حفظ"), Color(0.2, 0.5, 0.3), func():
+		HudLayout.save_slot()
+		_build_slots()
+		_say(UI.tx("Saved to layout %d" % (HudLayout.active + 1), "تم الحفظ في التخصيص %d" % (HudLayout.active + 1))), 20, Vector2(96, 48))
+	UI.btn(_slot_bar, UI.tx("Delete", "مسح"), Color(0.5, 0.2, 0.2), func():
+		var n := HudLayout.active + 1
+		HudLayout.delete_slot(HudLayout.active)
+		_refresh()
+		_say(UI.tx("Layout %d deleted" % n, "تم مسح التخصيص %d" % n)), 20, Vector2(96, 48))
+	UI.btn(_slot_bar, UI.tx("Done", "تم"), UI.ACCENT, _done, 20, Vector2(96, 48))
+
+
+func _refresh() -> void:
+	for id in _mock:
+		HudLayout.place(_mock[id], id)
+	_build_slots()
+
+
+func _say(t: String) -> void:
+	_info.text = t
 
 
 func _style_all() -> void:

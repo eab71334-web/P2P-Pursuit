@@ -20,7 +20,10 @@ const ORDER := ["gas", "brake", "c_horn", "c_sigl", "c_sigr", "c_lights", "c_wip
 const SC_MIN := 0.6
 const SC_MAX := 1.8
 
-static var _data := {}
+static var _data := {}                 # the layout in use (what the race shows)
+static var _slots: Array = []         # saved presets: [{filled: bool, data: Dictionary}]; 3 to start, the player can add more
+static var active := 0
+const MIN_SLOTS := 3
 static var _loaded := false
 static var intro_seen := false
 
@@ -35,9 +38,20 @@ static func _load() -> void:
 	if _loaded:
 		return
 	_loaded = true
+	for i in MIN_SLOTS:
+		_slots.append({"filled": false, "data": {}})
 	var cf := ConfigFile.new()
 	if cf.load(SAVE) != OK:
 		return
+	var n := int(cf.get_value("slots", "n", MIN_SLOTS))
+	active = int(cf.get_value("slots", "active", 0))
+	while _slots.size() < n:
+		_slots.append({"filled": false, "data": {}})
+	for i in n:
+		var sec := "slot_%d" % i
+		if cf.has_section(sec):
+			_slots[i] = {"filled": bool(cf.get_value(sec, "filled", false)), "data": cf.get_value(sec, "data", {})}
+	active = clampi(active, 0, _slots.size() - 1)
 	intro_seen = bool(cf.get_value("meta", "intro_seen", false))
 	for id in ORDER:
 		if cf.has_section(id):
@@ -48,6 +62,11 @@ static func _load() -> void:
 static func save() -> void:
 	var cf := ConfigFile.new()
 	cf.set_value("meta", "intro_seen", intro_seen)
+	cf.set_value("slots", "n", _slots.size())
+	cf.set_value("slots", "active", active)
+	for i in _slots.size():
+		cf.set_value("slot_%d" % i, "filled", _slots[i]["filled"])
+		cf.set_value("slot_%d" % i, "data", _slots[i]["data"])
 	for id in _data:
 		var e: Dictionary = _data[id]
 		for k in e:
@@ -82,7 +101,7 @@ static func entry(id: String) -> Dictionary:
 static func set_entry(id: String, e: Dictionary) -> void:
 	_load()
 	e["fx"] = clampf(float(e["fx"]), 0.03, 0.97)
-	e["fy"] = clampf(float(e["fy"]), 0.06, 0.94)
+	e["fy"] = clampf(float(e["fy"]), 0.3, 0.94)
 	e["sc"] = clampf(float(e["sc"]), SC_MIN, SC_MAX)
 	e["rot"] = wrapf(float(e["rot"]), -180.0, 180.0)
 	_data[id] = e
@@ -123,3 +142,57 @@ static func apply_world(zones: Dictionary) -> void:
 	for id in ORDER:
 		if zones.has(id) and _data.has(id):
 			place(zones[id] as Control, id)
+
+
+# ---- saved presets ("slots"): save the current layout, load, delete, add as many as you like
+static func slot_count() -> int:
+	_load()
+	return _slots.size()
+
+
+static func slot_filled(i: int) -> bool:
+	_load()
+	return i >= 0 and i < _slots.size() and bool(_slots[i]["filled"])
+
+
+static func all_filled() -> bool:
+	_load()
+	for sl in _slots:
+		if not bool(sl["filled"]):
+			return false
+	return true
+
+
+static func select_slot(i: int) -> void:
+	_load()
+	if i < 0 or i >= _slots.size():
+		return
+	active = i
+	_data = (_slots[i]["data"] as Dictionary).duplicate(true) if bool(_slots[i]["filled"]) else {}
+	save()
+
+
+static func save_slot() -> void:
+	_load()
+	_slots[active] = {"filled": true, "data": _data.duplicate(true)}
+	save()
+
+
+## empties a slot; extra slots (4th and up) disappear completely
+static func delete_slot(i: int) -> void:
+	_load()
+	if i < 0 or i >= _slots.size():
+		return
+	if i >= MIN_SLOTS:
+		_slots.remove_at(i)
+	else:
+		_slots[i] = {"filled": false, "data": {}}
+	active = clampi(i if i < _slots.size() else _slots.size() - 1, 0, _slots.size() - 1)
+	_data.clear()
+	save()
+
+
+static func add_slot() -> void:
+	_load()
+	_slots.append({"filled": false, "data": {}})
+	select_slot(_slots.size() - 1)
