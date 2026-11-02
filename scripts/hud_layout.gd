@@ -101,7 +101,7 @@ static func entry(id: String) -> Dictionary:
 static func set_entry(id: String, e: Dictionary) -> void:
 	_load()
 	e["fx"] = clampf(float(e["fx"]), 0.03, 0.97)
-	e["fy"] = clampf(float(e["fy"]), 0.3, 0.94)
+	e["fy"] = clampf(float(e["fy"]), 0.2, 0.86)
 	e["sc"] = clampf(float(e["sc"]), SC_MIN, SC_MAX)
 	e["rot"] = wrapf(float(e["rot"]), -180.0, 180.0)
 	_data[id] = e
@@ -196,3 +196,16 @@ static func add_slot() -> void:
 	_load()
 	_slots.append({"filled": false, "data": {}})
 	select_slot(_slots.size() - 1)
+
+
+## editor "Exit" throws the unsaved changes away: remember what was in use when it opened
+static func snapshot() -> Dictionary:
+	_load()
+	return {"data": _data.duplicate(true), "active": active}
+
+
+static func restore(snap: Dictionary) -> void:
+	_load()
+	_data = (snap["data"] as Dictionary).duplicate(true)
+	active = clampi(int(snap["active"]), 0, _slots.size() - 1)
+	save()

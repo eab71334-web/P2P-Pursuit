@@ -12,31 +12,23 @@ var _drag := false
 var _grab := Vector2.ZERO
 var _info: Label
 var _slot_bar: HBoxContainer
+var _slot_scroll: ScrollContainer
+var _sel_lbl: Label
+var _snap := {}
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	z_index = 200
+	_snap = HudLayout.snapshot()
 	var dim := ColorRect.new()
-	dim.color = Color(0.02, 0.03, 0.07, 0.9)
+	dim.color = Color(0.02, 0.03, 0.07, 0.92)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(dim)
-	var title := UI.lbl(self, UI.tx("Customize buttons", "تخصيص الأزرار"), 26, UI.ACCENT, false)
-	title.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	title.offset_top = 12
-	title.offset_left = -300
-	title.offset_right = 300
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_info = UI.lbl(self, UI.tx("Drag a button to move it. Tap it, then use the bar below.", "اسحب الزر لتغيير مكانه. اضغط عليه ثم استعمل الشريط تحت."), 16, UI.TXT2, false)
-	_info.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	_info.offset_top = 48
-	_info.offset_left = -380
-	_info.offset_right = 380
-	_info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_info.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_grid_lines()
+	# phone-screen frame so the player sees where the real screen ends
 	var nm := HudLayout.names()
 	for id in HudLayout.ORDER:
 		var p := Panel.new()
@@ -53,78 +45,189 @@ func _ready() -> void:
 		_mock[id] = p
 		HudLayout.place(p, id)
 	_style_all()
-	# top bars: tools, then the saved presets
-	var bar := HBoxContainer.new()
-	bar.add_theme_constant_override("separation", 8)
-	bar.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	bar.offset_top = 80
-	bar.offset_bottom = 128
-	bar.offset_left = -430
-	bar.offset_right = 430
-	bar.alignment = BoxContainer.ALIGNMENT_CENTER
-	add_child(bar)
-	UI.btn(bar, UI.tx("Size -", "حجم -"), UI.CARD2, _scale.bind(-0.1), 18, Vector2(96, 48))
-	UI.btn(bar, UI.tx("Size +", "حجم +"), UI.CARD2, _scale.bind(0.1), 18, Vector2(96, 48))
-	UI.btn(bar, UI.tx("Rotate <", "لفّ <"), UI.CARD2, _rot.bind(-15.0), 18, Vector2(100, 48))
-	UI.btn(bar, UI.tx("Rotate >", "لفّ >"), UI.CARD2, _rot.bind(15.0), 18, Vector2(100, 48))
-	UI.btn(bar, UI.tx("Reset button", "إعادة الزر"), UI.CARD2, _reset_one, 18, Vector2(130, 48))
-	UI.btn(bar, UI.tx("Reset all", "إعادة الكل"), UI.CARD2, _reset_all, 18, Vector2(120, 48))
+	# ---- top strip: exit | title | layouts | save | delete | done
+	var top := PanelContainer.new()
+	var tsb := StyleBoxFlat.new()
+	tsb.bg_color = Color(0.055, 0.065, 0.095, 0.98)
+	tsb.border_color = UI.ACCENT
+	tsb.border_width_bottom = 3
+	tsb.content_margin_left = 12
+	tsb.content_margin_right = 12
+	tsb.content_margin_top = 8
+	tsb.content_margin_bottom = 8
+	top.add_theme_stylebox_override("panel", tsb)
+	top.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	add_child(top)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	top.add_child(row)
+	_tbtn(row, UI.tx("Exit", "خروج"), Color(0.42, 0.16, 0.16), _exit, 18, 92)
+	var title := UI.lbl(row, UI.tx("Buttons", "الأزرار"), 22, UI.ACCENT, false)
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sp := Control.new()
+	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(sp)
+	var cap := UI.lbl(row, UI.tx("Layouts", "التخصيصات"), 16, UI.TXT2, false)
+	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_slot_scroll = ScrollContainer.new()
+	_slot_scroll.custom_minimum_size = Vector2(320, 48)
+	_slot_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_slot_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	row.add_child(_slot_scroll)
 	_slot_bar = HBoxContainer.new()
-	_slot_bar.add_theme_constant_override("separation", 8)
-	_slot_bar.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	_slot_bar.offset_top = 136
-	_slot_bar.offset_bottom = 184
-	_slot_bar.offset_left = -500
-	_slot_bar.offset_right = 500
-	_slot_bar.alignment = BoxContainer.ALIGNMENT_CENTER
-	add_child(_slot_bar)
+	_slot_bar.add_theme_constant_override("separation", 6)
+	_slot_scroll.add_child(_slot_bar)
+	var sp2 := Control.new()
+	sp2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(sp2)
+	_tbtn(row, UI.tx("Save", "حفظ"), Color(0.18, 0.48, 0.28), _save_slot, 18, 90)
+	_tbtn(row, UI.tx("Delete", "مسح"), Color(0.45, 0.2, 0.2), _del_slot, 18, 90)
+	_tbtn(row, UI.tx("Done", "تم"), UI.ACCENT, _done, 20, 90)
+	# ---- hint under the strip
+	var hint := PanelContainer.new()
+	hint.add_theme_stylebox_override("panel", UI.sb(Color(0, 0, 0, 0.45), 12))
+	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var hc := CenterContainer.new()
+	hc.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	hc.offset_top = 76
+	hc.offset_bottom = 112
+	hc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(hc)
+	hc.add_child(hint)
+	_info = UI.lbl(hint, UI.tx("Drag a button to move it. Tap it to edit. Done keeps the changes, Exit throws them away.",
+		"اسحب الزر لتحريكه. اضغط عليه للتعديل. «تم» يحفظ التغييرات و«خروج» يلغيها."), 15, UI.TXT2, false)
+	_info.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# ---- tools pill, bottom left (never over GAS / BRAKE)
+	var pill := PanelContainer.new()
+	var psb := StyleBoxFlat.new()
+	psb.bg_color = Color(0.055, 0.065, 0.095, 0.96)
+	psb.set_corner_radius_all(18)
+	psb.border_color = Color(1, 1, 1, 0.18)
+	psb.set_border_width_all(2)
+	psb.content_margin_left = 12
+	psb.content_margin_right = 12
+	psb.content_margin_top = 8
+	psb.content_margin_bottom = 8
+	pill.add_theme_stylebox_override("panel", psb)
+	pill.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	pill.offset_left = 14
+	pill.offset_bottom = -12
+	pill.offset_top = -72
+	add_child(pill)
+	var pr := HBoxContainer.new()
+	pr.add_theme_constant_override("separation", 8)
+	pill.add_child(pr)
+	_sel_lbl = UI.lbl(pr, "", 17, UI.ACCENT, false)
+	_sel_lbl.custom_minimum_size = Vector2(96, 0)
+	_sel_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tbtn(pr, UI.tx("Size -", "حجم -"), UI.CARD2, _scale.bind(-0.1), 17, 84)
+	_tbtn(pr, UI.tx("Size +", "حجم +"), UI.CARD2, _scale.bind(0.1), 17, 84)
+	_tbtn(pr, UI.tx("Turn <", "لفّ <"), UI.CARD2, _rot.bind(-15.0), 17, 84)
+	_tbtn(pr, UI.tx("Turn >", "لفّ >"), UI.CARD2, _rot.bind(15.0), 17, 84)
+	_tbtn(pr, UI.tx("Reset", "إعادة"), UI.CARD2, _reset_one, 17, 80)
+	_tbtn(pr, UI.tx("Reset all", "إعادة الكل"), UI.CARD2, _reset_all, 17, 100)
 	_build_slots()
+	_sel_text()
+
+
+func _tbtn(parent: Node, text: String, col: Color, cb: Callable, fs: int, w: float) -> Button:
+	var b := UI.btn(parent, text, col, cb, fs, Vector2(w, 46))
+	for st in ["normal", "hover", "pressed", "focus"]:
+		var sbx := b.get_theme_stylebox(st) as StyleBoxFlat
+		sbx.set_corner_radius_all(12)
+		sbx.content_margin_left = 8
+		sbx.content_margin_right = 8
+	return b
+
+
+## faint guide lines so placement feels deliberate
+func _grid_lines() -> void:
+	for k in range(1, 4):
+		for horiz in [true, false]:
+			var r := ColorRect.new()
+			r.color = Color(1, 1, 1, 0.04)
+			r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			if horiz:
+				r.set_anchors_preset(Control.PRESET_HCENTER_WIDE)
+				r.anchor_top = k * 0.25
+				r.anchor_bottom = k * 0.25
+				r.offset_top = 0
+				r.offset_bottom = 1
+			else:
+				r.set_anchors_preset(Control.PRESET_VCENTER_WIDE)
+				r.anchor_left = k * 0.25
+				r.anchor_right = k * 0.25
+				r.anchor_top = 0.0
+				r.anchor_bottom = 1.0
+				r.offset_left = 0
+				r.offset_right = 1
+			add_child(r)
+
+
+func _sel_text() -> void:
+	if _sel_lbl != null:
+		_sel_lbl.text = HudLayout.names()[_sel] if _sel != "" else UI.tx("Select a button", "اختر زراً")
+
+
+func _save_slot() -> void:
+	HudLayout.save_slot()
+	_build_slots()
+	_say(UI.tx("Saved to layout %d" % (HudLayout.active + 1), "تم الحفظ في التخصيص %d" % (HudLayout.active + 1)))
+
+
+func _del_slot() -> void:
+	var n := HudLayout.active + 1
+	HudLayout.delete_slot(HudLayout.active)
+	_refresh()
+	_say(UI.tx("Layout %d deleted" % n, "تم مسح التخصيص %d" % n))
+
+
+func _exit() -> void:
+	HudLayout.restore(_snap)
+	closed.emit()
+	queue_free()
 
 
 func _build_slots() -> void:
 	for c in _slot_bar.get_children():
 		_slot_bar.remove_child(c)
 		c.queue_free()
-	var cap := UI.lbl(_slot_bar, UI.tx("Layouts:", "التخصيصات:"), 18, UI.TXT2, false)
-	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for i in HudLayout.slot_count():
 		var on: bool = i == HudLayout.active
 		var filled := HudLayout.slot_filled(i)
 		var b := Button.new()
-		b.text = str(i + 1) + (" *" if filled else "")
-		b.custom_minimum_size = Vector2(62, 48)
+		b.text = str(i + 1)
+		b.custom_minimum_size = Vector2(54, 46)
 		b.add_theme_font_size_override("font_size", 20)
-		var col := UI.ACCENT if on else (Color(0.22, 0.3, 0.22) if filled else UI.CARD2)
+		var col := UI.ACCENT if on else (Color(0.2, 0.36, 0.25) if filled else UI.CARD2)
 		for st in ["normal", "hover", "pressed", "focus"]:
-			b.add_theme_stylebox_override(st, UI.sb(col, 10, Color(1, 1, 1, 0.5) if on else Color.TRANSPARENT, 2))
+			var sbx := UI.sb(col, 12, Color(1, 1, 1, 0.6) if on else (Color(0.4, 0.8, 0.5, 0.7) if filled else Color.TRANSPARENT), 2)
+			sbx.content_margin_left = 6
+			sbx.content_margin_right = 6
+			b.add_theme_stylebox_override(st, sbx)
 		b.add_theme_color_override("font_color", Color(0.08, 0.06, 0.04) if on else UI.TXT)
 		var idx := i
 		b.pressed.connect(func():
 			HudLayout.select_slot(idx)
+			_sel = ""
 			_refresh()
 			_say(UI.tx("Layout %d loaded" % (idx + 1), "تم تحميل التخصيص %d" % (idx + 1)) if HudLayout.slot_filled(idx) else UI.tx("Layout %d is empty - arrange the buttons, then press Save" % (idx + 1), "التخصيص %d فارغ - رتّب الأزرار ثم اضغط حفظ" % (idx + 1))))
 		_slot_bar.add_child(b)
 	if HudLayout.all_filled():        # all slots used: a "+" appears to add another one (no limit)
-		UI.btn(_slot_bar, "+", Color(0.18, 0.42, 0.25), func():
+		var pb := _tbtn(_slot_bar, "+", Color(0.18, 0.42, 0.25), func():
 			HudLayout.add_slot()
+			_sel = ""
 			_refresh()
-			_say(UI.tx("New layout added", "تمت إضافة تخصيص جديد")), 26, Vector2(62, 48))
-	UI.btn(_slot_bar, UI.tx("Save", "حفظ"), Color(0.2, 0.5, 0.3), func():
-		HudLayout.save_slot()
-		_build_slots()
-		_say(UI.tx("Saved to layout %d" % (HudLayout.active + 1), "تم الحفظ في التخصيص %d" % (HudLayout.active + 1))), 20, Vector2(96, 48))
-	UI.btn(_slot_bar, UI.tx("Delete", "مسح"), Color(0.5, 0.2, 0.2), func():
-		var n := HudLayout.active + 1
-		HudLayout.delete_slot(HudLayout.active)
-		_refresh()
-		_say(UI.tx("Layout %d deleted" % n, "تم مسح التخصيص %d" % n)), 20, Vector2(96, 48))
-	UI.btn(_slot_bar, UI.tx("Done", "تم"), UI.ACCENT, _done, 20, Vector2(96, 48))
+			_say(UI.tx("New layout added", "تمت إضافة تخصيص جديد")), 26, 54)
+		pb.custom_minimum_size = Vector2(54, 46)
 
 
 func _refresh() -> void:
 	for id in _mock:
 		HudLayout.place(_mock[id], id)
+	_style_all()
 	_build_slots()
+	_sel_text()
 
 
 func _say(t: String) -> void:
@@ -159,6 +262,7 @@ func _gui_input(event: InputEvent) -> void:
 			var id := _hit(mb.position)
 			if id != "":
 				_sel = id
+				_sel_text()
 				_drag = true
 				var c: Control = _mock[id]
 				_grab = mb.position - (c.get_global_transform() * (c.size * 0.5))
