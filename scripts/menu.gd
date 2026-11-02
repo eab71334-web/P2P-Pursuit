@@ -242,6 +242,7 @@ var _backdrop: Backdrop
 
 
 func _ready() -> void:
+	Backend.crumb("menu")
 	Net.players_changed.connect(_refresh_lobby)
 	Net.hosts_changed.connect(_refresh_hosts)
 	Net.joined.connect(_show_lobby)

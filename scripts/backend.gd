@@ -65,14 +65,27 @@ func _set_flag(on: bool) -> void:
 	if on:
 		var f := FileAccess.open(FLAG, FileAccess.WRITE)
 		if f:
-			f.store_string("1")
+			f.store_string("boot")
 	elif FileAccess.file_exists(FLAG):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(FLAG))
 
 
+## remembers where the game is, so a crash report says what was happening right before it
+func crumb(stage: String) -> void:
+	if url == "":
+		return
+	var f := FileAccess.open(FLAG, FileAccess.WRITE)
+	if f:
+		f.store_string(stage.substr(0, 160))
+
+
 func _check_unclean_exit() -> void:
 	if FileAccess.file_exists(FLAG):
-		report("crash", "Previous session ended without a clean exit (crash or forced close)")
+		var last := ""
+		var f := FileAccess.open(FLAG, FileAccess.READ)
+		if f:
+			last = f.get_as_text().strip_edges()
+		report("crash", "Previous session ended without a clean exit (crash or forced close)" + ("  [last: %s]" % last if last != "" else ""))
 
 
 ## one request; cb(http_code, dictionary). http_code 0 = no connection

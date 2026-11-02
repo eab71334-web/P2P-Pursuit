@@ -203,6 +203,7 @@ func _ready() -> void:
 	Net.peer_left.connect(_on_peer_left)
 	if not Net.dedicated:
 		Radio.start_race()
+	Backend.crumb("race start car=%s role=%s solo=%s server=%s" % [str(Profile.car), my_role, str(solo), str(multiplayer.is_server())])
 	get_viewport().size_changed.connect(_update_layout)
 	_update_layout()
 	if show_touch and Profile.steer_mode == "":
@@ -927,7 +928,39 @@ func _server_reset(peer: int) -> void:
 
 # ====================================================================== local frame loop
 
+var _hl_t := 0.0
+var _hl_tilt := 0.0
+var _hl_sent := false
+
+
+## every few seconds remember where we are (a crash report then says what was going on); if the car lies on
+## its side / nose in the sky for a few seconds, report it and put it back on the road
+func _health(delta: float) -> void:
+	if teams.is_empty() or my_team >= teams.size() or my_role != "driver":
+		return
+	var c = teams[my_team].car
+	if c == null or not is_instance_valid(c):
+		return
+	var up: float = c.global_transform.basis.y.y
+	var nose: float = -c.global_transform.basis.z.y
+	_hl_t += delta
+	if _hl_t >= 4.0:
+		_hl_t = 0.0
+		Backend.crumb("race car=%s spd=%d up=%.2f nose=%.2f y=%.1f look=%.2f" % [str(c.model), int(c.speed_kmh), up, nose, c.global_position.y, look_pitch])
+	if (up < 0.45 or absf(nose) > 0.55) and c.speed_kmh < 25.0 and teams[my_team].phase == 0:
+		_hl_tilt += delta
+		if _hl_tilt > 3.0:
+			_hl_tilt = 0.0
+			if not _hl_sent:
+				_hl_sent = true
+				Backend.report("tilt", "Car stuck tilted car=%s up=%.2f nose=%.2f y=%.1f" % [str(c.model), up, nose, c.global_position.y])
+			_request_reset()
+	else:
+		_hl_tilt = 0.0
+
+
 func _process(delta: float) -> void:
+	_health(delta)
 	_weather_process(delta)
 	if director and not teams.is_empty():
 		var cars: Array = []
@@ -1050,7 +1083,7 @@ func _update_look(delta: float) -> void:
 
 func _look_delta(rel: Vector2) -> void:
 	look_yaw = clampf(look_yaw - rel.x * 0.006, -2.6, 2.6)
-	look_pitch = clampf(look_pitch - rel.y * 0.006, -1.2, 0.75)
+	look_pitch = clampf(look_pitch - rel.y * 0.006, -1.2, 0.3 if (local_avatar != null and local_avatar.role == "driver") else 0.75)
 	look_idle = 0.0
 	map_mode = false
 
@@ -2078,6 +2111,7 @@ func _make_avatar(ts: TeamState, id: int) -> void:
 		ts.car.driver_avatar = av
 		if av.is_local and ts.car.actions != null and not ts.car.actions.changed.is_connected(_sig_hud):
 			ts.car.actions.changed.connect(_sig_hud)
+			ts.car.actions.net_event.connect(_cabin_net)
 	if av.is_local:
 		local_avatar = av
 
@@ -2190,8 +2224,8 @@ func _build_hud() -> void:
 	hud_root.add_child(skip_wait_btn)
 	repair_label = _full_label(0, 70, 26, 0.74)
 	repair_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
-	_make_zone("act", "", 0.0, 0.5, 20, -110, 210, -20, 22, _repair_action)
-	_make_zone("spray", L.t("z_spray"), 0.0, 0.5, 20, 0, 210, 90, 22)
+	_make_zone("act", "", 0.5, 1.0, -105, -176, 105, -84, 22, _repair_action)
+	_make_zone("spray", L.t("z_spray"), 0.5, 0.0, -105, 170, 105, 260, 22)
 	zones["act"].visible = false
 	zones["spray"].visible = false
 	# right column (top): reset / emote / punch - never collides with the bottom controls
@@ -2204,16 +2238,29 @@ func _build_hud() -> void:
 	_make_zone("replay", UI.tx("REPLAY", "إعادة سينمائية"), 1.0, 0.0, -150, sy + 56, -14, sy + 102, 17, _play_replay)
 	zones["replay"].visible = false
 	_make_zone("photo", UI.tx("PHOTO", "صورة"), 1.0, 0.0, -150, sy + 112, -14, sy + 158, 20, _take_photo)
-	# driver cabin controls (his own hand does them): horn / lights / wipers / wing mirrors
+	# driver cabin controls (his own hand does them): big buttons in a 3x3 block above the steering buttons, left side
 	if my_role == "driver":
-		var cx := 14.0
-		for it in [["c_horn", UI.tx("HORN", "بوق"), "horn"], ["c_lights", UI.tx("LIGHTS", "إضاءة"), "lights"], ["c_wipers", UI.tx("WIPER", "مساحات"), "wipers"], ["c_mirl", UI.tx("MIR L", "مرآة ي"), "mirror_left"], ["c_mirr", UI.tx("MIR R", "مرآة ن"), "mirror_right"]]:
-			_make_zone(it[0], it[1], 0.0, 0.0, cx, 98, cx + 74, 140, 14, _cabin.bind(it[2]))
-			cx += 80.0
-		_make_zone("c_drink", UI.tx("DRINK", "اشرب"), 0.0, 0.0, 14, 146, 88, 188, 14, _cabin.bind("drink"))
-		_make_zone("c_sigl", "<", 0.0, 0.0, 174, 146, 224, 188, 22, _cabin.bind("signal_left"))
-		_make_zone("c_sigr", ">", 0.0, 0.0, 230, 146, 280, 188, 22, _cabin.bind("signal_right"))
-		_make_zone("c_kind", UI.tx("JUICE", "عصير"), 0.0, 0.0, 94, 146, 168, 188, 14, _toggle_drink)
+		var items := [
+			["c_sigl", UI.tx("< SIGNAL", "< إشارة"), "signal_left"], ["c_horn", UI.tx("HORN", "بوق"), "horn"], ["c_sigr", UI.tx("SIGNAL >", "إشارة >"), "signal_right"],
+			["c_lights", UI.tx("LIGHTS", "إضاءة"), "lights"], ["c_wipers", UI.tx("WIPER", "مساحات"), "wipers"], ["c_drink", UI.tx("DRINK", "اشرب"), "drink"],
+			["c_mirl", UI.tx("MIRROR L", "مرآة يسار"), "mirror_left"], ["c_mirr", UI.tx("MIRROR R", "مرآة يمين"), "mirror_right"], ["c_kind", UI.tx("JUICE", "عصير"), ""]]
+		for k in items.size():
+			var col := k % 3
+			var row := k / 3
+			var x0 := 14.0 + col * 118.0
+			var y0 := -196.0 - (3 - row) * 76.0
+			var cb: Callable = _toggle_drink if items[k][2] == "" else _cabin.bind(items[k][2])
+			_make_zone(items[k][0], items[k][1], 0.0, 1.0, x0, y0, x0 + 110.0, y0 + 68.0, 20, cb)
+		cab_toast = Label.new()
+		cab_toast.position = Vector2(14, 0)
+		cab_toast.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+		cab_toast.offset_left = 14
+		cab_toast.offset_top = -196.0 - 3 * 76.0 - 36.0
+		cab_toast.offset_right = 360
+		cab_toast.offset_bottom = -196.0 - 3 * 76.0
+		_style_label(cab_toast, 22)
+		cab_toast.modulate.a = 0.0
+		hud_root.add_child(cab_toast)
 	# radio (bottom centre): < station >   (tap the name to switch it off / on)
 	_make_zone("radio_prev", "<", 0.5, 1.0, -142, -60, -92, -14, 22, _radio_step.bind(-1))
 	_make_zone("radio_name", Radio.label(), 0.5, 1.0, -86, -60, 86, -14, 16, Radio.toggle)
@@ -2263,10 +2310,61 @@ func _my_actions() -> CarActions:
 	return c.actions
 
 
+var cab_toast: Label
+
+
+func _toast(text: String) -> void:
+	if cab_toast == null:
+		return
+	cab_toast.text = text
+	cab_toast.modulate.a = 1.0
+	var tw := create_tween()
+	tw.tween_interval(0.9)
+	tw.tween_property(cab_toast, "modulate:a", 0.0, 0.5)
+
+
 func _cabin(what: String) -> void:
 	var a := _my_actions()
-	if a:
-		a.do(what)
+	if a == null:
+		return
+	if a.is_busy():
+		_toast(UI.tx("Wait...", "لحظة..."))
+	a.do(what)
+
+
+## the other players hear the horn and see lights / signals / wipers (relayed through the server)
+func _cabin_net(what: String, val: int) -> void:
+	if multiplayer.is_server():
+		cabin_sync.rpc(my_team, what, val)
+	else:
+		send_cabin.rpc_id(1, what, val)
+
+
+@rpc("any_peer", "reliable")
+func send_cabin(what: String, val: int) -> void:
+	if not multiplayer.is_server():
+		return
+	var s := multiplayer.get_remote_sender_id()
+	for ts in teams:
+		if ts.driver_id == s:
+			cabin_sync.rpc(ts.idx, what, val)
+			_cabin_apply(ts.idx, what, val)
+			return
+
+
+@rpc("authority", "call_remote", "reliable")
+func cabin_sync(team: int, what: String, val: int) -> void:
+	_cabin_apply(team, what, val)
+
+
+func _cabin_apply(team: int, what: String, val: int) -> void:
+	if team == my_team and my_role == "driver":
+		return
+	if team < 0 or team >= teams.size():
+		return
+	var c = teams[team].car
+	if c != null and is_instance_valid(c) and c.actions != null:
+		c.actions.remote(what, val)
 
 
 func _sig_hud() -> void:
@@ -2288,6 +2386,7 @@ func _toggle_drink() -> void:
 	if a == null:
 		return
 	a.toggle_drink()
+	_toast(UI.tx("Energy drink", "مشروب طاقة") if a.drink_kind == "energy" else UI.tx("Juice", "عصير"))
 	if zones.has("c_kind"):
 		((zones["c_kind"] as Control).get_child(0) as Label).text = UI.tx("ENERGY", "طاقة") if a.drink_kind == "energy" else UI.tx("JUICE", "عصير")
 

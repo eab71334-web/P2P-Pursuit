@@ -30,6 +30,7 @@ func _mobile() -> bool:
 func _is_android() -> bool:
 	return OS.get_name() == "Android"
 
+var android_on := false              # Android ads are opt-in ("android_enabled": true in ads_config.json) until proven stable
 var enabled := false                 # the native AdMob plugin exists in this build
 var sdk_ready := false               # SDK finished initialising
 var live := false                    # at least one real ad unit in use
@@ -72,6 +73,7 @@ const GUARD := "user://ads_guard.flag"
 
 
 func _trace(msg: String) -> void:
+	Backend.crumb("ads " + msg)
 	var f := FileAccess.open(TRACE, FileAccess.READ_WRITE if FileAccess.file_exists(TRACE) else FileAccess.WRITE)
 	if f:
 		f.seek_end()
@@ -102,7 +104,7 @@ func _ready() -> void:
 		status = "safe mode (ads crashed last time)"
 		last_error = "ads disabled after a crash - see ads_trace.txt"
 		_guard_set(false)
-	elif _mobile() and Engine.has_singleton("PoingGodotAdMob"):
+	elif _mobile() and Engine.has_singleton("PoingGodotAdMob") and (not _is_android() or android_on):
 		_trace("plugin singleton found")
 		_sdk = Engine.get_singleton("PoingGodotAdMob")
 		_rew = Engine.get_singleton("PoingGodotAdMobRewardedAd") if Engine.has_singleton("PoingGodotAdMobRewardedAd") else null
@@ -118,7 +120,7 @@ func _ready() -> void:
 		else:
 			status = "plugin incomplete"
 	else:
-		status = "off (no AdMob in this build)" if not sim else "simulated (desktop)"
+		status = ("off (Android ads disabled)" if (_is_android() and not android_on) else "off (no AdMob in this build)") if not sim else "simulated (desktop)"
 
 
 func _load_cfg() -> void:
@@ -134,6 +136,7 @@ func _load_cfg() -> void:
 	var d: Variant = JSON.parse_string(f.get_as_text())
 	if not (d is Dictionary):
 		return
+	android_on = bool(d.get("android_enabled", false))
 	var all_live := bool(d.get("live", false))
 	var pre := "android_" if _is_android() else ""
 	var b := str(d.get(pre + "banner", ""))

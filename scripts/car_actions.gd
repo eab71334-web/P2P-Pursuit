@@ -7,6 +7,7 @@ extends Node
 ## rocker switch, electric joystick / manual lever, tuning knob / preset buttons.
 
 signal changed                       # lights / wipers state changed (HUD buttons refresh)
+signal net_event(what: String, val: int)   # the local driver did something the other players should see / hear
 
 # horn: press | thumb | double | hold      lights: stalk | knob | switch      wipers: stalk | knob | switch
 # radio: knob | button                     mirror: joy | lever
@@ -244,6 +245,7 @@ func _signal_act(dir: int) -> Dictionary:
 			_sig_sound(true)
 		_sig_lights()
 		changed.emit()
+		net_event.emit("signal", signal_dir)
 	var base := _pv.basis
 	var sgn := float(dir)
 	return {"side": "L", "dur": 0.7, "lean": 0.0, "events": [_ev(0.28, fire)],
@@ -275,6 +277,10 @@ func _tick_signal(delta: float) -> void:
 		_sig_sound(_sig_on)
 		_sig_lights()
 	# like a real car it cancels itself after the turn (wheel turned the way of the signal, then straight again)
+	if car.is_remote:
+		if _sig_age > 25.0:
+			_cancel_signal()
+		return
 	var s: float = car.steer_target * float(-signal_dir)
 	if s < -0.45:
 		_sig_seen = true
@@ -289,6 +295,30 @@ func _cancel_signal() -> void:
 	_sig_on = false
 	_sig_lights()
 	changed.emit()
+	net_event.emit("signal", 0)
+
+
+## what another player did in HIS car (sent by the server): the sound plays from his car, so near rivals hear it
+func remote(what: String, val: int) -> void:
+	match what:
+		"horn":
+			Sfx.play3d("horn", car, 4.0, float(st["pitch"]))
+		"lights":
+			lights_on = val == 1
+			_apply_lights()
+		"wipers":
+			wipers_on = val == 1
+			if wipers_on:
+				_wp_t = 0.0
+		"signal":
+			signal_dir = val
+			_sig_age = 0.0
+			_sig_seen = false
+			_sig_t = 0.0
+			_sig_on = val != 0
+			if val != 0:
+				_sig_sound(true)
+			_sig_lights()
 
 
 func _cup_holder() -> Vector3:
@@ -301,7 +331,7 @@ func _mouth() -> Vector3:
 
 func _build_can() -> void:
 	_can = Node3D.new()
-	_can.scale = Vector3(1.6, 1.6, 1.6)
+	_can.scale = Vector3(1.1, 1.1, 1.1)
 	car.add_child(_can)
 	var bm := CylinderMesh.new()
 	bm.top_radius = 0.034
@@ -424,7 +454,9 @@ func _ev(t: float, fn: Callable) -> Dictionary:
 func _horn() -> Dictionary:
 	var kind: String = st["horn"]
 	var pitch: float = st["pitch"]
-	var play := func(): Sfx.play3d("horn", car, 2.0, pitch)
+	var play := func():
+		Sfx.play3d("horn", car, 2.0, pitch)
+		net_event.emit("horn", 0)
 	var hub := _hub()
 	var press_dir := (_pv.basis * Vector3(0, -1, 0)).normalized()        # into the dash
 	var hover := (_pv.basis * Vector3(0, 1, 0)).normalized() * 0.07
@@ -459,6 +491,7 @@ func _lights() -> Dictionary:
 		_apply_lights()
 		Sfx.play3d("click", car, -2.0, 0.9)
 		changed.emit()
+		net_event.emit("lights", 1 if lights_on else 0)
 	if kind == "stalk":
 		var sp := _stalk_l
 		var tip := _stalk_l_tip
@@ -479,6 +512,7 @@ func _wipers_act() -> Dictionary:
 			_wp_t = 0.0
 		Sfx.play3d("click", car, -2.0, 1.1)
 		changed.emit()
+		net_event.emit("wipers", 1 if wipers_on else 0)
 	if kind == "stalk":
 		var sp := _stalk_r
 		var tip := _stalk_r_tip
@@ -580,9 +614,12 @@ func _process(delta: float) -> void:
 		return
 	var w := car.driver_avatar
 	if w == null or not is_instance_valid(w):
-		_busy = false
+		_finish_stuck()
 		return
 	_t += delta
+	if _t > float(_a.get("dur", 1.0)) + APPROACH * 2.0 + 1.5:       # watchdog: never stay stuck
+		_finish_stuck()
+		return
 	var dur: float = float(_a["dur"])
 	var total := dur + APPROACH * 2.0
 	var t_in := clampf(_t - APPROACH, 0.0, dur)
@@ -605,11 +642,25 @@ func _process(delta: float) -> void:
 
 ## the can follows the hand while it is held (a little in front of the palm), tilts to drink
 func _tick_can() -> void:
-	if _can == null or not _can_held or car.driver_avatar == null:
+	if _can == null or not _can_held or car.driver_avatar == null or not is_instance_valid(car.driver_avatar):
 		return
 	var hp: Vector3 = car.driver_avatar.hand_car("R")
-	_can.position = hp + Vector3(0.0, 0.1, -0.085)
+	_can.position = hp + Vector3(0.0, 0.07, -0.07)
 	_can.rotation = Vector3(_can_tilt, 0.0, 0.0)
+
+
+func _finish_stuck() -> void:
+	_busy = false
+	_queue.clear()
+	_can_held = false
+	if _can != null:
+		_can.position = _cup_holder() + Vector3(0, 0.1, 0)
+		_can.rotation = Vector3.ZERO
+	var w := car.driver_avatar
+	if w != null and is_instance_valid(w):
+		w.set_aux_hand("L", Vector3.ZERO, 0.0)
+		w.set_aux_hand("R", Vector3.ZERO, 0.0)
+		w.lean = 0.0
 
 
 func _tick_wipers(delta: float) -> void:
