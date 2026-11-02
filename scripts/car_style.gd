@@ -155,6 +155,9 @@ const STRIPE_KIND := {
 }
 
 
+const FOUR_SEAT := ["hatch", "sierra", "pickup", "charger"]   # four windows (front + rear door); the others have two
+
+
 # cabin shape per model: windshield top z, rear window base z / top z, roof half width (smaller = more tumblehome)
 const GREENHOUSE := {
 	"hatch": {"zf1": -0.7, "zr0": 1.4, "zr1": 1.25, "hwt": 0.84},
@@ -229,6 +232,7 @@ static func decorate(car: Node3D, model: String, lo: Dictionary, body_mat: Stand
 	var rtl := Vector3(-hwt, rt, zr1)
 	var rtr := Vector3(hwt, rt, zr1)
 	var solid := mat(body_mat.albedo_color, body_mat.metallic, body_mat.roughness)
+	var panes: Array = []
 	quad(car, [fbl, fbr, ftr, ftl], glass, Vector3(0, 0.6, -0.8), false, 1.0, 0.0)
 	quad(car, [rbr, rbl, rtl, rtr], glass, Vector3(0, 0.6, 0.8), false, 1.0, 0.0)
 	quad(car, [ftl, ftr, rtr, rtl], solid, Vector3.UP, true)
@@ -237,9 +241,24 @@ static func decorate(car: Node3D, model: String, lo: Dictionary, body_mat: Stand
 		var r0 := Vector3(sx * 0.93, 1.33, zr0)
 		var f1 := Vector3(sx * hwt, rt, zf1)
 		var r1 := Vector3(sx * hwt, rt, zr1)
-		quad(car, [f0, r0, r1, f1], glass, Vector3(sx, 0.4, 0), false, 1.0, 0.0)
+		# side glass = sliding panes (1 per side on 2-seat cars, 2 on 4-seat cars); CarActions lowers them into the door
+		var cuts := [0.0, 0.5, 1.0] if model in FOUR_SEAT else [0.0, 1.0]
+		for i in cuts.size() - 1:
+			var a0: Vector3 = f0.lerp(r0, cuts[i])
+			var a1: Vector3 = f0.lerp(r0, cuts[i + 1])
+			var b0: Vector3 = f1.lerp(r1, cuts[i])
+			var b1: Vector3 = f1.lerp(r1, cuts[i + 1])
+			var piv := Node3D.new()
+			piv.position = (a0 + a1) * 0.5
+			car.add_child(piv)
+			quad(piv, [a0 - piv.position, a1 - piv.position, b1 - piv.position, b0 - piv.position], glass, Vector3(sx, 0.4, 0), false, 1.0, 0.0)
+			panes.append({"node": piv, "side": sx, "row": i})
+		if model in FOUR_SEAT:
+			beam(car, f0.lerp(r0, 0.5), f1.lerp(r1, 0.5), 0.06, body_mat)
+		beam(car, f0 + Vector3(sx * 0.012, 0, 0), r0 + Vector3(sx * 0.012, 0, 0), 0.03, chrome)
 		for pr in [[f0, f1, 0.12], [r0, r1, 0.14], [f1, r1, 0.08], [f0, r0, 0.06]]:
 			beam(car, pr[0], pr[1], pr[2], body_mat)
+	car.set_meta("panes", panes)
 	# --- lights, grille, handles, mirrors, exhaust
 	for sx in [-0.68, 0.68]:
 		box(car, Vector3(0.4, 0.17, 0.07), Vector3(sx, 0.95, -2.06), head)

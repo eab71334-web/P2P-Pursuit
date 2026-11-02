@@ -209,8 +209,23 @@ func set_grip(f: float) -> void:
 	if absf(f - _grip) < 0.01:
 		return
 	_grip = f
+	_apply_fric()
+
+
+var hb := false   # handbrake: the rear wheels lose most of their grip, so the tail swings out in tight turns
+
+
+func set_handbrake(on: bool) -> void:
+	if hb == on:
+		return
+	hb = on
+	_apply_fric()
+
+
+func _apply_fric() -> void:
 	for w in wheel_list:
-		w.wheel_friction_slip = 3.2 * f * grip_base * (1.0 if w.use_as_steering else float(hd["rear"]))
+		var k := 1.0 if w.use_as_steering else float(hd["rear"]) * (0.3 if hb else 1.0)
+		w.wheel_friction_slip = 3.2 * _grip * grip_base * k
 
 
 ## dark-mode lights: headlights + a dim cabin light so the blind driver can see the co-driver
@@ -448,6 +463,7 @@ func _build_audio() -> void:
 	_snd["fire"] = Sfx.loop3d("fire_loop", self, -40.0)
 	_snd["hiss"] = Sfx.loop3d("smoke_hiss", self, -40.0)
 	_snd["spray"] = Sfx.loop3d("spray_loop", self, -40.0)
+	_snd["wind"] = Sfx.loop3d("wind_loop", self, -60.0)
 	for k in _snd:
 		(_snd[k] as AudioStreamPlayer3D).position = Vector3(0, 1.0, -1.4)
 		(_snd[k] as AudioStreamPlayer3D).stream.resource_local_to_scene = false
@@ -616,6 +632,10 @@ func _update_motion_audio(delta: float) -> void:
 	var sk: AudioStreamPlayer3D = _snd["skid"]
 	sk.volume_db = -60.0 if lat < 3.0 else -26.0 + clampf((lat - 3.0) / 8.0, 0.0, 1.0) * 16.0
 	sk.pitch_scale = 0.9 + clampf(spd / 200.0, 0.0, 0.4)
+	var wopen: float = actions.win_avg if actions != null else 0.0
+	var wd: AudioStreamPlayer3D = _snd["wind"]
+	wd.volume_db = -60.0 if wopen < 0.02 else -34.0 + wopen * 6.0 + clampf(spd / 110.0, 0.0, 1.0) * 24.0
+	wd.pitch_scale = 0.85 + clampf(spd / 220.0, 0.0, 0.5)
 
 
 func _update_damage_fx(delta: float) -> void:

@@ -66,6 +66,33 @@ var _beams: Array = []
 var _wipers: Array[Node3D] = []
 var _wp_t := -1.0
 var _wp_phase := 0.0
+# --- v3 cabin extras
+const CRANK_CARS := ["hatch", "buggy", "sierra", "pickup", "muscle"]    # old cars: hand cranks the window; modern: electric switch
+var win_target := 0.0            # 0 closed .. 1 open (all windows)
+var win_avg := 0.0
+var _panes: Array = []
+var _pane_v: Array = []
+var _win_node: Node3D
+var _win_pos := Vector3.ZERO
+var hazard := false
+var fan_level := 0
+var dome_on := false
+var hb_on := false
+var _hb_t := 0.0
+var _hb_lever: Node3D
+var _hb_tip: Node3D
+var _hb_ang := 0.1
+var _dome_light: OmniLight3D
+var _dome_mat: StandardMaterial3D
+var _ac_node: Node3D
+var _haz_node: Node3D
+var _haz_mat_on: StandardMaterial3D
+var _haz_mat_off: StandardMaterial3D
+var _haz_btn: MeshInstance3D
+var _fan_snd: AudioStreamPlayer3D
+var _flash_spots: Array = []
+var _flash_t := 0.0
+var _greet_opened := false
 
 
 func setup(p_car: Car) -> void:
@@ -78,6 +105,7 @@ func setup(p_car: Car) -> void:
 	_build_wipers()
 	_build_can()
 	_build_signals()
+	_build_extras()
 
 
 # ------------------------------------------------------------------ public
@@ -261,13 +289,13 @@ func _sig_sound(tick: bool) -> void:
 
 func _sig_lights() -> void:
 	for side in ["left", "right"]:
-		var on: bool = _sig_on and ((side == "left" and signal_dir < 0) or (side == "right" and signal_dir > 0))
+		var on: bool = _sig_on and (hazard or (side == "left" and signal_dir < 0) or (side == "right" and signal_dir > 0))
 		for m in _sig_lamps[side]:
 			(m as MeshInstance3D).material_override = _sig_mat_on if on else _sig_mat_off
 
 
 func _tick_signal(delta: float) -> void:
-	if signal_dir == 0:
+	if signal_dir == 0 and not hazard:
 		return
 	_sig_age += delta
 	_sig_t += delta
@@ -276,6 +304,8 @@ func _tick_signal(delta: float) -> void:
 		_sig_on = not _sig_on
 		_sig_sound(_sig_on)
 		_sig_lights()
+	if hazard:
+		return
 	# like a real car it cancels itself after the turn (wheel turned the way of the signal, then straight again)
 	if car.is_remote:
 		if _sig_age > 25.0:
@@ -310,6 +340,21 @@ func remote(what: String, val: int) -> void:
 			wipers_on = val == 1
 			if wipers_on:
 				_wp_t = 0.0
+		"window":
+			win_target = float(val)
+			Sfx.play3d("window", car, -8.0, 1.0)
+		"dome":
+			_set_dome(val == 1)
+		"ac":
+			_set_fan(val)
+		"hazard":
+			_set_hazard(val == 1)
+		"flash":
+			_do_flash()
+		"hbrake":
+			_set_hb(val == 1, false)
+		"greet":
+			do("greet")
 		"signal":
 			signal_dir = val
 			_sig_age = 0.0
@@ -435,6 +480,20 @@ func _start(name: String) -> void:
 			_a = _signal_act(1)
 		"drink":
 			_a = _drink()
+		"window":
+			_a = _window_act()
+		"dome":
+			_a = _dome_act()
+		"ac":
+			_a = _ac_act()
+		"hazard":
+			_a = _hazard_act()
+		"flash":
+			_a = _flash_act()
+		"hbrake":
+			_a = _hbrake_act()
+		"greet":
+			_a = _greet_act()
 		"mirror_left":
 			_a = _mirror("left")
 		"mirror_right":
@@ -610,6 +669,7 @@ func _process(delta: float) -> void:
 	_tick_wipers(delta)
 	_tick_can()
 	_tick_signal(delta)
+	_tick_extras(delta)
 	if not _busy:
 		return
 	var w := car.driver_avatar
@@ -651,6 +711,7 @@ func _tick_can() -> void:
 
 func _finish_stuck() -> void:
 	_busy = false
+	_greet_opened = false
 	_queue.clear()
 	_can_held = false
 	if _can != null:
@@ -682,3 +743,281 @@ func _tick_wipers(delta: float) -> void:
 			_wp_t = -1.0
 			for a in _wipers:
 				a.rotation.z = 0.0
+
+
+# ================================================================== v3: windows, cabin light, fan, hazard, high beam, handbrake, greeting
+func _emit(what: String, val: int) -> void:
+	if not car.is_remote:
+		net_event.emit(what, val)
+
+
+func _build_extras() -> void:
+	var dark := _mat(Color(0.03, 0.03, 0.04), 0.2, 0.5)
+	var chrome := _mat(Color(0.78, 0.8, 0.86), 0.9, 0.25)
+	var amb := _mat(Color(1.0, 0.6, 0.15), 0.0, 0.5, 1.0)
+	# --- driver window control: crank (old cars) or electric rocker switch on the door
+	_win_pos = _pv.position + Vector3(-0.44, -0.30, 0.42)
+	if car.model in CRANK_CARS:
+		_win_node = Node3D.new()
+		_win_node.position = _win_pos
+		car.add_child(_win_node)
+		CarStyle.cyl(_win_node, 0.035, 0.012, Vector3(0.006, 0, 0), dark, Vector3(0, 0, 90))
+		var mv := Node3D.new()
+		_win_node.add_child(mv)
+		CarStyle.box(mv, Vector3(0.012, 0.07, 0.012), Vector3(0.02, 0.035, 0), chrome)
+		CarStyle.cyl(mv, 0.014, 0.04, Vector3(0.04, 0.07, 0), dark, Vector3(0, 0, 90))
+		_win_node.set_meta("mv", mv)
+	else:
+		_win_node = _make_knob(_win_pos, "switch", dark, chrome, amb)
+	# --- cabin dome light on the roof lining
+	var rt := 1.95 - car.drop
+	var lamp_pos := Vector3(-0.12, rt - 0.03, 0.02)
+	_dome_mat = _mat(Color(0.35, 0.33, 0.28), 0.0, 0.4)
+	CarStyle.box(car, Vector3(0.22, 0.025, 0.12), lamp_pos, _dome_mat)
+	_dome_light = OmniLight3D.new()
+	_dome_light.position = lamp_pos + Vector3(0, -0.15, 0.1)
+	_dome_light.omni_range = 3.0
+	_dome_light.light_energy = 0.9
+	_dome_light.light_color = Color(1.0, 0.92, 0.75)
+	_dome_light.visible = false
+	car.add_child(_dome_light)
+	# --- air-conditioning knob + vents under the radio
+	_ac_node = _make_knob(Vector3(0.12, 0.99, -0.62), "knob", dark, chrome, amb)
+	_fan_snd = Sfx.loop3d("fan_loop", car, -60.0)
+	_fan_snd.position = Vector3(0, 1.0, -0.6)
+	# --- hazard button (red triangle) left of the radio
+	_haz_mat_off = _mat(Color(0.5, 0.05, 0.04), 0.0, 0.5, 0.0)
+	_haz_mat_on = _mat(Color(1.0, 0.1, 0.05), 0.0, 0.3, 3.0)
+	_haz_node = Node3D.new()
+	_haz_node.position = Vector3(-0.1, 1.04, -0.66)
+	car.add_child(_haz_node)
+	CarStyle.box(_haz_node, Vector3(0.07, 0.01, 0.06), Vector3(0, -0.005, 0), dark)
+	_haz_btn = CarStyle.box(_haz_node, Vector3(0.045, 0.014, 0.04), Vector3(0, 0.007, 0), _haz_mat_off)
+	# --- handbrake lever between the seats
+	CarStyle.box(car, Vector3(0.09, 0.05, 0.5), Vector3(-0.2, 0.83, 0.5), dark)
+	_hb_lever = Node3D.new()
+	_hb_lever.position = Vector3(-0.2, 0.87, 0.26)
+	car.add_child(_hb_lever)
+	CarStyle.box(_hb_lever, Vector3(0.025, 0.025, 0.26), Vector3(0, 0, 0.13), chrome)
+	CarStyle.box(_hb_lever, Vector3(0.04, 0.035, 0.07), Vector3(0, 0.005, 0.27), dark)
+	_hb_tip = Node3D.new()
+	_hb_tip.position = Vector3(0, 0.0, 0.27)
+	_hb_lever.add_child(_hb_tip)
+	_hb_lever.rotation.x = _hb_ang
+	# --- high-beam flash lights (only lit while flashing)
+	for x in [-0.6, 0.6]:
+		var sp := SpotLight3D.new()
+		sp.position = Vector3(x, 0.9, -2.0)
+		sp.spot_range = 80.0
+		sp.spot_angle = 26.0
+		sp.light_energy = 9.0
+		sp.light_color = Color(0.92, 0.95, 1.0)
+		sp.visible = false
+		car.add_child(sp)
+		_flash_spots.append(sp)
+
+
+func _set_win(v: float, emit := true) -> void:
+	win_target = v
+	Sfx.play3d("window", car, -8.0, 1.0 if v > 0.5 else 0.9)
+	if emit:
+		_emit("window", int(v))
+	changed.emit()
+
+
+func _set_dome(on: bool) -> void:
+	dome_on = on
+	if _dome_light != null:
+		_dome_light.visible = on
+	if _dome_mat != null:
+		_dome_mat.emission_enabled = on
+		_dome_mat.emission = Color(1.0, 0.93, 0.75)
+		_dome_mat.emission_energy_multiplier = 3.0
+	changed.emit()
+
+
+func _set_fan(level: int) -> void:
+	fan_level = level
+	if _fan_snd != null:
+		_fan_snd.volume_db = [-60.0, -30.0, -24.0, -18.0][clampi(level, 0, 3)]
+	if _ac_node != null:
+		(_ac_node.get_meta("mv") as Node3D).rotation.y = -float(level) * 0.8
+	changed.emit()
+
+
+func _set_hazard(on: bool) -> void:
+	hazard = on
+	_sig_t = 0.0
+	_sig_on = on
+	if on:
+		_sig_sound(true)
+	_sig_lights()
+	if _haz_btn != null:
+		_haz_btn.material_override = _haz_mat_on if on else _haz_mat_off
+	changed.emit()
+
+
+func _do_flash() -> void:
+	_flash_t = 0.6
+	Sfx.play3d("horn_short", car, 0.0, float(st["pitch"]))
+
+
+func _set_hb(on: bool, emit := true) -> void:
+	hb_on = on
+	_hb_t = 0.0
+	if not car.is_remote:
+		car.set_handbrake(on)
+	Sfx.play3d("hbrake", car, -2.0, 1.0 if on else 0.8)
+	if emit:
+		_emit("hbrake", 1 if on else 0)
+	changed.emit()
+
+
+func _tick_extras(delta: float) -> void:
+	if _panes.is_empty() and car.has_meta("panes"):
+		_panes = car.get_meta("panes")
+		_pane_v.resize(_panes.size())
+		_pane_v.fill(0.0)
+	# windows slide down into the doors (driver's first, the others a little slower)
+	if not _panes.is_empty():
+		var sum := 0.0
+		for i in _panes.size():
+			var spd := 0.9 if (float(_panes[i]["side"]) < 0.0 and int(_panes[i]["row"]) == 0) else 0.65
+			_pane_v[i] = move_toward(float(_pane_v[i]), win_target, delta * spd)
+			var n: Node3D = _panes[i]["node"]
+			n.scale.y = maxf(1.0 - float(_pane_v[i]) * 0.97, 0.03)
+			n.visible = n.scale.y > 0.05
+			sum += float(_pane_v[i])
+		win_avg = sum / float(_panes.size())
+		if not car.is_remote and Radio != null:
+			var b := 7.0 * win_avg
+			if absf(b - Radio.window_boost) > 0.1:
+				Radio.window_boost = b
+				Radio._apply_volume()
+	# high-beam flash: quick double blink
+	if _flash_t > 0.0:
+		_flash_t -= delta
+		var on := _flash_t > 0.0 and fmod(_flash_t, 0.3) > 0.12
+		for sp in _flash_spots:
+			(sp as SpotLight3D).visible = on
+	# handbrake: auto release after a moment, lever follows
+	if hb_on:
+		_hb_t += delta
+		if _hb_t > 1.5:
+			_set_hb(false)
+	if _hb_lever != null and not (_busy and str(_a.get("name", "")) == "hbrake"):
+		_hb_ang = lerpf(_hb_ang, -0.6 if hb_on else 0.1, clampf(delta * 10.0, 0.0, 1.0))
+		_hb_lever.rotation.x = _hb_ang
+
+
+# ---- actions
+func _window_act() -> Dictionary:
+	var fire := func(): _set_win(0.0 if win_target > 0.5 else 1.0)
+	if car.model in CRANK_CARS:
+		var base := _win_node.position
+		var mv: Node3D = _win_node.get_meta("mv")
+		var tick := func(): Sfx.play3d("gear_tick", car, -6.0, 0.9)
+		return {"side": "L", "dur": 1.7, "lean": 0.06,
+			"events": [_ev(0.45, fire), _ev(0.7, tick), _ev(1.0, tick), _ev(1.3, tick)],
+			"pose": func(t: float) -> Vector3:
+				var f := smoothstep(0.2, 1.4, t)
+				var a := f * TAU * 2.0 * (-1.0 if win_target > 0.5 else 1.0)
+				mv.rotation.x = a
+				return base + Vector3(0.05, cos(a) * 0.07, sin(a) * 0.07)}
+	return _knob_action(_win_node, "switch", "L", fire, win_target > 0.5)
+
+
+func _dome_act() -> Dictionary:
+	var lamp := Vector3(-0.12, 1.95 - car.drop - 0.03, 0.02)
+	var fire := func():
+		_set_dome(not dome_on)
+		Sfx.play3d("click", car, -2.0, 1.2)
+		_emit("dome", 1 if dome_on else 0)
+	return {"side": "R", "dur": 1.0, "lean": 0.05, "events": [_ev(0.45, fire)],
+		"pose": func(t: float) -> Vector3:
+			var rise := smoothstep(0.0, 0.4, t)
+			var d := smoothstep(0.38, 0.46, t) * (1.0 - smoothstep(0.55, 0.65, t))
+			return lamp + Vector3(0, -0.2 + 0.15 * rise + 0.03 * d, 0.03)}
+
+
+func _ac_act() -> Dictionary:
+	var a0 := -float(fan_level) * 0.8
+	var nl := (fan_level + 1) % 4
+	var a1 := -float(nl) * 0.8
+	var fire := func():
+		_set_fan(nl)
+		Sfx.play3d("click", car, -3.0, 1.0)
+		_emit("ac", nl)
+	var mv: Node3D = _ac_node.get_meta("mv")
+	var base := _ac_node.position + Vector3(0, 0.03, 0)
+	return {"side": "R", "dur": 1.0, "lean": 0.3, "events": [_ev(0.5, fire)],
+		"pose": func(t: float) -> Vector3:
+			var f := smoothstep(0.25, 0.6, t)
+			var ang := lerpf(a0, a1, f)
+			mv.rotation.y = ang
+			var down := smoothstep(0.1, 0.22, t) * (1.0 - smoothstep(0.7, 0.85, t))
+			return base + Vector3(sin(-ang) * 0.025, 0.05 * (1.0 - down), cos(ang) * 0.025 - 0.02)}
+
+
+func _hazard_act() -> Dictionary:
+	var fire := func():
+		_set_hazard(not hazard)
+		Sfx.play3d("click", car, -2.0, 1.4)
+		_emit("hazard", 1 if hazard else 0)
+	var base := _haz_node.position
+	return {"side": "R", "dur": 0.95, "lean": 0.25, "events": [_ev(0.5, fire)],
+		"pose": func(t: float) -> Vector3:
+			var d := smoothstep(0.3, 0.46, t) * (1.0 - smoothstep(0.55, 0.7, t))
+			return base + Vector3(0, 0.07 - 0.06 * d, 0.0)}
+
+
+func _flash_act() -> Dictionary:
+	var sp := _sig_stalk
+	var tip := _sig_tip
+	var base := _pv.basis
+	var fire := func():
+		_do_flash()
+		_emit("flash", 1)
+	return {"side": "L", "dur": 0.9, "lean": 0.0, "events": [_ev(0.3, fire)],
+		"pose": func(t: float) -> Vector3:
+			var f := smoothstep(0.15, 0.3, t) * (1.0 - smoothstep(0.38, 0.46, t)) + smoothstep(0.5, 0.58, t) * (1.0 - smoothstep(0.7, 0.78, t))
+			sp.transform = Transform3D(base * Basis(Vector3(0, 1, 0), 0.22 * f), sp.position)
+			return car.to_local(tip.global_position)}
+
+
+func _hbrake_act() -> Dictionary:
+	var rel := hb_on
+	var lev := _hb_lever
+	var tip := _hb_tip
+	var fire := func(): _set_hb(not rel)
+	return {"side": "R", "dur": 1.1, "lean": 0.12, "events": [_ev(0.5, fire)],
+		"pose": func(t: float) -> Vector3:
+			var f := smoothstep(0.3, 0.7, t)
+			var ang := lerpf(-0.6, 0.1, f) if rel else lerpf(0.1, -0.6, f)
+			_hb_ang = ang
+			lev.rotation.x = ang
+			return car.to_local(tip.global_position) + Vector3(0, 0.05, -0.01)}
+
+
+func _greet_act() -> Dictionary:
+	var sd: float = car.sd
+	var open_it := func():
+		_greet_opened = win_target < 0.5
+		if _greet_opened:
+			_set_win(1.0, false)
+	var beep1 := func():
+		Sfx.play3d("horn_short", car, -2.0, float(st["pitch"]))
+		_emit("greet", 1)
+	var beep2 := func(): Sfx.play3d("horn_short", car, -2.0, float(st["pitch"]) * 1.12)
+	var close_it := func():
+		if _greet_opened:
+			_set_win(0.0, false)
+			_greet_opened = false
+	return {"side": "L", "dur": 2.6, "lean": 0.04,
+		"events": [_ev(0.0, open_it), _ev(1.0, beep1), _ev(1.3, beep2), _ev(2.3, close_it)],
+		"pose": func(t: float) -> Vector3:
+			var out := smoothstep(0.2, 1.0, t) * (1.0 - smoothstep(2.1, 2.6, t))
+			var wv := sin(t * 11.0) * 0.09 * smoothstep(0.9, 1.1, t) * (1.0 - smoothstep(2.0, 2.2, t))
+			var inner := Vector3(-0.8, 1.2 - sd * 0.5, -0.1)
+			var outer := Vector3(-1.3, 1.55 - sd * 0.3, -0.1 + wv)
+			return inner.lerp(outer, out) + Vector3(0, absf(wv) * 0.25, 0)}

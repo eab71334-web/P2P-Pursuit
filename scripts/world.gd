@@ -1290,6 +1290,20 @@ func _input(event: InputEvent) -> void:
 				_cabin("mirror_left")
 			KEY_BRACKETRIGHT:
 				_cabin("mirror_right")
+			KEY_J:
+				_cabin("hazard")
+			KEY_F:
+				_cabin("flash")
+			KEY_B:
+				_cabin("hbrake")
+			KEY_N:
+				_cabin("window")
+			KEY_V:
+				_cabin("ac")
+			KEY_I:
+				_cabin("dome")
+			KEY_Y:
+				_cabin("greet")
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			_touch_press(event.index, event.position)
@@ -2243,14 +2257,24 @@ func _build_hud() -> void:
 		var items := [
 			["c_sigl", UI.tx("< SIGNAL", "< إشارة"), "signal_left"], ["c_horn", UI.tx("HORN", "بوق"), "horn"], ["c_sigr", UI.tx("SIGNAL >", "إشارة >"), "signal_right"],
 			["c_lights", UI.tx("LIGHTS", "إضاءة"), "lights"], ["c_wipers", UI.tx("WIPER", "مساحات"), "wipers"], ["c_drink", UI.tx("DRINK", "اشرب"), "drink"],
-			["c_mirl", UI.tx("MIRROR L", "مرآة يسار"), "mirror_left"], ["c_mirr", UI.tx("MIRROR R", "مرآة يمين"), "mirror_right"], ["c_kind", UI.tx("JUICE", "عصير"), ""]]
+			["c_mirl", UI.tx("MIRROR L", "مرآة يسار"), "mirror_left"], ["c_mirr", UI.tx("MIRROR R", "مرآة يمين"), "mirror_right"], ["c_more", UI.tx("MORE >>", "المزيد >>"), "@more"],
+			["p2_haz", UI.tx("HAZARD", "طوارئ"), "hazard"], ["p2_flash", UI.tx("HIGH BEAM", "ضوء بعيد"), "flash"], ["p2_hb", UI.tx("HANDBRAKE", "فرامل يد"), "hbrake"],
+			["p2_win", UI.tx("WINDOWS", "نوافذ"), "window"], ["p2_ac", UI.tx("A/C FAN", "مروحة"), "ac"], ["p2_dome", UI.tx("CABIN LIGHT", "إضاءة داخلية"), "dome"],
+			["p2_greet", UI.tx("GREET", "تحية"), "greet"], ["c_kind", UI.tx("JUICE", "عصير"), ""], ["p2_back", UI.tx("<< BACK", "<< رجوع"), "@back"]]
 		for k in items.size():
 			var col := k % 3
-			var row := k / 3
+			var row := (k / 3) % 3
 			var x0 := 14.0 + col * 118.0
 			var y0 := -196.0 - (3 - row) * 76.0
-			var cb: Callable = _toggle_drink if items[k][2] == "" else _cabin.bind(items[k][2])
-			_make_zone(items[k][0], items[k][1], 0.0, 1.0, x0, y0, x0 + 110.0, y0 + 68.0, 20, cb)
+			var cb: Callable
+			match str(items[k][2]):
+				"": cb = _toggle_drink
+				"@more": cb = _cab_page.bind(2)
+				"@back": cb = _cab_page.bind(1)
+				_: cb = _cabin.bind(items[k][2])
+			_make_zone(items[k][0], items[k][1], 0.0, 1.0, x0, y0, x0 + 110.0, y0 + 68.0, 20 if k < 9 else 17, cb)
+			if k >= 9:
+				zones[items[k][0]].visible = false
 		cab_toast = Label.new()
 		cab_toast.position = Vector2(14, 0)
 		cab_toast.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
@@ -2313,6 +2337,16 @@ func _my_actions() -> CarActions:
 var cab_toast: Label
 
 
+## cabin button block has two pages: 1 = everyday, 2 = the extras (hazard, high beam, handbrake, windows, fan, cabin light, greet)
+func _cab_page(n: int) -> void:
+	for zn in zones:
+		var z := str(zn)
+		if z.begins_with("p2_") or z == "c_kind":
+			(zones[zn] as Control).visible = n == 2
+		elif z.begins_with("c_") and z != "c_kind":
+			(zones[zn] as Control).visible = n == 1
+
+
 func _toast(text: String) -> void:
 	if cab_toast == null:
 		return
@@ -2371,10 +2405,12 @@ func _sig_hud() -> void:
 	var a := _my_actions()
 	if a == null:
 		return
-	for pair in [["c_sigl", -1], ["c_sigr", 1]]:
+	var st := [["c_sigl", a.signal_dir == -1], ["c_sigr", a.signal_dir == 1], ["c_lights", a.lights_on], ["c_wipers", a.wipers_on],
+		["p2_haz", a.hazard], ["p2_hb", a.hb_on], ["p2_win", a.win_target > 0.5], ["p2_ac", a.fan_level > 0], ["p2_dome", a.dome_on]]
+	for pair in st:
 		if zones.has(pair[0]):
 			var sb := StyleBoxFlat.new()
-			sb.bg_color = Color(1.0, 0.6, 0.05, 0.75) if a.signal_dir == int(pair[1]) else Color(1, 1, 1, 0.18)
+			sb.bg_color = Color(1.0, 0.6, 0.05, 0.75) if pair[1] else Color(1, 1, 1, 0.18)
 			sb.set_corner_radius_all(14)
 			sb.border_color = Color(1, 1, 1, 0.5)
 			sb.set_border_width_all(3)

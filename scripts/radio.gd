@@ -17,6 +17,7 @@ const SAVE := "user://radio.cfg"
 var on := true
 var idx := 0
 var in_race := false           # the radio only plays while driving (HUD / dashboard exist)
+var window_boost := 0.0        # dB: louder when the windows are open
 var muted_by_scene := false    # ceremony / menus
 var _player: AudioStreamPlayer
 var _tune: AudioStreamPlayer
@@ -132,7 +133,7 @@ func _play(with_static: bool) -> void:
 func _target_db() -> float:
 	if muted_by_scene:
 		return -40.0
-	return linear_to_db(maxf(Gfx.vol_radio, 0.0001)) - 9.0
+	return linear_to_db(maxf(Gfx.vol_radio, 0.0001)) - 9.0 + window_boost
 
 
 func _apply_volume() -> void:
