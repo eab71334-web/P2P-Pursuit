@@ -7,9 +7,12 @@ extends Control
 signal closed
 
 var _mock := {}
-var _sel := ""
-var _drag := false
-var _grab := Vector2.ZERO
+var _selset := {}               # selected button ids
+var _multi := false
+var _multi_btn: Button
+var _touch_seen := false
+var _ptrs := {}                 # finger index -> {id, pos, grab}
+var _pinch := {}
 var _info: Label
 var _slot_bar: HBoxContainer
 var _slot_scroll: ScrollContainer
@@ -94,8 +97,8 @@ func _ready() -> void:
 	hc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(hc)
 	hc.add_child(hint)
-	_info = UI.lbl(hint, UI.tx("Drag a button to move it. Tap it to edit. Done keeps the changes, Exit throws them away.",
-		"اسحب الزر لتحريكه. اضغط عليه للتعديل. «تم» يحفظ التغييرات و«خروج» يلغيها."), 15, UI.TXT2, false)
+	_info = UI.lbl(hint, UI.tx("Drag to move. Two fingers on a button = resize + turn. Several fingers = several buttons at once. Done keeps, Exit discards.",
+		"اسحب الزر لتحريكه. إصبعان على الزر = تكبير ولفّ. أكثر من إصبع = أكثر من زر معاً. «تم» يحفظ و«خروج» يلغي."), 15, UI.TXT2, false)
 	_info.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# ---- tools pill, bottom left (never over GAS / BRAKE)
 	var pill := PanelContainer.new()
@@ -118,12 +121,14 @@ func _ready() -> void:
 	pr.add_theme_constant_override("separation", 8)
 	pill.add_child(pr)
 	_sel_lbl = UI.lbl(pr, "", 17, UI.ACCENT, false)
-	_sel_lbl.custom_minimum_size = Vector2(96, 0)
+	_sel_lbl.custom_minimum_size = Vector2(88, 0)
 	_sel_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_tbtn(pr, UI.tx("Size -", "حجم -"), UI.CARD2, _scale.bind(-0.1), 17, 84)
-	_tbtn(pr, UI.tx("Size +", "حجم +"), UI.CARD2, _scale.bind(0.1), 17, 84)
-	_tbtn(pr, UI.tx("Turn <", "لفّ <"), UI.CARD2, _rot.bind(-15.0), 17, 84)
-	_tbtn(pr, UI.tx("Turn >", "لفّ >"), UI.CARD2, _rot.bind(15.0), 17, 84)
+	_tbtn(pr, UI.tx("Size -", "حجم -"), UI.CARD2, _scale.bind(-0.1), 17, 78)
+	_tbtn(pr, UI.tx("Size +", "حجم +"), UI.CARD2, _scale.bind(0.1), 17, 78)
+	_tbtn(pr, UI.tx("Turn <", "لفّ <"), UI.CARD2, _rot.bind(-15.0), 17, 78)
+	_tbtn(pr, UI.tx("Turn >", "لفّ >"), UI.CARD2, _rot.bind(15.0), 17, 78)
+	_multi_btn = _tbtn(pr, UI.tx("Multi", "متعدد"), UI.CARD2, _toggle_multi, 17, 84)
+	_tbtn(pr, UI.tx("All", "الكل"), UI.CARD2, _select_all, 17, 64)
 	_tbtn(pr, UI.tx("Reset", "إعادة"), UI.CARD2, _reset_one, 17, 80)
 	_tbtn(pr, UI.tx("Reset all", "إعادة الكل"), UI.CARD2, _reset_all, 17, 100)
 	_build_slots()
@@ -166,7 +171,8 @@ func _grid_lines() -> void:
 
 func _sel_text() -> void:
 	if _sel_lbl != null:
-		_sel_lbl.text = HudLayout.names()[_sel] if _sel != "" else UI.tx("Select a button", "اختر زراً")
+		var n := _selset.size()
+		_sel_lbl.text = UI.tx("Select a button", "اختر زراً") if n == 0 else (HudLayout.names()[_selset.keys()[0]] if n == 1 else UI.tx("%d buttons" % n, "%d أزرار" % n))
 
 
 func _save_slot() -> void:
@@ -209,14 +215,14 @@ func _build_slots() -> void:
 		var idx := i
 		b.pressed.connect(func():
 			HudLayout.select_slot(idx)
-			_sel = ""
+			_selset.clear()
 			_refresh()
 			_say(UI.tx("Layout %d loaded" % (idx + 1), "تم تحميل التخصيص %d" % (idx + 1)) if HudLayout.slot_filled(idx) else UI.tx("Layout %d is empty - arrange the buttons, then press Save" % (idx + 1), "التخصيص %d فارغ - رتّب الأزرار ثم اضغط حفظ" % (idx + 1))))
 		_slot_bar.add_child(b)
 	if HudLayout.all_filled():        # all slots used: a "+" appears to add another one (no limit)
 		var pb := _tbtn(_slot_bar, "+", Color(0.18, 0.42, 0.25), func():
 			HudLayout.add_slot()
-			_sel = ""
+			_selset.clear()
 			_refresh()
 			_say(UI.tx("New layout added", "تمت إضافة تخصيص جديد")), 26, 54)
 		pb.custom_minimum_size = Vector2(54, 46)
@@ -237,7 +243,7 @@ func _say(t: String) -> void:
 func _style_all() -> void:
 	for id in _mock:
 		var sb := StyleBoxFlat.new()
-		var on: bool = id == _sel
+		var on: bool = _selset.has(id)
 		sb.bg_color = Color(1.0, 0.6, 0.05, 0.55) if on else Color(1, 1, 1, 0.2)
 		sb.set_corner_radius_all(14)
 		sb.border_color = Color(1.0, 0.8, 0.2) if on else Color(1, 1, 1, 0.55)
@@ -255,60 +261,158 @@ func _hit(pos: Vector2) -> String:
 	return ""
 
 
-func _gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+func _centre(id: String) -> Vector2:
+	var c: Control = _mock[id]
+	return c.get_global_transform() * (c.size * 0.5)
+
+
+## buttons the tools act on: the selected ones
+func _targets() -> Array:
+	return _selset.keys()
+
+
+func _select(id: String) -> void:
+	if _multi:
+		if _selset.has(id):
+			_selset.erase(id)
+		else:
+			_selset[id] = true
+	elif not _selset.has(id) or _selset.size() > 1:
+		_selset.clear()
+		_selset[id] = true
+	_sel_text()
+	_style_all()
+
+
+# ---- touch: every finger drags its own button (so several can be moved at once); two fingers on one button
+# pinch (size) and twist (rotation); with "Multi" on, selected buttons move / resize / turn together.
+func _input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch:
+		_touch_seen = true
+		_ptrs.erase(-1)           # the mouse press Godot emulates from the first touch arrives before it: drop it
+		var t := event as InputEventScreenTouch
+		if t.pressed:
+			_ptr_down(t.index, t.position)
+		else:
+			_ptr_up(t.index)
+	elif event is InputEventScreenDrag:
+		_ptr_move((event as InputEventScreenDrag).index, (event as InputEventScreenDrag).position)
+	elif not _touch_seen and event is InputEventMouseButton and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
 		var mb := event as InputEventMouseButton
 		if mb.pressed:
-			var id := _hit(mb.position)
-			if id != "":
-				_sel = id
-				_sel_text()
-				_drag = true
-				var c: Control = _mock[id]
-				_grab = mb.position - (c.get_global_transform() * (c.size * 0.5))
-				_style_all()
+			_ptr_down(-1, mb.position)
 		else:
-			_drag = false
-	elif event is InputEventMouseMotion and _drag and _sel != "":
-		var mm := event as InputEventMouseMotion
-		var vs := get_viewport_rect().size
-		var centre := mm.position - _grab
-		var e := HudLayout.entry(_sel)
-		e["fx"] = centre.x / vs.x
-		e["fy"] = centre.y / vs.y
-		HudLayout.set_entry(_sel, e)
-		HudLayout.place(_mock[_sel], _sel)
+			_ptr_up(-1)
+	elif not _touch_seen and event is InputEventMouseMotion and _ptrs.has(-1):
+		_ptr_move(-1, (event as InputEventMouseMotion).position)
+
+
+func _ptr_down(idx: int, pos: Vector2) -> void:
+	var id := _hit(pos)
+	if id == "":
+		return
+	# a second finger on the same button = pinch / twist
+	for k in _ptrs:
+		if k != idx and _ptrs[k]["id"] == id and not _pinch.has("a"):
+			var o: Vector2 = _ptrs[k]["pos"]
+			var d := pos - o
+			_pinch = {"a": k, "b": idx, "d0": maxf(d.length(), 20.0), "ang0": d.angle(), "mid": (pos + o) * 0.5, "base": {}}
+			if not _selset.has(id):
+				_select(id)
+			for t in _targets():
+				_pinch["base"][t] = HudLayout.entry(t)
+			_ptrs[idx] = {"id": id, "pos": pos, "grab": Vector2.ZERO}
+			return
+	_select(id)
+	_ptrs[idx] = {"id": id, "pos": pos, "grab": pos - _centre(id)}
+
+
+func _ptr_up(idx: int) -> void:
+	if not _ptrs.has(idx):
+		return
+	_ptrs.erase(idx)
+	if _pinch.has("a") and (int(_pinch["a"]) == idx or int(_pinch["b"]) == idx):
+		_pinch = {}
+		for k in _ptrs:                         # the finger that stays keeps dragging
+			_ptrs[k]["grab"] = _ptrs[k]["pos"] - _centre(_ptrs[k]["id"])
+
+
+func _ptr_move(idx: int, pos: Vector2) -> void:
+	if not _ptrs.has(idx):
+		return
+	_ptrs[idx]["pos"] = pos
+	var vs := get_viewport_rect().size
+	if _pinch.has("a"):
+		if not (_ptrs.has(_pinch["a"]) and _ptrs.has(_pinch["b"])):
+			return
+		var pa: Vector2 = _ptrs[_pinch["a"]]["pos"]
+		var pb: Vector2 = _ptrs[_pinch["b"]]["pos"]
+		var d := pb - pa
+		var ratio := d.length() / float(_pinch["d0"])
+		var dang := rad_to_deg(wrapf(d.angle() - float(_pinch["ang0"]), -PI, PI))
+		var shift := ((pa + pb) * 0.5 - (_pinch["mid"] as Vector2)) / vs
+		for t in _pinch["base"]:
+			var e: Dictionary = (_pinch["base"][t] as Dictionary).duplicate()
+			e["sc"] = float(e["sc"]) * ratio
+			e["rot"] = float(e["rot"]) + dang
+			e["fx"] = float(e["fx"]) + shift.x
+			e["fy"] = float(e["fy"]) + shift.y
+			HudLayout.set_entry(t, e)
+			HudLayout.place(_mock[t], t)
+		return
+	var id: String = _ptrs[idx]["id"]
+	var old := _centre(id)
+	var delta: Vector2 = (pos - (_ptrs[idx]["grab"] as Vector2)) - old
+	var group: Array = _targets() if _selset.has(id) else [id]
+	for t in group:
+		var e := HudLayout.entry(t)
+		e["fx"] = float(e["fx"]) + delta.x / vs.x
+		e["fy"] = float(e["fy"]) + delta.y / vs.y
+		HudLayout.set_entry(t, e)
+		HudLayout.place(_mock[t], t)
 
 
 func _scale(d: float) -> void:
-	if _sel == "":
-		return
-	var e := HudLayout.entry(_sel)
-	e["sc"] = float(e["sc"]) + d
-	HudLayout.set_entry(_sel, e)
-	HudLayout.place(_mock[_sel], _sel)
+	for t in _targets():
+		var e := HudLayout.entry(t)
+		e["sc"] = float(e["sc"]) + d
+		HudLayout.set_entry(t, e)
+		HudLayout.place(_mock[t], t)
 
 
 func _rot(d: float) -> void:
-	if _sel == "":
-		return
-	var e := HudLayout.entry(_sel)
-	e["rot"] = float(e["rot"]) + d
-	HudLayout.set_entry(_sel, e)
-	HudLayout.place(_mock[_sel], _sel)
+	for t in _targets():
+		var e := HudLayout.entry(t)
+		e["rot"] = float(e["rot"]) + d
+		HudLayout.set_entry(t, e)
+		HudLayout.place(_mock[t], t)
 
 
 func _reset_one() -> void:
-	if _sel == "":
-		return
-	HudLayout.reset(_sel)
-	HudLayout.place(_mock[_sel], _sel)
+	for t in _targets():
+		HudLayout.reset(t)
+		HudLayout.place(_mock[t], t)
 
 
 func _reset_all() -> void:
 	HudLayout.reset()
 	for id in _mock:
 		HudLayout.place(_mock[id], id)
+
+
+func _toggle_multi() -> void:
+	_multi = not _multi
+	_multi_btn.add_theme_stylebox_override("normal", UI.sb(UI.ACCENT if _multi else UI.CARD2, 12))
+	_multi_btn.add_theme_color_override("font_color", Color(0.08, 0.06, 0.04) if _multi else UI.TXT)
+	_say(UI.tx("Multi on: tap several buttons, then move / resize / turn them together", "تحديد متعدد: اضغط عدة أزرار ثم حرّكها وكبّرها ولفّها معاً") if _multi else UI.tx("Multi off", "إيقاف التحديد المتعدد"))
+
+
+func _select_all() -> void:
+	_selset.clear()
+	for id in _mock:
+		_selset[id] = true
+	_sel_text()
+	_style_all()
 
 
 func _done() -> void:
