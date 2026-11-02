@@ -222,6 +222,13 @@ func _ready() -> void:
 
 
 func _after_steer() -> void:
+	if my_role == "driver" and not Net.dedicated and not HudLayout.is_intro_seen():
+		HudEditor.intro(hud_root, _after_steer2)      # first time: tell the player the buttons can be customised
+	else:
+		_after_steer2()
+
+
+func _after_steer2() -> void:
 	if Net.dedicated:        # nobody plays at the server: wait for the clients' READY only
 		tutorial_done = true
 		_check_all_ready()
@@ -1272,6 +1279,8 @@ func _map_near() -> void:
 func _input(event: InputEvent) -> void:
 	if _picker != null and is_instance_valid(_picker):
 		return
+	if _hud_editor != null and is_instance_valid(_hud_editor):
+		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.keycode:
 			KEY_H:
@@ -1410,7 +1419,7 @@ func _touch_press(index: int, pos: Vector2) -> void:
 		wheel_last = (pos - _wheel_rect().get_center()).angle()
 		return
 	for zn in zones:
-		if (zones[zn] as Control).visible and (zones[zn] as Control).get_global_rect().has_point(pos):
+		if (zones[zn] as Control).visible and _zone_has(zones[zn] as Control, pos):
 			zone_touch[index] = zn
 			if tap_zones.has(zn):
 				(tap_zones[zn] as Callable).call()
@@ -1419,9 +1428,29 @@ func _touch_press(index: int, pos: Vector2) -> void:
 		look_touch = index   # a touch outside every button = look around
 
 
+## hit test that also works for buttons the player scaled / rotated
+func _zone_has(c: Control, pos: Vector2) -> bool:
+	var l := c.get_global_transform().affine_inverse() * pos
+	return Rect2(Vector2.ZERO, c.size).has_point(l)
+
+
+var _hud_editor: Control
+
+
+func _open_hud_editor() -> void:
+	if _hud_editor != null and is_instance_valid(_hud_editor):
+		return
+	var ed := HudEditor.new()
+	_hud_editor = ed
+	ed.closed.connect(func():
+		_hud_editor = null
+		HudLayout.apply_world(zones))
+	hud_root.add_child(ed)
+
+
 func _click_zone(pos: Vector2) -> void:
 	for zn in zones:
-		if (zones[zn] as Control).visible and (zones[zn] as Control).get_global_rect().has_point(pos) and tap_zones.has(zn):
+		if (zones[zn] as Control).visible and _zone_has(zones[zn] as Control, pos) and tap_zones.has(zn):
 			(tap_zones[zn] as Callable).call()
 			return
 
@@ -2252,6 +2281,8 @@ func _build_hud() -> void:
 	_make_zone("replay", UI.tx("REPLAY", "إعادة سينمائية"), 1.0, 0.0, -150, sy + 56, -14, sy + 102, 17, _play_replay)
 	zones["replay"].visible = false
 	_make_zone("photo", UI.tx("PHOTO", "صورة"), 1.0, 0.0, -150, sy + 112, -14, sy + 158, 20, _take_photo)
+	if my_role == "driver":
+		_make_zone("hudcfg", UI.tx("BUTTONS", "الأزرار"), 0.0, 0.0, 14, 94, 150, 136, 17, _open_hud_editor)
 	# driver cabin controls (his own hand does them): big buttons in a 3x3 block above the steering buttons, left side
 	if my_role == "driver":
 		var items := [
@@ -2323,6 +2354,7 @@ func _build_hud() -> void:
 			clipboard.my_color = teams[my_team].color
 			clipboard.set_track(track)
 			hud_root.add_child(clipboard)
+	HudLayout.apply_world(zones)
 
 
 func _my_actions() -> CarActions:

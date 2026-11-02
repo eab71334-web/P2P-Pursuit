@@ -33,6 +33,14 @@ func _build() -> void:
 		sm.append([m, SteerUI.mode_name(m)])
 	_row(UI.tx("Steering (touch)", "طريقة التوجيه (اللمس)"), SteerUI.mode_desc(Profile.steer_mode if Profile.steer_mode != "" else "buttons"),
 		_seg(sm, Profile.steer_mode if Profile.steer_mode != "" else "buttons", func(v): Profile.steer_mode = v; Profile.save(); _rebuild()))
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 8)
+	UI.btn(hb, UI.tx("Customize", "تخصيص"), UI.ACCENT, func():
+		var ed := HudEditor.new()
+		get_tree().root.add_child(ed), 20, Vector2(140, 46))
+	UI.btn(hb, UI.tx("Reset", "إعادة ضبط"), UI.CARD2, func(): HudLayout.reset(), 18, Vector2(130, 46))
+	_row(UI.tx("Driving buttons layout", "تخطيط أزرار السواقة"),
+		UI.tx("Move, resize and rotate gas, brake, horn, signals, lights and wipers.", "حرّك وكبّر وقلّب أزرار البنزين والفرامل والبوق والإشارات والإضاءة والمساحات."), hb)
 	# ---- performance
 	_head(UI.tx("PERFORMANCE", "الأداء"))
 	var weak := Gfx.preset == "weak"

@@ -1,0 +1,125 @@
+# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
+class_name HudLayout
+extends RefCounted
+## Player-made layout of the essential driving buttons (gas, brake, horn, signals, lights, wipers):
+## position (fraction of the screen), size and rotation, saved on the device. The editor (HudEditor) writes it,
+## the race HUD (world.gd) reads it. Buttons with no saved entry stay exactly where the game puts them.
+
+const SAVE := "user://hud_layout.cfg"
+## id -> default centre (fraction of the screen) and size in px, matching the race HUD
+const DEFAULTS := {
+	"gas": {"fx": 0.926, "fy": 0.854, "w": 150.0, "h": 130.0},
+	"brake": {"fx": 0.793, "fy": 0.854, "w": 150.0, "h": 130.0},
+	"c_sigl": {"fx": 0.054, "fy": 0.458, "w": 110.0, "h": 68.0},
+	"c_horn": {"fx": 0.146, "fy": 0.458, "w": 110.0, "h": 68.0},
+	"c_sigr": {"fx": 0.238, "fy": 0.458, "w": 110.0, "h": 68.0},
+	"c_lights": {"fx": 0.054, "fy": 0.564, "w": 110.0, "h": 68.0},
+	"c_wipers": {"fx": 0.146, "fy": 0.564, "w": 110.0, "h": 68.0},
+}
+const ORDER := ["gas", "brake", "c_horn", "c_sigl", "c_sigr", "c_lights", "c_wipers"]
+const SC_MIN := 0.6
+const SC_MAX := 1.8
+
+static var _data := {}
+static var _loaded := false
+static var intro_seen := false
+
+
+static func names() -> Dictionary:
+	return {"gas": UI.tx("GAS", "بنزين"), "brake": UI.tx("BRAKE", "فرامل"), "c_horn": UI.tx("HORN", "بوق"),
+		"c_sigl": UI.tx("< SIGNAL", "< إشارة"), "c_sigr": UI.tx("SIGNAL >", "إشارة >"),
+		"c_lights": UI.tx("LIGHTS", "إضاءة"), "c_wipers": UI.tx("WIPER", "مساحات")}
+
+
+static func _load() -> void:
+	if _loaded:
+		return
+	_loaded = true
+	var cf := ConfigFile.new()
+	if cf.load(SAVE) != OK:
+		return
+	intro_seen = bool(cf.get_value("meta", "intro_seen", false))
+	for id in ORDER:
+		if cf.has_section(id):
+			_data[id] = {"fx": float(cf.get_value(id, "fx", 0.5)), "fy": float(cf.get_value(id, "fy", 0.5)),
+				"sc": float(cf.get_value(id, "sc", 1.0)), "rot": float(cf.get_value(id, "rot", 0.0))}
+
+
+static func save() -> void:
+	var cf := ConfigFile.new()
+	cf.set_value("meta", "intro_seen", intro_seen)
+	for id in _data:
+		var e: Dictionary = _data[id]
+		for k in e:
+			cf.set_value(id, k, e[k])
+	cf.save(SAVE)
+
+
+static func mark_intro() -> void:
+	_load()
+	intro_seen = true
+	save()
+
+
+static func is_intro_seen() -> bool:
+	_load()
+	return intro_seen
+
+
+static func has_saved(id: String) -> bool:
+	_load()
+	return _data.has(id)
+
+
+static func entry(id: String) -> Dictionary:
+	_load()
+	if _data.has(id):
+		return (_data[id] as Dictionary).duplicate()
+	var d: Dictionary = DEFAULTS[id]
+	return {"fx": d["fx"], "fy": d["fy"], "sc": 1.0, "rot": 0.0}
+
+
+static func set_entry(id: String, e: Dictionary) -> void:
+	_load()
+	e["fx"] = clampf(float(e["fx"]), 0.03, 0.97)
+	e["fy"] = clampf(float(e["fy"]), 0.06, 0.94)
+	e["sc"] = clampf(float(e["sc"]), SC_MIN, SC_MAX)
+	e["rot"] = wrapf(float(e["rot"]), -180.0, 180.0)
+	_data[id] = e
+	save()
+
+
+static func reset(id := "") -> void:
+	_load()
+	if id == "":
+		_data.clear()
+	else:
+		_data.erase(id)
+	save()
+
+
+## put a Control where the layout says (anchored at the saved screen fraction, scaled and rotated around its centre)
+static func place(c: Control, id: String) -> void:
+	var e := entry(id)
+	var d: Dictionary = DEFAULTS[id]
+	var w: float = d["w"]
+	var h: float = d["h"]
+	c.anchor_left = e["fx"]
+	c.anchor_right = e["fx"]
+	c.anchor_top = e["fy"]
+	c.anchor_bottom = e["fy"]
+	c.offset_left = -w * 0.5
+	c.offset_right = w * 0.5
+	c.offset_top = -h * 0.5
+	c.offset_bottom = h * 0.5
+	c.pivot_offset = Vector2(w * 0.5, h * 0.5)
+	c.scale = Vector2(e["sc"], e["sc"])
+	c.rotation = deg_to_rad(float(e["rot"]))
+
+
+## race HUD: move only the buttons the player customised
+static func apply_world(zones: Dictionary) -> void:
+	_load()
+	for id in ORDER:
+		if zones.has(id) and _data.has(id):
+			place(zones[id] as Control, id)
