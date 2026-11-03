@@ -53,6 +53,7 @@ func _ready() -> void:
 	_build_podium()
 	_build_cars()
 	_build_crowd()
+	_build_spectators()
 	_build_camera_keys()
 	_build_events()
 	_build_overlay()
@@ -333,6 +334,32 @@ func _build_crowd() -> void:
 	_crowd = mi
 
 
+## real skeletal animation: a few rigged spectators around the podium (Dance / Idle_Talking from the Universal Animation Library)
+var _spectators: Array[RiggedActor] = []
+
+
+func _build_spectators() -> void:
+	if not RiggedActor.available():
+		return
+	var spots := [Vector3(-6.2, 0, 2.4), Vector3(-7.6, 0, 0.2), Vector3(-9.0, 0, 3.0), Vector3(-10.4, 0, 1.0), Vector3(-8.2, 0, -1.8),
+		Vector3(6.2, 0, 2.4), Vector3(7.6, 0, 0.2), Vector3(9.0, 0, 3.0), Vector3(10.4, 0, 1.0), Vector3(8.2, 0, -1.8)]
+	var n := 10 if Gfx.fx >= 0.8 else (6 if Gfx.fx >= 0.5 else 3)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	for i in n:
+		var a := RiggedActor.new()
+		var c := Color.from_hsv(rng.randf(), 0.55, rng.randf_range(0.55, 0.9))
+		if not a.setup(c, c.darkened(0.45)):
+			a.queue_free()
+			return
+		var p: Vector3 = spots[(i % 2) * 5 + i / 2]
+		a.position = p
+		a.rotation.y = atan2(-p.x, -p.z)             # face the podium
+		add_child(a)
+		a.play("Dance" if i % 3 != 2 else "Idle_Talking", rng.randf_range(0.9, 1.15), rng.randf())
+		_spectators.append(a)
+
+
 # ---------------------------------------------------------------- timeline
 
 var _t_third := 0.0
@@ -399,6 +426,9 @@ func _rise(r: int) -> void:
 
 
 func _award(r: int) -> void:
+	if r == 0:
+		for a in _spectators:                         # the winner is announced: everybody dances
+			a.play("Dance", randf_range(1.0, 1.3), randf(), 0.4)
 	var b: Dictionary = _blocks[r]
 	var avs: Array = b["avatars"]
 	for i in avs.size():
