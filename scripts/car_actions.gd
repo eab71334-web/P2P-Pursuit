@@ -93,6 +93,8 @@ var _fan_snd: AudioStreamPlayer3D
 var _flash_spots: Array = []
 var _flash_t := 0.0
 var _greet_opened := false
+var rain := 0.0                  # how wet the weather keeps the windshield (0 dry .. 1 storm); the wipers clear it
+var _wet := 0.0
 
 
 func setup(p_car: Car) -> void:
@@ -737,6 +739,7 @@ func _tick_wipers(delta: float) -> void:
 		var ph := int(_wp_t / cyc)
 		if ph != _wp_phase:
 			_wp_phase = ph
+			_wet = maxf(_wet - 0.6, 0.0)                         # every sweep wipes the droplets away
 			if wipers_on:
 				Sfx.play3d("wiper", car, -12.0, randf_range(0.95, 1.05))
 		if not wipers_on and u > 0.97:                          # finish the sweep, then park
@@ -874,6 +877,9 @@ func _set_hb(on: bool, emit := true) -> void:
 
 
 func _tick_extras(delta: float) -> void:
+	if car.has_meta("rain_mat"):
+		_wet = move_toward(_wet, rain, delta * 0.08)
+		(car.get_meta("rain_mat") as ShaderMaterial).set_shader_parameter("wet", _wet)
 	if _panes.is_empty() and car.has_meta("panes"):
 		_panes = car.get_meta("panes")
 		_pane_v.resize(_panes.size())

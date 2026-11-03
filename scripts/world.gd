@@ -2111,6 +2111,8 @@ func _build_teams() -> void:
 		if (Net.blind and not solo) or weather in ["night", "storm"]:
 			car.add_lights()
 		ts.car = car
+		if car.actions != null and weather in ["rain", "storm"]:
+			car.actions.rain = 0.95 if weather == "storm" else 0.6
 		if t == my_team and not Net.dedicated:
 			car.enable_mirrors(my_role)
 			car.bind_radio()
@@ -2227,6 +2229,12 @@ func _build_hud() -> void:
 	flash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud_root.add_child(flash_rect)
 
+	speed_fx = ColorRect.new()                       # streaks at the screen edges at high speed (FxShaders.speed_lines)
+	speed_fx.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	speed_fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	speed_fx.material = FxShaders.speed_lines()
+	speed_fx.visible = Gfx.fx >= 0.5
+	hud_root.add_child(speed_fx)
 	timer_label = _full_label(8, 56, 46)
 	medal_label = _full_label(62, 34, 24)
 	gesture_label = _full_label(100, 50, 34)
@@ -2370,6 +2378,7 @@ func _my_actions() -> CarActions:
 
 
 var cab_toast: Label
+var speed_fx: ColorRect
 
 
 ## cabin button block has two pages: 1 = everyday, 2 = the extras (hazard, high beam, handbrake, windows, fan, cabin light, greet)
@@ -2667,6 +2676,8 @@ func _update_hud() -> void:
 	var spd := my.car.speed_kmh if multiplayer.is_server() else my.speed
 	speed_label.text = "%d km/h" % int(spd)
 	if state == State.RUNNING:
+		if speed_fx != null and speed_fx.visible:
+			(speed_fx.material as ShaderMaterial).set_shader_parameter("amount", smoothstep(130.0, 210.0, spd))
 		Score.drive(spd, my.car != null and is_instance_valid(my.car) and my.car.damage >= 80.0)
 	var shown := false
 	for m in MEDALS:

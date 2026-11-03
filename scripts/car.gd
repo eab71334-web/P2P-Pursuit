@@ -568,7 +568,27 @@ func _vol(db: float, on: bool) -> float:
 	return db if on else -60.0
 
 
+var _heat := 0.0
+
+
+## brake discs glow after hard braking at speed and cool down slowly
+func _tick_discs(delta: float) -> void:
+	var hot := 0.0
+	if brake_in > 0.3 and speed_kmh > 70.0:
+		hot = clampf((speed_kmh - 60.0) / 110.0, 0.0, 1.0)
+	_heat = move_toward(_heat, hot, delta * (0.55 if hot > _heat else 0.18))
+	for w in wheel_list:
+		var m = w.get_meta("disc", null)
+		if m != null:
+			(m as StandardMaterial3D).emission_energy_multiplier = _heat * 4.5
+	for h in _holders:
+		var m2 = h.get_meta("disc", null)
+		if m2 != null:
+			(m2 as StandardMaterial3D).emission_energy_multiplier = _heat * 4.5
+
+
 func _process(delta: float) -> void:
+	_tick_discs(delta)
 	if _flag_mat != null:
 		# the flag hangs at a standstill and streams out straight behind the car with speed
 		_flag_mat.set_shader_parameter("wind", clampf(maxf(speed_kmh, 18.0 if preview else 0.0) / 75.0, 0.0, 1.0))

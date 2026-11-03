@@ -82,6 +82,9 @@ static func make_wheel(parent: Node, rim_col: Color, model: String, style := "")
 	var dark := mat(Color(0.06, 0.06, 0.08), 0.0, 0.8)
 	cyl(gear, rim_r * 0.82, width + 0.025, Vector3.ZERO, dark)
 	_wheel_face(gear, style, rim_r, width, rim_m, dark)
+	var disc_m := FxShaders.disc_material()                  # brake disc seen through the spokes; glows after hard braking
+	cyl(gear, rim_r * 0.9, width * 0.5, Vector3.ZERO, disc_m)
+	parent.set_meta("disc", disc_m)
 	if model == "pickup" or model == "buggy":    # chunky tread blocks
 		for k in 10:
 			var a := TAU * k / 10.0
@@ -233,7 +236,9 @@ static func decorate(car: Node3D, model: String, lo: Dictionary, body_mat: Stand
 	var rtr := Vector3(hwt, rt, zr1)
 	var solid := mat(body_mat.albedo_color, body_mat.metallic, body_mat.roughness)
 	var panes: Array = []
-	quad(car, [fbl, fbr, ftr, ftl], glass, Vector3(0, 0.6, -0.8), false, 1.0, 0.0)
+	var rain := FxShaders.rain_glass()                       # windshield: droplets (CarActions wipes them)
+	car.set_meta("rain_mat", rain)
+	quad(car, [fbl, fbr, ftr, ftl], rain, Vector3(0, 0.6, -0.8), false, 1.0, 0.0)
 	quad(car, [rbr, rbl, rtl, rtr], glass, Vector3(0, 0.6, 0.8), false, 1.0, 0.0)
 	quad(car, [ftl, ftr, rtr, rtl], solid, Vector3.UP, true)
 	for sx in [-1.0, 1.0]:
