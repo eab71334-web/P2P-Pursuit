@@ -56,6 +56,8 @@ var _rig_ik := {}
 var _rig_tg := {}
 var _rig_on := false
 var _rig_head := Vector3(0, 0.8, 0.05)
+var _scarf: Cloth
+var _scarf_anchor: Node3D
 var _look: Node3D           # hat / glasses / face (hidden for the local player)
 var _bx: Node3D             # legs / shoes / shirt details (hidden for the local player)
 var _arm_up: Array = []
@@ -183,6 +185,23 @@ func _build_rig() -> void:
 		ik.target_node = ik.get_path_to(tg)
 		_rig_ik[sd] = ik
 	_rig.visible = false
+	# racing scarf: real-time cloth pinned at the back of the neck, streams back with the car's speed
+	_scarf_anchor = Node3D.new()
+	_scarf_anchor.position = _rig_head + Vector3(0, -0.2, 0.1)
+	add_child(_scarf_anchor)
+	_scarf = Cloth.new()
+	_scarf.anchor = _scarf_anchor
+	_scarf.color = shirt_color.lightened(0.35)
+	_scarf.width = 0.2
+	_scarf.length = 0.75
+	_scarf.visible = false
+	_scarf.process_mode = Node.PROCESS_MODE_DISABLED
+	add_child(_scarf)
+	for cd in [[Vector3(0, 0.15, 0.12), 0.27], [Vector3(0, 0.45, 0.08), 0.24]]:
+		var cn := Node3D.new()
+		cn.position = cd[0]
+		add_child(cn)
+		_scarf.colliders.append([cn, cd[1]])
 
 
 ## the pro body is used while seated in the car; box body for podium / outside / blast / emotes
@@ -191,6 +210,11 @@ func _rig_update() -> void:
 	if want != _rig_on:
 		_rig_on = want
 		_rig.visible = want
+		if _scarf:
+			_scarf.visible = want
+			_scarf.process_mode = Node.PROCESS_MODE_INHERIT if want else Node.PROCESS_MODE_DISABLED
+			if want:
+				_scarf._first = true
 		for sd in ["L", "R"]:
 			var ik := _rig_ik[sd] as SkeletonIK3D
 			if want:
@@ -218,6 +242,9 @@ func _rig_update() -> void:
 		_head.scale = Vector3.ONE * (0.62 if want else 1.0)
 		_head.position = _rig_head if want else Vector3(0, 0.8, 0.05)
 	if _rig_on:
+		var car := get_parent() as RigidBody3D
+		if car and _scarf:
+			_scarf.wind = -car.linear_velocity * 0.35 + Vector3(0, 0.3, 0)
 		for sd in ["L", "R"]:
 			(_rig_tg[sd] as Marker3D).position = _cur[sd] as Vector3
 
