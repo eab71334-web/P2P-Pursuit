@@ -13,6 +13,9 @@ var _multi_btn: Button
 var _touch_seen := false
 var _ptrs := {}                 # finger index -> {id, pos, grab}
 var _pinch := {}
+var _layer: Control
+var _picker: Control
+var _picker_box: VBoxContainer
 var _info: Label
 var _slot_bar: HBoxContainer
 var _slot_scroll: ScrollContainer
@@ -31,23 +34,11 @@ func _ready() -> void:
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(dim)
 	_grid_lines()
-	# phone-screen frame so the player sees where the real screen ends
-	var nm := HudLayout.names()
-	for id in HudLayout.ORDER:
-		var p := Panel.new()
-		p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var l := Label.new()
-		l.text = nm[id]
-		l.set_anchors_preset(Control.PRESET_FULL_RECT)
-		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		l.add_theme_font_size_override("font_size", 24 if id == "gas" or id == "brake" else 20)
-		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		p.add_child(l)
-		add_child(p)
-		_mock[id] = p
-		HudLayout.place(p, id)
-	_style_all()
+	_layer = Control.new()                         # the mock buttons live here, under the bars and dialogs
+	_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_layer)
+	_build_mocks()
 	# ---- top strip: exit | title | layouts | save | delete | done
 	var top := PanelContainer.new()
 	var tsb := StyleBoxFlat.new()
@@ -65,8 +56,7 @@ func _ready() -> void:
 	row.add_theme_constant_override("separation", 10)
 	top.add_child(row)
 	_tbtn(row, UI.tx("Exit", "خروج"), Color(0.42, 0.16, 0.16), _exit, 18, 92)
-	var title := UI.lbl(row, UI.tx("Buttons", "الأزرار"), 22, UI.ACCENT, false)
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tbtn(row, UI.tx("+ / -  Buttons", "إضافة / حذف أزرار"), Color(0.16, 0.34, 0.56), _open_picker, 18, 170)
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(sp)
@@ -133,6 +123,124 @@ func _ready() -> void:
 	_tbtn(pr, UI.tx("Reset all", "إعادة الكل"), UI.CARD2, _reset_all, 17, 100)
 	_build_slots()
 	_sel_text()
+
+
+func _build_mocks() -> void:
+	for id in _mock:
+		(_mock[id] as Control).queue_free()
+	_mock.clear()
+	var nm := HudLayout.names()
+	for id in HudLayout.ORDER:
+		if not HudLayout.is_on_screen(id):
+			_selset.erase(id)
+			continue
+		var p := Panel.new()
+		p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var l := Label.new()
+		l.text = nm[id]
+		l.set_anchors_preset(Control.PRESET_FULL_RECT)
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		l.add_theme_font_size_override("font_size", 24 if id == "gas" or id == "brake" else (17 if nm[id].length() > 9 else 20))
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		p.add_child(l)
+		_layer.add_child(p)
+		_mock[id] = p
+		HudLayout.place(p, id)
+	_style_all()
+	_sel_text()
+
+
+## "+ / -" dialog: every button of the game, tap to put it on the screen or take it off
+func _open_picker() -> void:
+	if _picker != null and is_instance_valid(_picker):
+		return
+	_picker = Control.new()
+	_picker.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_picker.z_index = 20
+	add_child(_picker)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.6)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_picker.add_child(dim)
+	var cc := CenterContainer.new()
+	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_picker.add_child(cc)
+	var card := PanelContainer.new()
+	var csb := StyleBoxFlat.new()
+	csb.bg_color = Color(0.07, 0.08, 0.115)
+	csb.set_corner_radius_all(20)
+	csb.border_color = UI.ACCENT
+	csb.set_border_width_all(3)
+	csb.content_margin_left = 22
+	csb.content_margin_right = 22
+	csb.content_margin_top = 16
+	csb.content_margin_bottom = 16
+	card.add_theme_stylebox_override("panel", csb)
+	cc.add_child(card)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	card.add_child(v)
+	var hd := UI.lbl(v, UI.tx("Add / remove buttons", "إضافة وحذف الأزرار"), 28, UI.ACCENT, false)
+	hd.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var sub := UI.lbl(v, UI.tx("Tap a button to put it on your screen (green) or take it off. Buttons you take off stay in the MORE page, except the basic ones which are hidden.",
+		"اضغط على زر لوضعه على شاشتك (أخضر) أو إزالته. الأزرار الإضافية المزالة ترجع لصفحة «المزيد»، والأساسية تختفي."), 15, UI.TXT2, true)
+	sub.custom_minimum_size = Vector2(700, 0)
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_picker_box = VBoxContainer.new()
+	_picker_box.add_theme_constant_override("separation", 8)
+	var sc := ScrollContainer.new()
+	sc.custom_minimum_size = Vector2(720, 300)
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sc.add_child(_picker_box)
+	_picker_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_child(sc)
+	_picker_fill()
+	var h := HBoxContainer.new()
+	h.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_child(h)
+	_tbtn(h, UI.tx("Close", "إغلاق"), UI.ACCENT, func():
+		_picker.queue_free()
+		_picker = null, 22, 160)
+
+
+func _picker_fill() -> void:
+	for c in _picker_box.get_children():
+		_picker_box.remove_child(c)
+		c.queue_free()
+	var nm := HudLayout.names()
+	for sec in [[UI.tx("Driving", "السواقة"), HudLayout.ESSENTIAL], [UI.tx("Cabin extras", "إضافات الكابينة"), HudLayout.EXTRA]]:
+		var l := UI.lbl(_picker_box, sec[0], 17, UI.TXT2, false)
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var g := GridContainer.new()
+		g.columns = 3
+		g.add_theme_constant_override("h_separation", 8)
+		g.add_theme_constant_override("v_separation", 8)
+		_picker_box.add_child(g)
+		for id in sec[1]:
+			var on := HudLayout.is_on_screen(id)
+			var locked: bool = HudLayout.LOCKED.has(id)
+			var b := Button.new()
+			b.custom_minimum_size = Vector2(228, 58)
+			b.text = ("✓  " if on else "+  ") + nm[id] + ("   🔒" if locked else "")
+			b.add_theme_font_size_override("font_size", 18)
+			var col := Color(0.14, 0.38, 0.22) if on else Color(0.13, 0.14, 0.19)
+			for st in ["normal", "hover", "pressed", "focus", "disabled"]:
+				b.add_theme_stylebox_override(st, UI.sb(col, 14, Color(0.4, 0.85, 0.55, 0.8) if on else Color(1, 1, 1, 0.12), 2))
+			b.add_theme_color_override("font_color", UI.TXT if on else UI.TXT2)
+			b.add_theme_color_override("font_disabled_color", UI.TXT)
+			b.disabled = locked
+			var bid: String = id
+			b.pressed.connect(func():
+				if HudLayout.is_on_screen(bid):
+					HudLayout.remove_button(bid)
+					_say(UI.tx("%s removed" % HudLayout.names()[bid], "تم حذف %s" % HudLayout.names()[bid]))
+				else:
+					HudLayout.add_button(bid)
+					_say(UI.tx("%s added - drag it where you want" % HudLayout.names()[bid], "تمت إضافة %s - اسحبه للمكان اللي تبيه" % HudLayout.names()[bid]))
+				_build_mocks()
+				_picker_fill())
+			g.add_child(b)
 
 
 func _tbtn(parent: Node, text: String, col: Color, cb: Callable, fs: int, w: float) -> Button:
@@ -229,11 +337,8 @@ func _build_slots() -> void:
 
 
 func _refresh() -> void:
-	for id in _mock:
-		HudLayout.place(_mock[id], id)
-	_style_all()
+	_build_mocks()
 	_build_slots()
-	_sel_text()
 
 
 func _say(t: String) -> void:
@@ -254,6 +359,8 @@ func _style_all() -> void:
 func _hit(pos: Vector2) -> String:
 	for i in range(HudLayout.ORDER.size() - 1, -1, -1):
 		var id: String = HudLayout.ORDER[i]
+		if not _mock.has(id):
+			continue
 		var c: Control = _mock[id]
 		var l := c.get_global_transform().affine_inverse() * pos
 		if Rect2(Vector2.ZERO, c.size).has_point(l):
@@ -396,8 +503,7 @@ func _reset_one() -> void:
 
 func _reset_all() -> void:
 	HudLayout.reset()
-	for id in _mock:
-		HudLayout.place(_mock[id], id)
+	_build_mocks()
 
 
 func _toggle_multi() -> void:

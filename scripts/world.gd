@@ -1419,7 +1419,7 @@ func _touch_press(index: int, pos: Vector2) -> void:
 		wheel_last = (pos - _wheel_rect().get_center()).angle()
 		return
 	for zn in zones:
-		if (zones[zn] as Control).visible and _zone_has(zones[zn] as Control, pos):
+		if (zones[zn] as Control).visible and not HudLayout.is_removed(str(zn)) and _zone_has(zones[zn] as Control, pos):
 			zone_touch[index] = zn
 			if tap_zones.has(zn):
 				(tap_zones[zn] as Callable).call()
@@ -1444,13 +1444,14 @@ func _open_hud_editor() -> void:
 	_hud_editor = ed
 	ed.closed.connect(func():
 		_hud_editor = null
-		HudLayout.apply_world(zones))
+		HudLayout.apply_world(zones)
+		_cab_page(1))
 	hud_root.add_child(ed)
 
 
 func _click_zone(pos: Vector2) -> void:
 	for zn in zones:
-		if (zones[zn] as Control).visible and _zone_has(zones[zn] as Control, pos) and tap_zones.has(zn):
+		if (zones[zn] as Control).visible and not HudLayout.is_removed(str(zn)) and _zone_has(zones[zn] as Control, pos) and tap_zones.has(zn):
 			(tap_zones[zn] as Callable).call()
 			return
 
@@ -2373,6 +2374,12 @@ var cab_toast: Label
 func _cab_page(n: int) -> void:
 	for zn in zones:
 		var z := str(zn)
+		if HudLayout.is_removed(z):
+			(zones[zn] as Control).visible = false
+			continue
+		if HudLayout.is_added(z):                 # the player put this one on the screen: always there, in his spot
+			(zones[zn] as Control).visible = true
+			continue
 		if z.begins_with("p2_") or z == "c_kind":
 			(zones[zn] as Control).visible = n == 2
 		elif z.begins_with("c_") and z != "c_kind":
