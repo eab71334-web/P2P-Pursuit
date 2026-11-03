@@ -10,6 +10,7 @@ const ANIMS_LOOP := ["Dance", "Idle", "Idle_Talking", "Walk", "Walk_Formal", "Jo
 
 var player: AnimationPlayer
 var _root: Node
+var _mats: Array = []     # [material, is_joint]
 
 
 static func available() -> bool:
@@ -34,6 +35,7 @@ func setup(main: Color, joint: Color) -> bool:
 			mat.emission_enabled = true
 			mat.emission = mat.albedo_color * 0.35
 			m.set_surface_override_material(s, mat)
+			_mats.append([mat, nm.contains("Joint")])
 	return player != null
 
 
@@ -47,3 +49,10 @@ func play(anim: String, speed := 1.0, offset := 0.0, blend := 0.3) -> void:
 	player.speed_scale = speed
 	if offset > 0.0:
 		player.seek(offset * a.length, true)
+
+
+func recolor(main: Color, joint: Color) -> void:
+	for e in _mats:
+		var m := e[0] as StandardMaterial3D
+		m.albedo_color = joint if e[1] else main
+		m.emission = m.albedo_color * 0.35

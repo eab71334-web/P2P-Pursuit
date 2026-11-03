@@ -49,6 +49,13 @@ var blast_t := -1.0         # >= 0 : thrown by an explosion
 var blast_vel := Vector3.ZERO
 var blast_ground := 0.0
 var _legs: Array = []
+# "pro body": a skinned human mannequin (Quaternius UAL, CC0) sits in the seat, hands follow the same targets as the box arms (IK)
+var _rig: RiggedActor
+var _rig_sk: Skeleton3D
+var _rig_ik := {}
+var _rig_tg := {}
+var _rig_on := false
+var _rig_head := Vector3(0, 0.8, 0.05)
 var _look: Node3D           # hat / glasses / face (hidden for the local player)
 var _bx: Node3D             # legs / shoes / shirt details (hidden for the local player)
 var _arm_up: Array = []
@@ -120,6 +127,8 @@ func _ready() -> void:
 	if role == "navigator":
 		_build_clipboard()
 	_build_look()
+	if not is_local:
+		_build_rig()
 	if is_local:
 		_torso.visible = false
 		_helmet.visible = false
@@ -138,6 +147,79 @@ func _ready() -> void:
 		_head.add_child(cam)
 		cam.position = Vector3(0, 0, -0.12)
 		cam.current = true
+
+
+func _build_rig() -> void:
+	if not RiggedActor.available():
+		return
+	_rig = RiggedActor.new()
+	var sk: Dictionary = Catalog.SKINS[_o("skin")]
+	if not _rig.setup(shirt_color, sk["c"]):
+		_rig.queue_free()
+		_rig = null
+		return
+	_rig.rotation.y = PI
+	_rig.position = Vector3(0, -0.56, -0.19)
+	add_child(_rig)
+	_rig.play("Driving", 1.0, 0.25)
+	_rig.player.seek(0.5, true)
+	_rig.player.pause()
+	_rig_sk = _rig.find_child("Skeleton3D", true, false) as Skeleton3D
+	var hb := _rig_sk.find_bone("Head")
+	_rig_head = to_local(_rig_sk.global_transform * _rig_sk.get_bone_global_pose(hb).origin) + Vector3(0, 0.1, 0)
+	for sd in ["L", "R"]:
+		var suf: String = sd.to_lower()
+		var tg := Marker3D.new()
+		add_child(tg)
+		_rig_tg[sd] = tg
+		var ik := SkeletonIK3D.new()
+		ik.root_bone = "upperarm_" + suf
+		ik.tip_bone = "hand_" + suf
+		ik.override_tip_basis = false
+		ik.use_magnet = true
+		ik.magnet = Vector3(-0.6 if sd == "L" else 0.6, -1.0, 0.6)
+		ik.interpolation = 1.0
+		_rig_sk.add_child(ik)
+		ik.target_node = ik.get_path_to(tg)
+		_rig_ik[sd] = ik
+	_rig.visible = false
+
+
+## the pro body is used while seated in the car; box body for podium / outside / blast / emotes
+func _rig_update() -> void:
+	var want := _rig != null and not (outside or standing or blast_t >= 0.0 or podium_kind != "" or emote != "")
+	if want != _rig_on:
+		_rig_on = want
+		_rig.visible = want
+		for sd in ["L", "R"]:
+			var ik := _rig_ik[sd] as SkeletonIK3D
+			if want:
+				ik.start()
+			else:
+				ik.stop()
+			for k in ["up", "fore", "hand"]:
+				(_limbs[sd][k] as MeshInstance3D).visible = not want
+		_torso.visible = not want
+		_bx.visible = not want
+		var hat := _o("hat")
+		_helmet.visible = (not want) or hat == "helmet"
+		_visor.visible = _helmet.visible and hat == "helmet"
+		if want:
+			var sm := SphereMesh.new()
+			sm.radius = 0.2
+			sm.height = 0.42
+			_helmet.mesh = sm
+			_helmet.position.y = 0.02
+		else:
+			var bm := BoxMesh.new()
+			bm.size = Vector3(0.36, 0.36, 0.36)
+			_helmet.mesh = bm
+			_helmet.position.y = 0.0
+		_head.scale = Vector3.ONE * (0.62 if want else 1.0)
+		_head.position = _rig_head if want else Vector3(0, 0.8, 0.05)
+	if _rig_on:
+		for sd in ["L", "R"]:
+			(_rig_tg[sd] as Marker3D).position = _cur[sd] as Vector3
 
 
 func _o(slot: String) -> String:
@@ -173,6 +255,8 @@ func _build_look() -> void:
 		(lm["fore"].material_override as StandardMaterial3D).albedo_color = skin
 		(lm["hand"].material_override as StandardMaterial3D).albedo_color = skin.darkened(0.08)
 	(_finger.material_override as StandardMaterial3D).albedo_color = skin
+	if _rig:
+		_rig.recolor(sc, skin)
 	# shirt details
 	if shirt.has("stripe"):
 		var sm := Color(shirt["stripe"])
@@ -195,7 +279,7 @@ func _build_look() -> void:
 			_box(hip, Vector3(0.2, 0.12, 0.2), Vector3(0, -0.15, 0), Color(pants["stripe"]))
 		_legs.append({"hip": hip, "knee": knee})
 	# face for everything except the visor helmet
-	if hat != "helmet":
+	if hat != "helmet" and _rig == null:
 		for ex in [-0.08, 0.08]:
 			_box(_look, Vector3(0.05, 0.07, 0.02), Vector3(ex, 0.03, -0.182), Color(0.05, 0.05, 0.08))
 		_box(_look, Vector3(0.1, 0.02, 0.02), Vector3(0, -0.08, -0.182), Color(0.45, 0.12, 0.12))
@@ -567,6 +651,8 @@ func _process(delta: float) -> void:
 	_cur["R"] = (_cur["R"] as Vector3).lerp(dr, clampf(delta * k, 0.0, 1.0))
 	_solve("L")
 	var elbow_r := _solve("R")
+	if _rig:
+		_rig_update()
 	# pointing finger / stop palm on the right hand
 	var h: Vector3 = _limbs["R"]["hand"].position
 	var dir := (h - elbow_r).normalized()
