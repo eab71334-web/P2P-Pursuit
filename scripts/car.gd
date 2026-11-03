@@ -71,6 +71,7 @@ var _hood_ang := 0.0
 var _cover_ang := 0.0
 var _lever_ang := 0.0
 var _prev_vel := Vector3.ZERO
+var _debris_cd := 0.0
 var _last_pos := Vector3.ZERO
 var _vel_est := Vector3.ZERO
 var _wheel_pivot: Node3D
@@ -496,6 +497,13 @@ func _physics_process(delta: float) -> void:
 	var dv := (_prev_vel - linear_velocity).length()
 	if dv > 3.5:
 		impact_acc = maxf(impact_acc, dv)
+	if dv > 7.0 and not preview and _debris_cd <= 0.0:       # hard crash: panel shards fly off (Voronoi fracture, see Debris)
+		_debris_cd = 0.6
+		Score.crash()
+		var w := get_parent()
+		if w != null:
+			Debris.burst(w, global_position + Vector3(0, 0.9, 0), body_color.darkened(0.15), clampf(dv / 12.0, 0.6, 1.6), (_prev_vel - linear_velocity).normalized(), 6)
+	_debris_cd = maxf(_debris_cd - delta, 0.0)
 	_prev_vel = linear_velocity
 
 
@@ -743,13 +751,11 @@ func explode_fx() -> void:
 	var tl := fl.create_tween()
 	tl.tween_property(fl, "light_energy", 0.0, 0.9)
 	tl.tween_callback(fl.queue_free)
-	# flying debris: hood, doors, bumpers, wheels
+	# flying debris: body shards (Voronoi fracture) + wheels
+	Debris.burst(world, global_position + Vector3(0, 1.0, 0), body_color.darkened(0.35), 2.0, Vector3.UP, 14)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7 + team
-	var parts := [[Vector3(1.7, 0.1, 1.0), body_color], [Vector3(0.1, 0.5, 1.8), body_color], [Vector3(0.1, 0.5, 1.8), body_color],
-		[Vector3(1.8, 0.3, 0.2), DARK], [Vector3(0.5, 0.8, 0.8), Color(0.05, 0.05, 0.06)], [Vector3(0.5, 0.8, 0.8), Color(0.05, 0.05, 0.06)],
-		[Vector3(0.9, 0.2, 0.9), Color(0.15, 0.15, 0.18)], [Vector3(0.4, 0.4, 0.4), Color(1.0, 0.5, 0.1)]]
-	for pd in parts:
+	for pd in [[Vector3(0.5, 0.8, 0.8), Color(0.05, 0.05, 0.06)], [Vector3(0.5, 0.8, 0.8), Color(0.05, 0.05, 0.06)], [Vector3(0.9, 0.2, 0.9), Color(0.15, 0.15, 0.18)]]:
 		var rb := RigidBody3D.new()
 		rb.collision_layer = 2
 		rb.collision_mask = 1

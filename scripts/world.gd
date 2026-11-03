@@ -302,6 +302,7 @@ func begin_countdown() -> void:
 @rpc("authority", "call_local", "reliable")
 func race_started() -> void:
 	Gfx.racing = true
+	Score.start()
 	state = State.RUNNING
 	race_time = 0.0
 
@@ -329,6 +330,7 @@ func team_dnf(team: int) -> void:
 @rpc("authority", "call_local", "reliable")
 func all_done(order: Array, pcts: Array) -> void:
 	Gfx.racing = false
+	Score.stop()
 	state = State.ENDED
 	Net.race_over = true
 	final_order = order
@@ -2664,6 +2666,8 @@ func _update_hud() -> void:
 	timer_label.text = _fmt(shown_time)
 	var spd := my.car.speed_kmh if multiplayer.is_server() else my.speed
 	speed_label.text = "%d km/h" % int(spd)
+	if state == State.RUNNING:
+		Score.drive(spd, my.car != null and is_instance_valid(my.car) and my.car.damage >= 80.0)
 	var shown := false
 	for m in MEDALS:
 		if shown_time <= m[1]:
@@ -2742,6 +2746,7 @@ func _refresh_result() -> void:
 
 
 func _show_result(place: int, t: float) -> void:
+	Score.finish(place == 1)
 	var medal := L.t("no_medal")
 	var mi := -1
 	for i in MEDALS.size():

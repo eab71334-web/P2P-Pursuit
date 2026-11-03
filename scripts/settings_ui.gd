@@ -88,6 +88,9 @@ func _build() -> void:
 	var vo := [[0.0, UI.tx("Mute", "صامت")], [0.4, "40%"], [0.7, "70%"], [1.0, "100%"]]
 	_row(UI.tx("Master volume", "مستوى الصوت العام"), "", _seg(vo, _near(Gfx.vol_master, [0.0, 0.4, 0.7, 1.0]), func(v): Gfx.vol_master = v; Gfx.apply(); Gfx.save(); _rebuild()))
 	_row(UI.tx("Radio volume", "مستوى الراديو"), "", _seg(vo, _near(Gfx.vol_radio, [0.0, 0.4, 0.7, 1.0]), func(v): Gfx.vol_radio = v; Gfx.apply(); Gfx.save(); _rebuild()))
+	_row(UI.tx("Race music", "موسيقى السباق"), UI.tx("Radio = the in-car stations. Interactive = a score that gets more intense with your speed and reacts to crashes and the finish.", "راديو = محطات السيارة. تفاعلية = موسيقى تشتد مع سرعتك وتتفاعل مع الاصطدام والنهاية."),
+		_seg([["radio", UI.tx("Radio", "راديو")], ["score", UI.tx("Interactive", "تفاعلية")], ["off", UI.tx("Off", "إيقاف")]], Score.mode, func(v): Score.set_mode(v); _rebuild()))
+	_row(UI.tx("Interactive music volume", "مستوى الموسيقى التفاعلية"), "", _seg(vo, _near(Score.vol, [0.0, 0.4, 0.7, 1.0]), func(v): Score.set_vol(v); _rebuild()))
 	_row(UI.tx("Vibration", "الاهتزاز"), "",
 		_seg([[true, UI.tx("On", "تشغيل")], [false, UI.tx("Off", "إيقاف")]], Gfx.haptics, func(v): Gfx.haptics = v; Gfx.save(); _rebuild()))
 	if weak:

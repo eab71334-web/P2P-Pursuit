@@ -102,7 +102,7 @@ func _step(d: int) -> void:
 
 
 func _play(with_static: bool) -> void:
-	if not in_race or not on:
+	if not in_race or not on or Score.owns_music() or Score.mode == "off":
 		return
 	var id: String = STATIONS[idx]["id"]
 	var st: AudioStreamWAV
@@ -128,6 +128,17 @@ func _play(with_static: bool) -> void:
 		tw.tween_method(func(db): _player.volume_db = db, -40.0, _target_db(), 0.4)
 	else:
 		_player.play(randf() * 8.0)
+
+
+## the player changed "Race music": start / stop the radio accordingly
+func refresh() -> void:
+	if in_race and on and not Score.owns_music() and Score.mode != "off":
+		if _player and not _player.playing:
+			_play(false)
+	elif _player:
+		_player.stop()
+		if _tune:
+			_tune.stop()
 
 
 func _target_db() -> float:
