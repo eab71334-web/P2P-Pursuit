@@ -156,7 +156,7 @@ func _build_rig() -> void:
 		return
 	_rig = RiggedActor.new()
 	var sk: Dictionary = Catalog.SKINS[_o("skin")]
-	if not _rig.setup(shirt_color, sk["c"]):
+	if not _rig.setup_human(str(outfit.get("body", "m")) == "f", sk["c"]):
 		_rig.queue_free()
 		_rig = null
 		return

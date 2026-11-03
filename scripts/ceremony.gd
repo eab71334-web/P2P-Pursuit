@@ -349,9 +349,11 @@ func _build_spectators() -> void:
 	for i in n:
 		var a := RiggedActor.new()
 		var c := Color.from_hsv(rng.randf(), 0.55, rng.randf_range(0.55, 0.9))
-		if not a.setup(c, c.darkened(0.45)):
+		var sk: Color = Catalog.SKINS.values()[rng.randi() % Catalog.SKINS.size()]["c"]
+		if not a.setup_human(i % 2 == 1, sk):
 			a.queue_free()
 			return
+		a.dress(c, Color.from_hsv(rng.randf(), 0.4, 0.35), Color(0.95, 0.95, 0.97), sk, rng.randf() < 0.5)
 		var p: Vector3 = spots[(i % 2) * 5 + i / 2]
 		a.position = p
 		a.rotation.y = atan2(-p.x, -p.z)             # face the podium

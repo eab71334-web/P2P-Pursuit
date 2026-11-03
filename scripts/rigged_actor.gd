@@ -11,10 +11,46 @@ const ANIMS_LOOP := ["Dance", "Idle", "Idle_Talking", "Walk", "Walk_Formal", "Jo
 var player: AnimationPlayer
 var _root: Node
 var _mats: Array = []     # [material, is_joint]
+var human := false
+var _body_mat: StandardMaterial3D
+const BASE_M := "res://assets/ubc/base/Superhero_Male_FullBody.gltf"
+const BASE_F := "res://assets/ubc/base/Superhero_Female_FullBody.gltf"
 
 
 static func available() -> bool:
 	return ResourceLoader.exists(SRC)
+
+
+## High-detail human (Quaternius Universal Base Characters, CC0: face, eyes, fingers) driven by the UAL animation clips.
+## Same 65-bone skeleton as the mannequin, so every clip plays on it.
+func setup_human(female: bool, skin: Color) -> bool:
+	var base := load(BASE_F if female else BASE_M) as PackedScene
+	var ual := load(SRC) as PackedScene
+	if base == null or ual == null:
+		return false
+	_root = base.instantiate()
+	add_child(_root)
+	var u := ual.instantiate()
+	var uap := u.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	player = AnimationPlayer.new()
+	_root.add_child(player)
+	player.root_node = player.get_path_to(_root)
+	var lib := AnimationLibrary.new()
+	for a in uap.get_animation_list():
+		lib.add_animation(a, uap.get_animation(a))
+	player.add_animation_library("", lib)
+	u.free()
+	human = true
+	for mi in _root.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if m.name.begins_with("Eye"):
+			continue
+		var base_mat := m.mesh.surface_get_material(0)
+		if m.name.to_lower().begins_with("super") and base_mat is StandardMaterial3D:
+			_body_mat = (base_mat as StandardMaterial3D).duplicate()
+			m.set_surface_override_material(0, _body_mat)
+	recolor(skin, skin)
+	return true
 
 
 ## main = body colour, joint = joints colour
@@ -52,6 +88,11 @@ func play(anim: String, speed := 1.0, offset := 0.0, blend := 0.3) -> void:
 
 
 func recolor(main: Color, joint: Color) -> void:
+	if human:
+		if _body_mat:
+			var c := main
+			_body_mat.albedo_color = Color(clampf(c.r * 1.25, 0, 1), clampf(c.g * 1.25, 0, 1), clampf(c.b * 1.25, 0, 1))
+		return
 	for e in _mats:
 		var m := e[0] as StandardMaterial3D
 		m.albedo_color = joint if e[1] else main
@@ -130,8 +171,13 @@ func dress(shirt: Color, pants: Color, shoes: Color, skin: Color, long_sleeve: b
 					nv[v] += ns[v] * float(push[g])
 				a2[Mesh.ARRAY_VERTEX] = nv
 				a2[Mesh.ARRAY_INDEX] = keep
+				for ci in range(Mesh.ARRAY_CUSTOM0, Mesh.ARRAY_CUSTOM3 + 1):
+					a2[ci] = null                  # custom channels need format flags; the garment does not use them
 				var am := ArrayMesh.new()
-				am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a2)
+				var fl := Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS if per == 8 else 0
+				am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a2, [], {}, fl)
+				if am.get_surface_count() == 0:
+					continue
 				var cm := MeshInstance3D.new()
 				cm.mesh = am
 				cm.skin = src.skin
