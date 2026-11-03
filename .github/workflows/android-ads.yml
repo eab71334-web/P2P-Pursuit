@@ -120,6 +120,9 @@ jobs:
           grep -n "play-services-ads" build.gradle
           grep -n "APPLICATION_ID" AndroidManifest.xml
 
+      - name: Add Effekseer plugin (experiment)
+        run: python3 tools/get_effekseer.py || echo "Effekseer download failed - building without it"
+
       - name: Import project
         run: godot --headless --import || true
 
