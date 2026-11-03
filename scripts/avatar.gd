@@ -185,6 +185,7 @@ func _build_rig() -> void:
 		ik.target_node = ik.get_path_to(tg)
 		_rig_ik[sd] = ik
 	_rig.visible = false
+	_build_look()                                  # dresses the body now that it exists (shirt / pants / shoes layers)
 	# racing scarf: real-time cloth pinned at the back of the neck, streams back with the car's speed
 	_scarf_anchor = Node3D.new()
 	_scarf_anchor.position = _rig_head + Vector3(0, -0.2, 0.1)
@@ -283,7 +284,7 @@ func _build_look() -> void:
 		(lm["hand"].material_override as StandardMaterial3D).albedo_color = skin.darkened(0.08)
 	(_finger.material_override as StandardMaterial3D).albedo_color = skin
 	if _rig:
-		_rig.recolor(sc, skin)
+		_rig.dress(sc, pants["c"], shoe, skin, shirt.get("sleeve", false))
 	# shirt details
 	if shirt.has("stripe"):
 		var sm := Color(shirt["stripe"])

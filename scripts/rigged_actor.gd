@@ -56,3 +56,91 @@ func recolor(main: Color, joint: Color) -> void:
 		var m := e[0] as StandardMaterial3D
 		m.albedo_color = joint if e[1] else main
 		m.emission = m.albedo_color * 0.35
+
+
+# ------------------------------------------------------------------ clothing
+## Real garments: layers cut from the skinned body (by bone weights), pushed out a little along the normals, so they follow
+## every animation / IK pose exactly. shirt (torso + sleeves), pants (hips + legs), shoes (feet). Skin stays visible elsewhere.
+var _cloth_nodes: Array = []
+var _bone_group: Dictionary = {}
+
+
+func _group_of(bone: String, long_sleeve: bool) -> String:
+	if bone in ["spine_01", "spine_02", "spine_03", "clavicle_l", "clavicle_r"]:
+		return "shirt"
+	if bone.begins_with("upperarm"):
+		return "shirt"
+	if bone.begins_with("lowerarm"):
+		return "shirt" if long_sleeve else ""
+	if bone == "pelvis" or bone.begins_with("thigh") or bone.begins_with("calf"):
+		return "pants"
+	if bone.begins_with("foot") or bone.begins_with("ball"):
+		return "shoes"
+	return ""
+
+
+func dress(shirt: Color, pants: Color, shoes: Color, skin: Color, long_sleeve: bool, shirt_stripe := Color.TRANSPARENT) -> void:
+	for n in _cloth_nodes:
+		(n as Node).queue_free()
+	_cloth_nodes.clear()
+	recolor(skin, skin.darkened(0.15))
+	if _root == null:
+		return
+	var cols := {"shirt": shirt, "pants": pants, "shoes": shoes}
+	var push := {"shirt": 0.016, "pants": 0.014, "shoes": 0.02}
+	for mi in _root.find_children("*", "MeshInstance3D", true, false):
+		var src := mi as MeshInstance3D
+		if src.skin == null or src.mesh == null or src in _cloth_nodes:
+			continue
+		var sk := src.get_node_or_null(src.skeleton) as Skeleton3D
+		if sk == null:
+			continue
+		for s in src.mesh.get_surface_count():
+			var arr: Array = src.mesh.surface_get_arrays(s)
+			var vs: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+			var ns: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+			var bs: PackedInt32Array = arr[Mesh.ARRAY_BONES]
+			var ws: PackedFloat32Array = arr[Mesh.ARRAY_WEIGHTS]
+			var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX] if arr[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+			if idx.is_empty() or bs.is_empty():
+				continue
+			var per := bs.size() / vs.size()            # 4 or 8 influences per vertex
+			var grp: Array = []
+			for v in vs.size():
+				var best := -1.0
+				var bi := 0
+				for j in per:
+					if ws[v * per + j] > best:
+						best = ws[v * per + j]
+						bi = bs[v * per + j]
+				var nm := src.skin.get_bind_name(bi)
+				if nm == "":
+					nm = sk.get_bone_name(src.skin.get_bind_bone(bi))
+				grp.append(_group_of(nm, long_sleeve))
+			for g in ["shirt", "pants", "shoes"]:
+				var keep := PackedInt32Array()
+				for t in range(0, idx.size(), 3):
+					if grp[idx[t]] == g and grp[idx[t + 1]] == g and grp[idx[t + 2]] == g:
+						keep.append_array([idx[t], idx[t + 1], idx[t + 2]])
+				if keep.is_empty():
+					continue
+				var a2 := arr.duplicate()
+				var nv := vs.duplicate()
+				for v in nv.size():
+					nv[v] += ns[v] * float(push[g])
+				a2[Mesh.ARRAY_VERTEX] = nv
+				a2[Mesh.ARRAY_INDEX] = keep
+				var am := ArrayMesh.new()
+				am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a2)
+				var cm := MeshInstance3D.new()
+				cm.mesh = am
+				cm.skin = src.skin
+				src.get_parent().add_child(cm)
+				cm.skeleton = cm.get_path_to(sk)
+				var m := StandardMaterial3D.new()
+				m.albedo_color = cols[g]
+				m.roughness = 0.85 if g != "shoes" else 0.55
+				m.emission_enabled = true
+				m.emission = (cols[g] as Color) * 0.3
+				cm.material_override = m
+				_cloth_nodes.append(cm)
