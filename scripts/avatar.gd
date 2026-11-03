@@ -205,49 +205,79 @@ func _build_rig() -> void:
 		_scarf.colliders.append([cn, cd[1]])
 
 
-## the pro body is used while seated in the car; box body for podium / outside / blast / emotes
+## the pro body is used in every state; each state plays a real skeletal animation:
+## seated -> Driving pose + hand IK (wheel, horn, emotes, gestures), standing / podium / outside / blast -> clips from the library
+var _rig_anim := ""
+var _rig_head_bone := -1
+
+
+func _rig_anim_for() -> String:
+	if blast_t >= 0.0:
+		return "Death01"
+	if podium_kind != "":
+		return "Dance" if podium_kind in ["cup", "cheer"] else "Idle_Talking"
+	if outside:
+		return "Interact" if work == 1 else "Pistol_Aim_Neutral"
+	if standing:
+		if emote == "dance" or emote == "spin" or emote == "hover":
+			return "Dance"
+		return "Idle_Talking" if emote != "" else "Idle"
+	return "seat"
+
+
 func _rig_update() -> void:
-	var want := _rig != null and not (outside or standing or blast_t >= 0.0 or podium_kind != "" or emote != "")
-	if want != _rig_on:
-		_rig_on = want
-		_rig.visible = want
-		if _scarf:
-			_scarf.visible = want
-			_scarf.process_mode = Node.PROCESS_MODE_INHERIT if want else Node.PROCESS_MODE_DISABLED
-			if want:
-				_scarf._first = true
-		for sd in ["L", "R"]:
-			var ik := _rig_ik[sd] as SkeletonIK3D
-			if want:
-				ik.start()
-			else:
-				ik.stop()
-			for k in ["up", "fore", "hand"]:
-				(_limbs[sd][k] as MeshInstance3D).visible = not want
-		_torso.visible = not want
-		_bx.visible = not want
-		var hat := _o("hat")
-		_helmet.visible = (not want) or hat == "helmet"
-		_visor.visible = _helmet.visible and hat == "helmet"
-		if want:
+	var anim := _rig_anim_for()
+	var seated := anim == "seat"
+	if anim != _rig_anim:
+		var first := _rig_anim == ""
+		_rig_anim = anim
+		if first:
+			_rig_on = true
+			_rig.visible = true
+			for sd in ["L", "R"]:
+				for k in ["up", "fore", "hand"]:
+					(_limbs[sd][k] as MeshInstance3D).visible = false
+			_torso.visible = false
+			_bx.visible = false
+			var hat := _o("hat")
+			_helmet.visible = hat == "helmet"
+			_visor.visible = _helmet.visible
 			var sm := SphereMesh.new()
 			sm.radius = 0.2
 			sm.height = 0.42
 			_helmet.mesh = sm
 			_helmet.position.y = 0.02
+			_head.scale = Vector3.ONE * 0.62
+		for sd in ["L", "R"]:
+			var ik := _rig_ik[sd] as SkeletonIK3D
+			if seated:
+				ik.start()
+			else:
+				ik.stop()
+		if _scarf:
+			_scarf.visible = seated
+			_scarf.process_mode = Node.PROCESS_MODE_INHERIT if seated else Node.PROCESS_MODE_DISABLED
+			if seated:
+				_scarf._first = true
+		if seated:
+			_rig.position = Vector3(0, -0.56, -0.19)
+			_rig.play("Driving", 1.0, 0.25)
+			_rig.player.seek(0.5, true)
+			_rig.player.pause()
 		else:
-			var bm := BoxMesh.new()
-			bm.size = Vector3(0.36, 0.36, 0.36)
-			_helmet.mesh = bm
-			_helmet.position.y = 0.0
-		_head.scale = Vector3.ONE * (0.62 if want else 1.0)
-		_head.position = _rig_head if want else Vector3(0, 0.8, 0.05)
-	if _rig_on:
+			_rig.position = Vector3(0, -0.97, 0)
+			_rig.play(anim, 1.0, randf() if anim in ["Dance", "Idle_Talking", "Idle"] else 0.0, 0.25)
+	if seated:
+		_head.position = _rig_head
 		var car := get_parent() as RigidBody3D
 		if car and _scarf:
 			_scarf.wind = -car.linear_velocity * 0.35 + Vector3(0, 0.3, 0)
 		for sd in ["L", "R"]:
 			(_rig_tg[sd] as Marker3D).position = _cur[sd] as Vector3
+	else:
+		if _rig_head_bone < 0:
+			_rig_head_bone = _rig_sk.find_bone("Head")
+		_head.position = to_local(_rig_sk.global_transform * _rig_sk.get_bone_global_pose(_rig_head_bone).origin) + Vector3(0, 0.1, 0)
 
 
 func _o(slot: String) -> String:
@@ -618,6 +648,8 @@ func _process(delta: float) -> void:
 	if _head == null:
 		return
 	hit_kick = move_toward(hit_kick, 0.0, delta * 2.5)
+	if _rig:
+		_rig_update()
 	_head.rotation = Vector3(look_pitch, look_yaw, hit_kick * 0.35 * sin(Time.get_ticks_msec() * 0.06))
 
 	if blast_t >= 0.0:
@@ -679,8 +711,6 @@ func _process(delta: float) -> void:
 	_cur["R"] = (_cur["R"] as Vector3).lerp(dr, clampf(delta * k, 0.0, 1.0))
 	_solve("L")
 	var elbow_r := _solve("R")
-	if _rig:
-		_rig_update()
 	# pointing finger / stop palm on the right hand
 	var h: Vector3 = _limbs["R"]["hand"].position
 	var dir := (h - elbow_r).normalized()
