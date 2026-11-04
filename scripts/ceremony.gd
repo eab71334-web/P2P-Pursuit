@@ -339,7 +339,7 @@ var _spectators: Array[RiggedActor] = []
 
 
 func _build_spectators() -> void:
-	if not RiggedActor.available():
+	if not Gfx.human_chars or not RiggedActor.available():
 		return
 	var spots := [Vector3(-6.2, 0, 2.4), Vector3(-7.6, 0, 0.2), Vector3(-9.0, 0, 3.0), Vector3(-10.4, 0, 1.0), Vector3(-8.2, 0, -1.8),
 		Vector3(6.2, 0, 2.4), Vector3(7.6, 0, 0.2), Vector3(9.0, 0, 3.0), Vector3(10.4, 0, 1.0), Vector3(8.2, 0, -1.8)]

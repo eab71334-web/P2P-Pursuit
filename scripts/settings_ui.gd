@@ -91,6 +91,8 @@ func _build() -> void:
 	_row(UI.tx("Race music", "موسيقى السباق"), UI.tx("Radio = the in-car stations. Interactive = a score that gets more intense with your speed and reacts to crashes and the finish.", "راديو = محطات السيارة. تفاعلية = موسيقى تشتد مع سرعتك وتتفاعل مع الاصطدام والنهاية."),
 		_seg([["radio", UI.tx("Radio", "راديو")], ["score", UI.tx("Interactive", "تفاعلية")], ["off", UI.tx("Off", "إيقاف")]], Score.mode, func(v): Score.set_mode(v); _rebuild()))
 	_row(UI.tx("Interactive music volume", "مستوى الموسيقى التفاعلية"), "", _seg(vo, _near(Score.vol, [0.0, 0.4, 0.7, 1.0]), func(v): Score.set_vol(v); _rebuild()))
+	_row(UI.tx("Characters (experimental)", "الشخصيات (تجريبي)"), UI.tx("Classic = the original block characters. Human = realistic animated people with real clothes (heavier, experimental).", "كلاسيكي = الشخصيات المكعبة الأصلية. بشري = أشخاص واقعيون متحركون بملابس حقيقية (أثقل، تجريبي)."),
+		_seg([[false, UI.tx("Classic", "كلاسيكي")], [true, UI.tx("Human (beta)", "بشري (تجريبي)")]], Gfx.human_chars, func(v): Gfx.human_chars = v; Gfx.save(); _rebuild()))
 	_row(UI.tx("Vibration", "الاهتزاز"), "",
 		_seg([[true, UI.tx("On", "تشغيل")], [false, UI.tx("Off", "إيقاف")]], Gfx.haptics, func(v): Gfx.haptics = v; Gfx.save(); _rebuild()))
 	if weak:

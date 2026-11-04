@@ -33,6 +33,7 @@ var auto := false             # dynamic resolution
 var show_fps := false
 var vsync := true
 var haptics := true
+var human_chars := false     # EXPERIMENTAL: realistic skinned human characters (default = classic block characters)
 var vol_master := 1.0
 var vol_radio := 0.7
 var racing := false           # set by the world while a race is on (dynamic resolution only works then)
@@ -192,6 +193,7 @@ func save() -> void:
 	cf.set_value("gfx", "show_fps", show_fps)
 	cf.set_value("gfx", "vsync", vsync)
 	cf.set_value("gfx", "haptics", haptics)
+	cf.set_value("gfx", "human_chars", human_chars)
 	cf.set_value("gfx", "vol_master", vol_master)
 	cf.set_value("gfx", "vol_radio", vol_radio)
 	for k in KEYS:
@@ -207,6 +209,7 @@ func _load() -> void:
 	show_fps = cf.get_value("gfx", "show_fps", false)
 	vsync = cf.get_value("gfx", "vsync", true)
 	haptics = cf.get_value("gfx", "haptics", true)
+	human_chars = cf.get_value("gfx", "human_chars", false)
 	vol_master = cf.get_value("gfx", "vol_master", 1.0)
 	vol_radio = cf.get_value("gfx", "vol_radio", 0.7)
 	if preset != "auto":

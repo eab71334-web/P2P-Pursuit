@@ -129,7 +129,7 @@ func _ready() -> void:
 	if role == "navigator":
 		_build_clipboard()
 	_build_look()
-	if not is_local:
+	if not is_local and Gfx.human_chars:
 		_build_rig()
 	if is_local:
 		_torso.visible = false
@@ -313,6 +313,13 @@ func _build_look() -> void:
 		(lm["fore"].material_override as StandardMaterial3D).albedo_color = skin
 		(lm["hand"].material_override as StandardMaterial3D).albedo_color = skin.darkened(0.08)
 	(_finger.material_override as StandardMaterial3D).albedo_color = skin
+	if _rig:
+		var fem := str(outfit.get("body", "m")) == "f"
+		var h := absi(peer_id * 2654435761) if peer_id != 0 else 7
+		var styles: Array = ["Long", "Buns", "BuzzedFemale"] if fem else ["SimpleParted", "Buzzed", "SimpleParted"]
+		var hair_cols: Array = [Color(0.12, 0.08, 0.05), Color(0.3, 0.18, 0.08), Color(0.05, 0.05, 0.06), Color(0.5, 0.3, 0.12), Color(0.55, 0.12, 0.08)]
+		var show_hair := hat in ["headset", "bandana"]
+		_rig.set_hair(styles[h % 3] if show_hair else "", hair_cols[(h / 3) % 5], (not fem) and show_hair and (h / 15) % 3 == 0)
 	if _rig:
 		_rig.dress(sc, pants["c"], shoe, skin, shirt.get("sleeve", false))
 	# shirt details

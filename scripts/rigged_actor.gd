@@ -190,3 +190,40 @@ func dress(shirt: Color, pants: Color, shoes: Color, skin: Color, long_sleeve: b
 				m.emission = (cols[g] as Color) * 0.3
 				cm.material_override = m
 				_cloth_nodes.append(cm)
+
+
+# ------------------------------------------------------------------ hair
+var _hair: BoneAttachment3D
+const HAIR_DIR := "res://assets/ubc/hair/Origin/"
+
+
+## style: "SimpleParted" | "Buzzed" | "Long" | "Buns" | "BuzzedFemale" | "" (none); beard adds the beard model.
+## Hair is authored in body space; it hangs on the Head bone so it follows every animation.
+func set_hair(style: String, color: Color, beard := false) -> void:
+	if _hair:
+		_hair.queue_free()
+		_hair = null
+	if not human or (style == "" and not beard):
+		return
+	var sk := _root.find_child("Skeleton3D", true, false) as Skeleton3D
+	var hb := sk.find_bone("Head")
+	_hair = BoneAttachment3D.new()
+	_hair.bone_name = "Head"
+	sk.add_child(_hair)
+	var inv := sk.get_bone_global_rest(hb).affine_inverse()
+	for part in [style, "Beard" if beard else ""]:
+		if part == "":
+			continue
+		var ps := load(HAIR_DIR + ("Hair_" + part) + ".gltf") as PackedScene
+		if ps == null:
+			continue
+		var n := ps.instantiate() as Node3D
+		_hair.add_child(n)
+		n.transform = inv
+		for mi in n.find_children("*", "MeshInstance3D", true, false):
+			var m := mi as MeshInstance3D
+			var bm := m.mesh.surface_get_material(0)
+			if bm is StandardMaterial3D:
+				var mat := (bm as StandardMaterial3D).duplicate() as StandardMaterial3D
+				mat.albedo_color = color
+				m.set_surface_override_material(0, mat)
