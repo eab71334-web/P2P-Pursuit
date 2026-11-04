@@ -180,7 +180,7 @@ func _ready() -> void:
 	my_role = "" if Net.dedicated else Net.roles.get(my_id, "driver")
 	my_team = Net.team_of.get(my_id, 0)
 	solo = (Net.players.size() == 1 or Net.ffa) and not Net.dedicated
-	show_touch = (DisplayServer.is_touchscreen_available() or OS.get_environment("FORCE_TOUCH") != "") and my_role == "driver"
+	show_touch = (DisplayServer.is_touchscreen_available() or OS.get_environment("FORCE_TOUCH") != "") and my_role == "driver" and Controls.touch_wanted()
 	if Net.stage.is_empty():
 		Net.stage = {"seed": Net.track_seed}
 	track = Track.from_stage(Net.stage)
@@ -1068,7 +1068,7 @@ func _update_look(delta: float) -> void:
 			look_yaw = move_toward(look_yaw, 0.0, delta * 5.0)
 			look_pitch = move_toward(look_pitch, -1.03, delta * 4.0)
 		look_idle = 0.0
-	elif Input.is_action_pressed("look_mate") and local_avatar.seat_dx != 0.0:
+	elif (Input.is_action_pressed("look_mate") or (Controls.map.get("look_mate", -1) >= 0 and Input.is_joy_button_pressed(0, Controls.map["look_mate"]))) and local_avatar.seat_dx != 0.0:
 		var target_yaw := -signf(local_avatar.seat_dx) * 1.45
 		look_yaw = move_toward(look_yaw, target_yaw, delta * 7.0)
 		look_pitch = move_toward(look_pitch, 0.1, delta * 3.0)
@@ -1315,6 +1315,24 @@ func _input(event: InputEvent) -> void:
 				_cabin("dome")
 			KEY_Y:
 				_cabin("greet")
+	var pad_act := Controls.cabin_for(event)
+	if pad_act != "":
+		match pad_act:
+			"reset":
+				_request_reset()
+			"map_toggle":
+				_toggle_map()
+			"radio_next":
+				_radio_step(1)
+			"radio_prev":
+				_radio_step(-1)
+			"emote":
+				_do_emote()
+			"look_mate":
+				pass
+			_:
+				if my_role == "driver":
+					_cabin(pad_act)
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			_touch_press(event.index, event.position)
@@ -2385,6 +2403,9 @@ var speed_fx: ColorRect
 func _cab_page(n: int) -> void:
 	for zn in zones:
 		var z := str(zn)
+		if not Controls.touch_wanted() and (z.begins_with("c_") or z.begins_with("p2_") or z == "hudcfg"):
+			(zones[zn] as Control).visible = false         # gamepad connected: no touch buttons
+			continue
 		if HudLayout.is_removed(z):
 			(zones[zn] as Control).visible = false
 			continue

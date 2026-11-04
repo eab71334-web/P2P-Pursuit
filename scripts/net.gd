@@ -150,6 +150,7 @@ func _setup_inputs() -> void:
 		"radio_prev": [KEY_COMMA],
 		"radio_toggle": [KEY_SLASH],
 	}
+	Controls.add_pad_events()
 	for action in map:
 		if not InputMap.has_action(action):
 			InputMap.add_action(action)

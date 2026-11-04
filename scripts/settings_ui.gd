@@ -41,6 +41,16 @@ func _build() -> void:
 	UI.btn(hb, UI.tx("Reset", "إعادة ضبط"), UI.CARD2, func(): HudLayout.reset(), 18, Vector2(130, 46))
 	_row(UI.tx("Driving buttons layout", "تخطيط أزرار السواقة"),
 		UI.tx("Move, resize and rotate gas, brake, horn, signals, lights and wipers.", "حرّك وكبّر وقلّب أزرار البنزين والفرامل والبوق والإشارات والإضاءة والمساحات."), hb)
+	# ---- gamepad
+	_head(UI.tx("GAMEPAD", "يد التحكم"))
+	_row(UI.tx("Touch buttons", "أزرار اللمس"), UI.tx("Auto hides the on-screen buttons while a gamepad (PS4/PS5/Xbox, wired or Bluetooth) is connected.", "تلقائي يخفي أزرار الشاشة عند توصيل يد (PS4/PS5/Xbox سلكية أو بلوتوث)."),
+		_seg([["auto", UI.tx("Auto", "تلقائي")], ["show", UI.tx("Show", "إظهار")], ["hide", UI.tx("Hide", "إخفاء")]], Controls.touch_mode, func(v): Controls.set_touch_mode(v); _rebuild()))
+	var pad_btn := HBoxContainer.new()
+	UI.btn(pad_btn, UI.tx("Gamepad buttons", "أزرار اليد"), UI.ACCENT, func():
+		var ed := PadEditor.new()
+		get_tree().root.add_child(ed), 20, Vector2(200, 46))
+	_row(UI.tx("Gamepad: steer = left stick, gas = R2, brake = L2", "اليد: التوجيه = العصا اليسرى، بنزين = R2، فرامل = L2"),
+		UI.tx("Change what every other button does (horn, lights, handbrake...).", "غيّر وظيفة بقية الأزرار (بوق، إضاءة، فرامل يد...)."), pad_btn)
 	# ---- performance
 	_head(UI.tx("PERFORMANCE", "الأداء"))
 	var weak := Gfx.preset == "weak"

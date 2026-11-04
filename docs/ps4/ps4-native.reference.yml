@@ -1,0 +1,82 @@
+# REFERENCE ONLY (not active): the owner's PS4 native-PKG workflow from his other game (Warzone Native, C++ + OpenOrbis).
+# It lives outside .github/workflows on purpose: it builds a C++ project (native/, shared/, tools/export-native.js) that does not exist in this repo.
+name: Build PS4 Native PKG
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['native/**', 'shared/**', 'tools/export-native.js', '.github/workflows/ps4-native.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  pkg:
+    runs-on: ubuntu-22.04
+    env:
+      CLR_OPENSSL_VERSION_OVERRIDE: '1.1'
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install deps
+        run: sudo apt-get update -y && sudo apt-get install -y clang lld jq
+      - name: Install libssl1.1
+        run: |
+          cd /tmp
+          for U in http://security.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2_amd64.deb; do
+            curl -fsSL "$U" -o libssl1.1.deb && break
+          done
+          sudo dpkg -i libssl1.1.deb
+      - name: Export maps and weapons to C++
+        run: node tools/export-native.js
+      - name: Host sanity test (software renderer + bots)
+        run: |
+          cd native/src && g++ -O2 -std=c++17 -pthread -o /tmp/hl headless.cpp && /tmp/hl 0 10 && /tmp/hl 4 10 && g++ -O2 -std=c++17 -pthread -o /tmp/nt nettest.cpp && /tmp/nt
+          cd ../.. && (PORT=3000 node server/server.js > /tmp/srv.log 2>&1 &) && sleep 2 && cd native/src && g++ -O2 -std=c++17 -pthread -o /tmp/acl acltest.cpp && /tmp/acl
+      - name: Download OpenOrbis toolchain
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          URL=""
+          for i in 1 2 3 4 5; do
+            URL=$(curl -sL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" https://api.github.com/repos/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/latest | jq -r '[(.assets // [])[] | select(.name|test("linux|toolchain";"i"))][0].browser_download_url // empty')
+            [ -n "$URL" ] && break
+            sleep 8
+          done
+          [ -n "$URL" ] || { echo "no toolchain"; exit 1; }
+          mkdir -p /tmp/oo && curl -sL "$URL" -o /tmp/oo/tc.pkg
+          cd /tmp/oo && (tar -xf tc.pkg 2>/dev/null || unzip -q tc.pkg)
+          LX=$(find /tmp/oo -name link.x | head -1)
+          echo "OO_PS4_TOOLCHAIN=$(dirname "$LX")" >> "$GITHUB_ENV"
+          chmod -R +x "$(dirname "$LX")/bin" || true
+      - name: Build native PKG (from the working hello_world sample)
+        run: |
+          S="$OO_PS4_TOOLCHAIN/samples"; N=wzNative; BUILD=${{ github.run_number }}; VER=$(printf "01.%02d" $((BUILD % 100)))
+          rm -rf "$S/$N"; cp -r "$S/hello_world" "$S/$N"
+          rm -rf "$S/$N/hello_world"; mkdir -p "$S/$N/$N" "$S/$N/gen"
+          cp native/src/*.h native/src/main_ps4.cpp "$S/$N/$N/"
+          cp native/gen/data.h "$S/$N/gen/"
+          ( cd "$S/$N"
+            sed -i "s/^LIBS .*/LIBS        := -lc -lkernel -lc++ -lSceUserService -lSceVideoOut -lSceAudioOut -lScePad -lSceSysmodule -lSDL2\nEXTRAFLAGS := -O2 -march=btver2 -fno-math-errno -DBUILD_ID=$BUILD/" Makefile
+            sed -i "s/^VERSION .*/VERSION     := $VER/" Makefile
+            sed -i "s/BREW00[0-9]*/BREW00790/g; s/IV0000-BREW00790_00-[A-Z0-9]*/IV0000-BREW00790_00-WZNATIVE00000000/; s/^TITLE .*/TITLE       := Warzone Native/" Makefile
+            make
+            cp ./*.pkg "$GITHUB_WORKSPACE/WarzoneNative.pkg"; cp ./*.pkg "$GITHUB_WORKSPACE/WarzoneNative-b$BUILD.pkg" )
+          ls -la "$GITHUB_WORKSPACE"/*.pkg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WarzoneNative-pkg
+          path: |
+            WarzoneNative.pkg
+            WarzoneNative-b*.pkg
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ps4-native-latest
+          name: Warzone Native (PS4 PKG)
+          files: |
+            WarzoneNative.pkg
+            WarzoneNative-b*.pkg

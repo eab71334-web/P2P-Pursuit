@@ -164,6 +164,14 @@ the cars are still blocky procedural models; realistic cars would need artist-ma
 
 ---------------------------------------------------------------------------------------------------
 
+## 8b. Gamepad & PS4 (added later)
+
+- `scripts/controls.gd` (autoload `Controls`): pad support + remap (saved in `user://controls.cfg`); steer = left stick, gas = R2, brake = L2; other actions remappable via `scripts/pad_editor.gd` (Settings → GAMEPAD). Touch buttons auto-hide while a pad is connected (`Controls.touch_wanted()` is used in `world.gd` for `show_touch` and `_cab_page`).
+- Not verified on a real pad. Menu navigation by pad (focus/`ui_accept`) was not worked on.
+- PS4: see `docs/ps4/PS4_PLAN.md` — Godot cannot run on PS4; a PS4 build needs a separate native C++ port (OpenOrbis). `docs/ps4/ps4-native.reference.yml` is the owner's workflow for another game, kept for reference only.
+
+---------------------------------------------------------------------------------------------------
+
 ## 9. Open items / waiting on the owner
 
 1. Owner has not yet confirmed on phone: Android buttons/sky/crash fixes, cabin extras, button editor, Score music, rain, human characters.
@@ -184,3 +192,4 @@ the cars are still blocky procedural models; realistic cars would need artist-ma
 6. Every character state uses real skeletal clips (podium, standing, outside, blast).
 7. High-detail human (UBC) with face/eyes/fingers, hair & beard on the head bone.
 8. Characters switch: Classic (default) vs Human (beta) in Settings; this handoff document.
+9. Gamepad support + button remap + touch auto-hide; PS4 plan docs.

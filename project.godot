@@ -21,6 +21,7 @@ Backend="*res://scripts/backend.gd"
 Ads="*res://scripts/ads.gd"
 Radio="*res://scripts/radio.gd"
 Score="*res://scripts/score.gd"
+Controls="*res://scripts/controls.gd"
 
 [display]
 

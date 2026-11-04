@@ -1,7 +1,7 @@
 #!/bin/bash
 # usage: tools/run.sh <mode> ; copies project to /tmp/t, injects the harness, runs under Xvfb
 set -e
-SRC=/home/claude/rally-lan
+SRC=${SRC:-/home/claude/p2p-pursuit}
 rm -rf /tmp/t && mkdir -p /tmp/t /tmp/shots && cp -r $SRC/. /tmp/t/ && cd /tmp/t
 cp tools/auto.gd scripts/auto.gd
 [ "$1" != intro ] && sed -i 's|scenes/intro.tscn|scenes/main.tscn|' project.godot
