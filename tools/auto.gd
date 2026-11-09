@@ -12,6 +12,8 @@ func _ready() -> void:
 		set_process(false)
 		return
 	L.tutorial_off = true
+	if OS.get_environment("STORE") != "":
+		HudLayout.mark_intro()
 	if OS.get_environment("GFXP") != "":
 		Gfx.set_preset(OS.get_environment("GFXP"))
 
