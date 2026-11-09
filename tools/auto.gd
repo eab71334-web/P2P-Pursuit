@@ -258,6 +258,8 @@ func _process(d: float) -> void:
 			_film(sc)
 		"film2":
 			_film2(sc)
+		"cine":
+			_cine(sc)
 		"icon":
 			_icon(sc)
 		"result":
@@ -1374,3 +1376,61 @@ func _icon(sc: Node) -> void:
 		shot("icon_" + ("cover" if cover else "square"))
 	elif step == 2 and t > 4.6:
 		get_tree().quit()
+
+## store screenshots: a real race, no HUD, free cameras around the player's car. env: CINE_CAR, CINE_PAINT, CINE_CAMS ("a,b"), CINE_STAGE
+var _cine_t0 := 0.0
+var _cine_i := 0
+var _cine_cam: Camera3D
+const CINE_POS := {
+	"front34": [Vector3(-3.6, 0.75, -5.4), Vector3(0.1, 0.65, 0.2), 48.0],
+	"wheel": [Vector3(-1.75, 0.16, -2.9), Vector3(-0.6, 0.55, -1.0), 62.0],
+	"rear34": [Vector3(3.2, 0.95, 5.6), Vector3(0.0, 0.7, -0.4), 46.0],
+	"side": [Vector3(-6.2, 0.6, -0.4), Vector3(0.0, 0.7, 0.0), 40.0],
+	"lowfront": [Vector3(0.9, 0.28, -4.6), Vector3(0.0, 0.6, 0.0), 58.0],
+	"chase": [Vector3(0.0, 2.1, 6.4), Vector3(0.0, 0.9, -2.0), 62.0],
+}
+func _cine(sc: Node) -> void:
+	var car_id := OS.get_environment("CINE_CAR")
+	if step == 0:
+		step = 1
+		Profile.cars[car_id] = true
+		Profile.car = car_id
+		Profile.carset[car_id] = {"paint": OS.get_environment("CINE_PAINT"), "stripe": "white", "rim": "black", "glow": "none", "spoiler": "gt", "front": "splitter", "wheel": "centre"}
+	elif step == 1 and t > 2.0:
+		step = 2
+		sc._start_solo({"bots": 0, "level": 0, "weather": OS.get_environment("CINE_WX"), "theme": OS.get_environment("CINE_THEME"), "career": -1})
+	elif step == 2:
+		var w := get_tree().current_scene
+		if w != null and w.get("state") != null and int(w.get("state")) == 2:
+			step = 3; _cine_t0 = t
+			Input.action_press("accel")
+	elif step == 3:
+		var w := get_tree().current_scene
+		var ts = w.teams[w.my_team]
+		ts.damage = 0.0
+		ts.car.set_plate_text("")
+		if t > _cine_t0 + 2.2 and Input.is_action_pressed("accel"):
+			Input.action_release("accel")
+		if t > _cine_t0 + 3.0:
+			if _cine_cam == null:
+				for cl in get_tree().root.find_children("*", "CanvasLayer", true, false):
+					(cl as CanvasLayer).visible = false
+				if w.local_avatar != null:
+					w.local_avatar.visible = false
+				_cine_cam = Camera3D.new()
+				get_tree().root.add_child(_cine_cam)
+				_cine_cam.current = true
+				_cine_t0 = t
+			var cams := OS.get_environment("CINE_CAMS").split(",")
+			if _cine_i >= cams.size():
+				get_tree().quit()
+				return
+			var c: Array = CINE_POS[cams[_cine_i]]
+			var car: Node3D = ts.car
+			_cine_cam.fov = c[2]
+			_cine_cam.global_position = car.global_transform * (c[0] as Vector3)
+			_cine_cam.look_at(car.global_transform * (c[1] as Vector3), Vector3.UP)
+			if t > _cine_t0 + 1.2:
+				shot("cine_%s_%s" % [car_id, cams[_cine_i]])
+				_cine_i += 1
+				_cine_t0 = t
