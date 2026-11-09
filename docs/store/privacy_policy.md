@@ -1,7 +1,7 @@
 # Privacy Policy — Hairpin Rush
 
 **Developer:** Sabak Studios  
-**Contact:** [CONTACT EMAIL — fill in before publishing]  
+**Contact:** eab71334@gmail.com  
 **Last updated:** 9 November 2026
 
 ## What the game stores on your device
@@ -33,7 +33,7 @@ We may update this policy. The date at the top shows the latest version.
 # سياسة الخصوصية — Hairpin Rush
 
 **المطوّر:** Sabak Studios  
-**التواصل:** [البريد الإلكتروني — يُكتب قبل النشر]  
+**التواصل:** eab71334@gmail.com  
 **آخر تحديث:** 9 نوفمبر 2026
 
 ## ما يُحفظ على جهازك
