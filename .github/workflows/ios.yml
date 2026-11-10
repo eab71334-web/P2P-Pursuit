@@ -5,6 +5,9 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   ios:
     runs-on: macos-15
@@ -85,7 +88,16 @@ jobs:
           cp -R build/app.xcarchive/Products/Applications/*.app Payload/
           zip -qr CoDriverRally.ipa Payload
 
+      - name: Publish to Releases (no Actions storage quota)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view latest-ios >/dev/null 2>&1 || gh release create latest-ios --title "iOS IPA (unsigned) (latest)" --notes "Newest build from main" --prerelease
+          gh release upload latest-ios CoDriverRally.ipa --clobber
+
       - uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: CoDriverRally-ipa
           path: CoDriverRally.ipa
+          retention-days: 2
