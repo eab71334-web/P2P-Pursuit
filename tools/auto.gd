@@ -1420,6 +1420,7 @@ const CINE_POS := {
 	"rear34": [Vector3(3.2, 0.95, 5.6), Vector3(0.0, 0.7, -0.4), 46.0],
 	"side": [Vector3(-6.2, 0.6, -0.4), Vector3(0.0, 0.7, 0.0), 40.0],
 	"lowfront": [Vector3(0.9, 0.28, -4.6), Vector3(0.0, 0.6, 0.0), 58.0],
+	"dash": [Vector3(0.12, 1.42, -0.25), Vector3(0.12, 0.93, -0.70), 40.0],
 	"chase": [Vector3(0.0, 2.1, 6.4), Vector3(0.0, 0.9, -2.0), 62.0],
 }
 func _cine(sc: Node) -> void:
@@ -1474,6 +1475,7 @@ const POSTER_CAM := {
 	"low": [Vector3(-4.0, 0.3, -7.0), Vector3(0.0, 0.6, 0.0), 36.0, 20.0],
 	"wheel": [Vector3(-2.6, 0.18, -3.6), Vector3(-0.2, 0.45, -0.3), 52.0, 25.0],
 	"rear34": [Vector3(9.5, 1.2, 13.2), Vector3(3.0, 1.1, 0.0), 36.0, -24.0],
+	"dash": [Vector3(0.1, 1.2, -0.15), Vector3(0.12, 0.99, -0.72), 48.0, 0.0],
 	"side": [Vector3(-17.0, 1.0, -0.5), Vector3(-1.0, 0.9, 0.0), 26.0, 0.0],
 }
 func _poster(sc: Node) -> void:

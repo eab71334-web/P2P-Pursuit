@@ -172,8 +172,13 @@ func _build_controls() -> void:
 		_knob_l = _make_knob(_panel_l(), st["lights"], dark, chrome, amb)
 	if st["wipers"] != "stalk":
 		_knob_w = _make_knob(_panel_r(), st["wipers"], dark, chrome, amb)
+	for kn in [_knob_l, _knob_w]:
+		if kn != null:
+			kn.rotation = Vector3(deg_to_rad(72.0), 0, 0)   # face the driver like the dash does
 	# --- mirror control: electric joystick or manual lever by the left door
 	_joy_pos = _pv.position + Vector3(-0.44, -0.30, 0.18)
+	# door armrest the window / mirror controls sit on (otherwise they float)
+	CarStyle.box(car, Vector3(0.16, 0.05, 0.56), Vector3(_joy_pos.x, _joy_pos.y - 0.037, _joy_pos.z + 0.12), dark)
 	_joy = Node3D.new()
 	_joy.position = _joy_pos
 	car.add_child(_joy)
@@ -785,17 +790,41 @@ func _build_extras() -> void:
 	_dome_light.visible = false
 	car.add_child(_dome_light)
 	# --- air-conditioning knob + vents under the radio
-	_ac_node = _make_knob(Vector3(0.12, 0.99, -0.62), "knob", dark, chrome, amb)
+	# console cluster under the radio, tilted like the radio face so the hazard button and the A/C knob sit flush on it
+	var tilt := deg_to_rad(72.0)
+	var ydir := Vector3(0, cos(tilt), sin(tilt))
+	var zdir := Vector3(0, -sin(tilt), cos(tilt))
+	var sport := car.model in ["charger", "coupe", "m4", "gt3", "hyper"]
+	var heavy := car.model in ["muscle", "pickup", "sierra"]
+	var cl_c := Vector3(0.12, 1.04, -0.725) + zdir * 0.138
+	var cl_w := 0.30 if not sport else 0.26
+	var cl := Node3D.new()
+	cl.position = cl_c
+	cl.rotation = Vector3(tilt, 0, 0)
+	car.add_child(cl)
+	var accent: Color = CarInterior.theme(car.model)["stitch"]
+	CarStyle.box(cl, Vector3(cl_w, 0.06, 0.07), Vector3.ZERO, dark)
+	CarStyle.box(cl, Vector3(cl_w + 0.01, 0.008, 0.078), Vector3(0, 0.032, 0), chrome if not heavy else _mat(Color(0.25, 0.25, 0.28), 0.6, 0.4))
+	if sport:
+		CarStyle.box(cl, Vector3(cl_w * 0.9, 0.003, 0.0015), Vector3(0, 0.0365, 0.028), _mat(accent, 0.0, 0.5, 1.0))
+	var hx := -cl_w * 0.32
+	var kx := cl_w * 0.30
+	_ac_node = _make_knob(cl_c + ydir * 0.036 + Vector3(kx, 0, 0), "knob", dark, chrome, amb)
+	_ac_node.rotation = Vector3(tilt, 0, 0)
+	if sport:
+		(_ac_node.get_meta("mv") as Node3D).scale = Vector3(0.8, 0.8, 0.8)
 	_fan_snd = Sfx.loop3d("fan_loop", car, -60.0)
 	_fan_snd.position = Vector3(0, 1.0, -0.6)
 	# --- hazard button (red triangle) left of the radio
 	_haz_mat_off = _mat(Color(0.5, 0.05, 0.04), 0.0, 0.5, 0.0)
 	_haz_mat_on = _mat(Color(1.0, 0.1, 0.05), 0.0, 0.3, 3.0)
 	_haz_node = Node3D.new()
-	_haz_node.position = Vector3(-0.1, 1.04, -0.66)
+	_haz_node.position = cl_c + ydir * 0.036 + Vector3(hx, 0, 0)
+	_haz_node.rotation = Vector3(tilt, 0, 0)
 	car.add_child(_haz_node)
-	CarStyle.box(_haz_node, Vector3(0.07, 0.01, 0.06), Vector3(0, -0.005, 0), dark)
-	_haz_btn = CarStyle.box(_haz_node, Vector3(0.045, 0.014, 0.04), Vector3(0, 0.007, 0), _haz_mat_off)
+	var hz_sz := Vector3(0.05, 0.012, 0.036) if sport else Vector3(0.062, 0.014, 0.042)
+	CarStyle.box(_haz_node, Vector3(hz_sz.x + 0.014, 0.008, hz_sz.z + 0.014), Vector3(0, -0.004, 0), dark)
+	_haz_btn = CarStyle.box(_haz_node, hz_sz, Vector3(0, 0.006, 0), _haz_mat_off)
 	# --- handbrake lever between the seats
 	CarStyle.box(car, Vector3(0.09, 0.05, 0.5), Vector3(-0.2, 0.83, 0.5), dark)
 	_hb_lever = Node3D.new()
