@@ -273,6 +273,9 @@ func _process(d: float) -> void:
 			elif step == 2 and t > 5.0:
 				step = 3
 				shot("cmap")
+				for c in sc.career_page._map.get_children():
+					if c is Button:
+						print("NODE ", c.size, " min=", c.get_combined_minimum_size())
 				get_tree().quit()
 		"hub":
 			if step == 0 and t > 2.0:

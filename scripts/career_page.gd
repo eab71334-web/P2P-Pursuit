@@ -281,7 +281,7 @@ func _build_nodes(tier: int) -> void:
 		var st := _stars(i)
 		var op := Career.unlocked(i)
 		var boss := bool(lv["boss"])
-		var sz := Vector2(300, 128) if boss else Vector2(264, 112)
+		var sz := Vector2(252, 108) if boss else Vector2(224, 98)
 		var b := Button.new()
 		b.focus_mode = Control.FOCUS_NONE
 		b.size = sz
@@ -326,9 +326,9 @@ func _build_nodes(tier: int) -> void:
 		v.add_theme_constant_override("separation", 1)
 		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		h.add_child(v)
-		var nl := UI.title(v, "%02d%s" % [i + 1, ("  " + UI.tx("FINAL", "النهائي")) if boss else ""], 24, Color(0.95, 0.8, 0.35) if boss else Color.WHITE)
+		var nl := UI.title(v, "%02d%s" % [i + 1, ("  " + UI.tx("FINAL", "النهائي")) if boss else ""], 20 if boss else 24, Color(0.95, 0.8, 0.35) if boss else Color.WHITE)
 		nl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var nm := UI.lbl(v, Career.stage_name(i), 17, Color(0.95, 0.96, 1.0) if op else Color(0.6, 0.63, 0.7), true)
+		var nm := UI.lbl(v, Career.stage_name(i), 15, Color(0.95, 0.96, 1.0) if op else Color(0.6, 0.63, 0.7), true)
 		nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		if op:
 			v.add_child(StarRow.new(st, 9.0))
