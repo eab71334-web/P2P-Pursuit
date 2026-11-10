@@ -321,6 +321,8 @@ static func decorate(car: Node3D, model: String, lo: Dictionary, body_mat: Stand
 			_number(car, str(de["t"]), Vector3(sx * 0.975, 0.86, 0.45), de["c"], 90.0 * sx, 0.2)
 
 	# --- model specific parts
+	var n_stock := car.get_child_count()
+	var hn_stock := hood.get_child_count() if hood else 0
 	match model:
 		"hatch":
 			box(car, Vector3(0.4, 0.1, 0.5), Vector3(0, 2.03 - d, -0.25), dark)                          # roof intake
@@ -515,17 +517,44 @@ static func decorate(car: Node3D, model: String, lo: Dictionary, body_mat: Stand
 			if hood:
 				box(hood, Vector3(0.2, 0.02, 0.9), Vector3(0, 0.02, -0.49), org)
 
+	_drop_replaced_stock(car, model, lo, hood, n_stock, hn_stock)
 	_body_kit(car, model, lo, body_mat, hood, d)
-	_fitted_parts(car, lo.get("up", {}), body_mat, hood, d)
+	_fitted_parts(car, lo.get("up", {}), body_mat, hood, d, lo, model)
+
+
+## A part chosen in the garage REPLACES the stock one in the same place (no old wing under the new wing).
+static func _drop_replaced_stock(car: Node3D, model: String, lo: Dictionary, hood: Node3D, n0: int, hn0: int) -> void:
+	var rear := str(lo.get("spoiler", "none")) != "none" and Catalog.body_opts(model, "spoiler").has(str(lo.get("spoiler", "none")))
+	var front := str(lo.get("front", "none")) != "none" and Catalog.body_opts(model, "front").has(str(lo.get("front", "none")))
+	var hd := str(lo.get("hood", "none")) != "none" and Catalog.body_opts(model, "hood").has(str(lo.get("hood", "none")))
+	var kill: Array = []
+	for i in range(n0, car.get_child_count()):
+		var c := car.get_child(i)
+		if not (c is MeshInstance3D):
+			continue
+		var p: Vector3 = (c as Node3D).position
+		if rear and p.z > 1.85 and p.y >= 0.98:
+			kill.append(c)                                   # stock spoiler / wing / stands / end plates
+		elif front and p.z < -2.1 and (p.y <= 0.55 or (p.y >= 1.05 and absf(p.x) < 0.2)):
+			kill.append(c)                                   # stock splitter / canards / bull bar
+	if hd and hood:
+		for i in range(hn0, hood.get_child_count()):
+			kill.append(hood.get_child(i))                   # stock scoop / band on the hood
+	for c in kill:
+		(c as Node).get_parent().remove_child(c)
+		(c as Node).queue_free()
 
 
 ## visible bolt-on parts (turbo scoop, exhaust tips, aero, suspension flares, armor)
-static func _fitted_parts(car: Node3D, up: Dictionary, body_mat: StandardMaterial3D, hood: Node3D, d: float) -> void:
+static func _fitted_parts(car: Node3D, up: Dictionary, body_mat: StandardMaterial3D, hood: Node3D, d: float, lo := {}, model := "") -> void:
 	var dark := mat(CARBON, 0.4, 0.4)
 	var carbon := mat(CARBON, 0.6, 0.3)
+	var rear_pick := str(lo.get("spoiler", "none")) != "none"
+	var front_pick := str(lo.get("front", "none")) != "none"
+	var hood_pick := str(lo.get("hood", "none")) != "none"
 	var tu := int(up.get("fit_turbo", 0))
 	if tu > 0:
-		if hood:
+		if hood and not hood_pick:
 			box(hood, Vector3(0.5, 0.08 + 0.04 * tu, 0.4), Vector3(0, 0.1, -0.35), body_mat)         # power bulge
 			box(hood, Vector3(0.42, 0.03, 0.3), Vector3(0, 0.15 + 0.04 * tu, -0.3), dark)           # intake
 		var glow := mat(Color(1.0, 0.4, 0.05), 0.5, 0.3, 1.5 if tu >= 3 else 0.0)
@@ -540,12 +569,13 @@ static func _fitted_parts(car: Node3D, up: Dictionary, body_mat: StandardMateria
 			cyl(car, 0.06 + 0.015 * ex, 0.32, Vector3(sx, 0.42, 2.26), dark, Vector3(90, 0, 0))
 	var ae := int(up.get("fit_aero", 0))
 	if ae > 0:
-		box(car, Vector3(2.0, 0.06, 0.35), Vector3(0, 0.34, -2.28), carbon)                           # front lip
-		if ae >= 2:
+		if ae == 1 and not front_pick:
+			box(car, Vector3(2.0, 0.06, 0.35), Vector3(0, 0.34, -2.28), carbon)                           # front lip
+		if ae == 2 and not rear_pick:
 			box(car, Vector3(1.9, 0.05, 0.45), Vector3(0, 1.02, 2.0), carbon)                        # spoiler
 			for sx in [-0.8, 0.8]:
 				box(car, Vector3(0.05, 0.14, 0.4), Vector3(sx, 0.95, 2.0), carbon)
-		if ae >= 3:
+		if ae >= 3 and not rear_pick:
 			for sx in [-0.75, 0.75]:
 				box(car, Vector3(0.07, 0.7, 0.1), Vector3(sx, 1.25, 2.0), carbon)
 			box(car, Vector3(2.1, 0.07, 0.6), Vector3(0, 1.62, 2.02), carbon)                        # tall wing
@@ -554,10 +584,11 @@ static func _fitted_parts(car: Node3D, up: Dictionary, body_mat: StandardMateria
 	var su := int(up.get("fit_susp", 0))
 	if su > 0:
 		var gold := mat(Color(1.0, 0.75, 0.15), 0.8, 0.3)
-		for sx in [-0.97, 0.97]:
-			for sz in [-1.3, 1.3]:
-				box(car, Vector3(0.05, 0.05, 0.4), Vector3(sx, 0.62, sz), gold)                      # coilover glimpse above the wheels
-		if su >= 2:
+		if su == 1:
+			for sx in [-0.97, 0.97]:
+				for sz in [-1.3, 1.3]:
+					box(car, Vector3(0.05, 0.05, 0.4), Vector3(sx, 0.62, sz), gold)                  # coilover glimpse above the wheels
+		if su == 2:
 			for sx in [-1.0, 1.0]:
 				box(car, Vector3(0.06, 0.1, 2.0), Vector3(sx * 0.99, 0.5, 0.0), carbon)             # side skirts
 		if su >= 3:
@@ -566,12 +597,13 @@ static func _fitted_parts(car: Node3D, up: Dictionary, body_mat: StandardMateria
 					box(car, Vector3(0.14, 0.12, 1.0), Vector3(sx, 0.88, sz), body_mat)               # fender flares
 	var kt := int(up.get("fit_kit", 0))
 	if kt > 0:
-		box(car, Vector3(1.8, 0.06, 1.4), Vector3(0, 0.34, -1.4), mat(Color(0.5, 0.52, 0.56), 0.8, 0.4))   # skid plate
-		if kt >= 2:
+		if kt == 1:
+			box(car, Vector3(1.8, 0.06, 1.4), Vector3(0, 0.34, -1.4), mat(Color(0.5, 0.52, 0.56), 0.8, 0.4))   # skid plate
+		if kt == 2:
 			var tube := mat(Color(0.12, 0.12, 0.14), 0.7, 0.35)
 			for sx in [-0.7, 0.7]:
 				beam(car, Vector3(sx, 1.0, 1.0), Vector3(sx, 1.8 - d, 0.2), 0.06, tube)               # visible roll hoops
-		if kt >= 3:
+		if kt >= 3 and not front_pick:
 			for sx in [-0.6, 0.6]:
 				box(car, Vector3(0.07, 0.55, 0.08), Vector3(sx, 0.85, -2.22), mat(CHROME, 0.9, 0.2))   # bull bar
 			box(car, Vector3(1.4, 0.07, 0.08), Vector3(0, 1.12, -2.22), mat(CHROME, 0.9, 0.2))
