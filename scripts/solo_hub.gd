@@ -29,7 +29,7 @@ class Tile extends Button:
 		art.landmark = lm
 		art.grade = grade
 		art.speed = 1.4
-		art.show_car = true
+		art.show_car = false
 		art.motion = mot
 		art.car_col = ccol
 		art.bend_amp = bamp
@@ -46,24 +46,24 @@ class Tile extends Button:
 		gr.set_color(1, Color(0.02, 0.03, 0.06, 0.88))
 		var gt := GradientTexture2D.new()
 		gt.gradient = gr
-		gt.fill_from = Vector2(0, 1)
-		gt.fill_to = Vector2(0, 0)
+		gt.fill_from = Vector2(0, 0)
+		gt.fill_to = Vector2(0, 1)
 		scrim.texture = gt
 		scrim.stretch_mode = TextureRect.STRETCH_SCALE
-		scrim.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+		scrim.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 		scrim.offset_left = 9
 		scrim.offset_right = -9
-		scrim.offset_top = 9
-		scrim.offset_bottom = 150
+		scrim.offset_bottom = -9
+		scrim.offset_top = -150
 		scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(scrim)
 		var v := VBoxContainer.new()
-		v.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+		v.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 		v.offset_left = 30
 		v.offset_right = -30
-		v.offset_top = 22
-		v.offset_bottom = 140
-		v.alignment = BoxContainer.ALIGNMENT_BEGIN
+		v.offset_bottom = -28
+		v.offset_top = -130
+		v.alignment = BoxContainer.ALIGNMENT_END
 		v.add_theme_constant_override("separation", 4)
 		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(v)
@@ -80,9 +80,9 @@ class Tile extends Button:
 		if badge != "":
 			var pill := PanelContainer.new()
 			pill.add_theme_stylebox_override("panel", UI.sb(Color(0, 0, 0, 0.62) if not locked else Color(0.15, 0.16, 0.2, 0.9), 14, Color(1, 1, 1, 0.18) if locked else UI.ACCENT, 1))
-			pill.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+			pill.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 			pill.offset_left = 26
-			pill.offset_top = -56
+			pill.offset_top = 24
 			pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			add_child(pill)
 			var pm := MarginContainer.new()
