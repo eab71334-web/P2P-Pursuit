@@ -372,10 +372,19 @@ func _build_engine_bay(c: Color) -> void:
 	cov.name = "cover"
 	# hood release lever inside the cabin (pulled by the player)
 	_lever_pivot = Node3D.new()
-	_lever_pivot.position = Vector3(-0.8, 0.95, -0.3)
+	_lever_pivot.position = Vector3(-0.74, 0.93, -0.58)
 	add_child(_lever_pivot)
-	_box(_lever_pivot, Vector3(0.04, 0.04, 0.2), Vector3(0, 0, -0.1), Color(0.95, 0.8, 0.1))
-	_box(_lever_pivot, Vector3(0.06, 0.06, 0.05), Vector3(0, 0, -0.2), Color(0.85, 0.1, 0.1))
+	var sport := model in ["charger", "coupe", "m4", "gt3", "hyper"]
+	var accent: Color = CarInterior.theme(model)["stitch"]
+	_box(self, Vector3(0.1, 0.012, 0.07), Vector3(-0.74, 0.915, -0.58), Color(0.02, 0.02, 0.03))   # small mounting plate under the dash
+	if sport:
+		_box(_lever_pivot, Vector3(0.016, 0.016, 0.07), Vector3(0, 0, 0.0), Color(0.03, 0.03, 0.035))
+		_box(_lever_pivot, Vector3(0.05, 0.02, 0.016), Vector3(0, 0, 0.04), Color(0.03, 0.03, 0.035))
+		_box(_lever_pivot, Vector3(0.05, 0.006, 0.006), Vector3(0, 0.012, 0.04), accent)
+	else:
+		_box(_lever_pivot, Vector3(0.014, 0.014, 0.08), Vector3(0, 0, 0.0), Color(0.75, 0.77, 0.82))
+		_box(_lever_pivot, Vector3(0.06, 0.022, 0.02), Vector3(0, 0, 0.05), Color(0.05, 0.05, 0.06))
+		_box(_lever_pivot, Vector3(0.02, 0.026, 0.026), Vector3(0, 0, 0.05), Color(0.85, 0.12, 0.1))
 
 
 func _quad_mat(additive: bool) -> StandardMaterial3D:

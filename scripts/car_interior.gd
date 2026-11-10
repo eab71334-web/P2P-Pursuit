@@ -59,8 +59,6 @@ static func build(car: Node3D, model: String, sd: float, drop: float) -> void:
 	_bx(car, Vector3(0.012, 0.02, 1.0), Vector3(-0.12, 1.1 - sd * 0.2, 0.1), stitch)
 	var shift_y := 1.1 - sd * 0.2
 	shifter(car, model, shift_y)
-	_bx(car, Vector3(0.05, 0.05, 0.3), Vector3(0.0, shift_y + 0.04, 0.42), chrome, Vector3(-12, 0, 0))   # handbrake
-	_bx(car, Vector3(0.07, 0.05, 0.08), Vector3(0.0, shift_y + 0.08, 0.55), dark)
 	# ---- floor carpet + mats + pedals
 	_bx(car, Vector3(1.8, 0.04, 2.0), Vector3(0, 0.915, -0.1), _m(th["carpet"], 0.0, 1.0))
 	for sx in [-0.45]:

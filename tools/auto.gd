@@ -260,6 +260,8 @@ func _process(d: float) -> void:
 			_film2(sc)
 		"cine":
 			_cine(sc)
+		"act":
+			_act(sc)
 		"cmap":
 			if step == 0 and t > 2.0:
 				step = 1
@@ -1544,3 +1546,50 @@ func _poster(sc: Node) -> void:
 		shot("poster_%s_%s" % [OS.get_environment("CINE_CAR"), OS.get_environment("CINE_ANGLE")])
 	elif step == 2 and t > 5.3:
 		get_tree().quit()
+
+
+## cabin actions: env CINE_CAR, ACT (hbrake, greet, drink, window, hazard...), ACTCAM (fp | pass | back)
+var _act_n := 0
+var _act_t0 := 0.0
+func _act(sc: Node) -> void:
+	var car_id := OS.get_environment("CINE_CAR")
+	if step == 0:
+		step = 1
+		Profile.cars[car_id] = true
+		Profile.car = car_id
+		Profile.carset[car_id] = {"paint": "red", "stripe": "white", "rim": "black", "glow": "none", "spoiler": "gt", "front": "splitter", "wheel": "centre"}
+	elif step == 1 and t > 2.0:
+		step = 2
+		sc._start_solo({"bots": 0, "level": 0, "weather": "clear", "theme": "", "career": -1})
+	elif step == 2:
+		var w := get_tree().current_scene
+		if w != null and w.get("state") != null and int(w.get("state")) == 2:
+			step = 3; _act_t0 = t
+	elif step == 3 and t > _act_t0 + 1.5:
+		var w := get_tree().current_scene
+		var ts = w.teams[w.my_team]
+		for cl in get_tree().root.find_children("*", "CanvasLayer", true, false):
+			(cl as CanvasLayer).visible = false
+		var cm := OS.get_environment("ACTCAM")
+		if cm != "fp":
+			_cine_cam = Camera3D.new()
+			get_tree().root.add_child(_cine_cam)
+			_cine_cam.current = true
+		ts.car.actions.do(OS.get_environment("ACT"))
+		step = 4; _act_t0 = t
+	elif step == 4:
+		var w := get_tree().current_scene
+		var ts = w.teams[w.my_team]
+		var car: Node3D = ts.car
+		var cm := OS.get_environment("ACTCAM")
+		if _cine_cam != null:
+			var pre := {"pass": [Vector3(0.75, 1.55, 0.35), Vector3(-0.55, 1.0, -0.05), 75.0], "back": [Vector3(-0.1, 1.9, 1.25), Vector3(-0.45, 1.05, -0.2), 70.0], "low": [Vector3(0.5, 0.7, 0.0), Vector3(-0.5, 0.9, 0.2), 80.0]}
+			var c: Array = pre[cm]
+			_cine_cam.fov = c[2]
+			_cine_cam.global_position = car.global_transform * (c[0] as Vector3)
+			_cine_cam.look_at(car.global_transform * (c[1] as Vector3), Vector3.UP)
+		if t > _act_t0 + 0.3 * (_act_n + 1):
+			shot("act_%s_%s_%d" % [OS.get_environment("ACT"), cm, _act_n])
+			_act_n += 1
+			if _act_n >= int(OS.get_environment("ACTN") if OS.get_environment("ACTN") != "" else "8"):
+				get_tree().quit()

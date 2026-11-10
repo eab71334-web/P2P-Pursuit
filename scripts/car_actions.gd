@@ -82,6 +82,12 @@ var _hb_t := 0.0
 var _hb_lever: Node3D
 var _hb_tip: Node3D
 var _hb_ang := 0.1
+var _hb_style := "lever"
+var _hb_off := 0.0
+var _hb_up := 0.5
+var _hb_btn: MeshInstance3D
+var _hb_led_off: StandardMaterial3D = StandardMaterial3D.new()
+var _hb_led_on: StandardMaterial3D = StandardMaterial3D.new()
 var _dome_light: OmniLight3D
 var _dome_mat: StandardMaterial3D
 var _ac_node: Node3D
@@ -103,6 +109,11 @@ func setup(p_car: Car) -> void:
 	_pv = car._wheel_pivot
 	if _pv == null:
 		return
+	_hb_led_off.albedo_color = Color(0.25, 0.04, 0.03)
+	_hb_led_on.albedo_color = Color(1.0, 0.1, 0.05)
+	_hb_led_on.emission_enabled = true
+	_hb_led_on.emission = Color(1.0, 0.1, 0.05)
+	_hb_led_on.emission_energy_multiplier = 3.0
 	_build_controls()
 	_build_wipers()
 	_build_can()
@@ -176,9 +187,7 @@ func _build_controls() -> void:
 		if kn != null:
 			kn.rotation = Vector3(deg_to_rad(72.0), 0, 0)   # face the driver like the dash does
 	# --- mirror control: electric joystick or manual lever by the left door
-	_joy_pos = _pv.position + Vector3(-0.44, -0.30, 0.18)
-	# door armrest the window / mirror controls sit on (otherwise they float)
-	CarStyle.box(car, Vector3(0.16, 0.05, 0.56), Vector3(_joy_pos.x, _joy_pos.y - 0.037, _joy_pos.z + 0.12), dark)
+	_joy_pos = Vector3(-0.835, 1.18, -0.14)
 	_joy = Node3D.new()
 	_joy.position = _joy_pos
 	car.add_child(_joy)
@@ -378,7 +387,7 @@ func _cup_holder() -> Vector3:
 
 
 func _mouth() -> Vector3:
-	return Vector3(-0.45, 1.72 - car.sd, 0.16)
+	return Vector3(-0.43, 1.49 - car.sd, 0.15)   # hand position that puts the can top on the mouth, below the visor
 
 
 func _build_can() -> void:
@@ -442,7 +451,7 @@ func toggle_drink() -> void:
 
 func _drink() -> Dictionary:
 	var h := _cup_holder() + Vector3(0, 0.17, 0)
-	var m := _mouth() + Vector3(0, 0.0, -0.02)
+	var m := _mouth()
 	var grab := func():
 		_can_held = true
 		Sfx.play3d("click", car, -6.0, 1.3)
@@ -461,7 +470,7 @@ func _drink() -> Dictionary:
 			var lower := smoothstep(2.55, 3.2, t)
 			var p := h.lerp(m, lift * (1.0 - lower))
 			p.y += sin(lift * PI * (1.0 - lower)) * 0.05
-			_can_tilt = -1.15 * smoothstep(1.4, 1.8, t) * (1.0 - smoothstep(2.3, 2.6, t))
+			_can_tilt = 1.0 * smoothstep(1.4, 1.8, t) * (1.0 - smoothstep(2.3, 2.6, t))
 			return p}
 
 
@@ -764,10 +773,10 @@ func _build_extras() -> void:
 	var chrome := _mat(Color(0.78, 0.8, 0.86), 0.9, 0.25)
 	var amb := _mat(Color(1.0, 0.6, 0.15), 0.0, 0.5, 1.0)
 	# --- driver window control: crank (old cars) or electric rocker switch on the door
-	_win_pos = _pv.position + Vector3(-0.44, -0.30, 0.42)
+	_win_pos = Vector3(-0.835, 1.18, 0.16)   # on the door-card armrest
 	if car.model in CRANK_CARS:
 		_win_node = Node3D.new()
-		_win_node.position = _win_pos
+		_win_node.position = _win_pos + Vector3(0, 0.04, 0)
 		car.add_child(_win_node)
 		CarStyle.cyl(_win_node, 0.035, 0.012, Vector3(0.006, 0, 0), dark, Vector3(0, 0, 90))
 		var mv := Node3D.new()
@@ -825,16 +834,48 @@ func _build_extras() -> void:
 	var hz_sz := Vector3(0.05, 0.012, 0.036) if sport else Vector3(0.062, 0.014, 0.042)
 	CarStyle.box(_haz_node, Vector3(hz_sz.x + 0.014, 0.008, hz_sz.z + 0.014), Vector3(0, -0.004, 0), dark)
 	_haz_btn = CarStyle.box(_haz_node, hz_sz, Vector3(0, 0.006, 0), _haz_mat_off)
-	# --- handbrake lever between the seats
-	CarStyle.box(car, Vector3(0.09, 0.05, 0.5), Vector3(-0.2, 0.83, 0.5), dark)
+	# --- handbrake, one design per car type, mounted on the centre console behind the shifter
+	var sy := 1.1 - float(car.sd) * 0.2 + 0.01
+	_hb_style = "lever"
+	if car.model in ["buggy", "gt3"]:
+		_hb_style = "hydro"
+	elif car.model in ["charger", "coupe", "m4", "hyper"]:
+		_hb_style = "button"
+	var boot := _mat(Color(0.015, 0.015, 0.02), 0.2, 0.9)
+	var grip := _mat(Color(0.03, 0.03, 0.035), 0.1, 0.85)
 	_hb_lever = Node3D.new()
-	_hb_lever.position = Vector3(-0.2, 0.87, 0.26)
 	car.add_child(_hb_lever)
-	CarStyle.box(_hb_lever, Vector3(0.025, 0.025, 0.26), Vector3(0, 0, 0.13), chrome)
-	CarStyle.box(_hb_lever, Vector3(0.04, 0.035, 0.07), Vector3(0, 0.005, 0.27), dark)
 	_hb_tip = Node3D.new()
-	_hb_tip.position = Vector3(0, 0.0, 0.27)
 	_hb_lever.add_child(_hb_tip)
+	match _hb_style:
+		"lever":
+			_hb_lever.position = Vector3(0.0, sy + 0.015, 0.66)
+			CarStyle.box(car, Vector3(0.11, 0.035, 0.2), Vector3(0.0, sy + 0.012, 0.58), boot)        # gaiter / slot
+			CarStyle.box(_hb_lever, Vector3(0.022, 0.022, 0.34), Vector3(0, 0, -0.17), chrome)
+			CarStyle.box(_hb_lever, Vector3(0.05, 0.045, 0.11), Vector3(0, 0.004, -0.36), grip)
+			CarStyle.box(_hb_lever, Vector3(0.012, 0.012, 0.05), Vector3(0, 0.03, -0.40), _mat(Color(0.8, 0.1, 0.08), 0.0, 0.5))   # ratchet button
+			_hb_tip.position = Vector3(0, 0.0, -0.36)
+			_hb_off = 0.02
+			_hb_up = 0.52
+		"hydro":
+			_hb_lever.position = Vector3(0.0, sy + 0.02, 0.5)
+			CarStyle.box(car, Vector3(0.09, 0.04, 0.13), Vector3(0.0, sy + 0.012, 0.5), boot)
+			CarStyle.cyl(_hb_lever, 0.014, 0.30, Vector3(0, 0.15, 0), chrome)
+			CarStyle.box(_hb_lever, Vector3(0.045, 0.1, 0.06), Vector3(0, 0.32, 0.0), grip)
+			CarStyle.box(_hb_lever, Vector3(0.05, 0.012, 0.062), Vector3(0, 0.375, 0.0), _mat(Color(0.9, 0.5, 0.05), 0.0, 0.5, 0.4))
+			_hb_tip.position = Vector3(0, 0.32, 0)
+			_hb_off = -0.06
+			_hb_up = 0.62
+		_:
+			# electric parking brake: round "P" button with a red ring on the console, right of the shifter
+			_hb_lever.position = Vector3(0.085, sy + 0.004, 0.3)
+			CarStyle.box(_hb_lever, Vector3(0.07, 0.008, 0.07), Vector3(0, -0.002, 0), boot)
+			CarStyle.cyl(_hb_lever, 0.026, 0.014, Vector3(0, 0.006, 0), chrome)
+			_hb_btn = CarStyle.cyl(_hb_lever, 0.017, 0.016, Vector3(0, 0.009, 0), _hb_led_off)
+			_hb_tip.position = Vector3(0, 0.02, 0)
+			_hb_off = 0.0
+			_hb_up = 0.0
+	_hb_ang = _hb_off
 	_hb_lever.rotation.x = _hb_ang
 	# --- high-beam flash lights (only lit while flashing)
 	for x in [-0.6, 0.6]:
@@ -895,6 +936,8 @@ func _do_flash() -> void:
 
 
 func _set_hb(on: bool, emit := true) -> void:
+	if _hb_btn != null:
+		_hb_btn.material_override = _hb_led_on if on else _hb_led_off
 	hb_on = on
 	_hb_t = 0.0
 	if not car.is_remote:
@@ -941,8 +984,9 @@ func _tick_extras(delta: float) -> void:
 		if _hb_t > 1.5:
 			_set_hb(false)
 	if _hb_lever != null and not (_busy and str(_a.get("name", "")) == "hbrake"):
-		_hb_ang = lerpf(_hb_ang, -0.6 if hb_on else 0.1, clampf(delta * 10.0, 0.0, 1.0))
-		_hb_lever.rotation.x = _hb_ang
+		if _hb_style != "button":
+			_hb_ang = lerpf(_hb_ang, _hb_up if hb_on else _hb_off, clampf(delta * 10.0, 0.0, 1.0))
+			_hb_lever.rotation.x = _hb_ang
 
 
 # ---- actions
@@ -1025,13 +1069,19 @@ func _hbrake_act() -> Dictionary:
 	var lev := _hb_lever
 	var tip := _hb_tip
 	var fire := func(): _set_hb(not rel)
-	return {"side": "R", "dur": 1.1, "lean": 0.12, "events": [_ev(0.5, fire)],
+	var btn := _hb_style == "button"
+	var off := _hb_off
+	var up := _hb_up
+	return {"side": "R", "dur": 1.1, "lean": 0.08, "events": [_ev(0.5, fire)],
 		"pose": func(t: float) -> Vector3:
 			var f := smoothstep(0.3, 0.7, t)
-			var ang := lerpf(-0.6, 0.1, f) if rel else lerpf(0.1, -0.6, f)
+			if btn:
+				var d := smoothstep(0.35, 0.5, t) * (1.0 - smoothstep(0.55, 0.7, t))
+				return car.to_local(tip.global_position) + Vector3(0, 0.075 - 0.05 * d, 0.0)
+			var ang := lerpf(up, off, f) if rel else lerpf(off, up, f)
 			_hb_ang = ang
 			lev.rotation.x = ang
-			return car.to_local(tip.global_position) + Vector3(0, 0.05, -0.01)}
+			return car.to_local(tip.global_position) + Vector3(0, 0.055, 0.0)}
 
 
 func _greet_act() -> Dictionary:
@@ -1048,11 +1098,14 @@ func _greet_act() -> Dictionary:
 		if _greet_opened:
 			_set_win(0.0, false)
 			_greet_opened = false
-	return {"side": "L", "dur": 2.6, "lean": 0.04,
-		"events": [_ev(0.0, open_it), _ev(1.0, beep1), _ev(1.3, beep2), _ev(2.3, close_it)],
+	return {"side": "L", "dur": 3.1, "lean": 0.04,
+		"events": [_ev(0.0, open_it), _ev(1.3, beep1), _ev(1.6, beep2), _ev(2.7, close_it)],
 		"pose": func(t: float) -> Vector3:
-			var out := smoothstep(0.2, 1.0, t) * (1.0 - smoothstep(2.1, 2.6, t))
-			var wv := sin(t * 11.0) * 0.09 * smoothstep(0.9, 1.1, t) * (1.0 - smoothstep(2.0, 2.2, t))
-			var inner := Vector3(-0.8, 1.2 - sd * 0.5, -0.1)
-			var outer := Vector3(-1.3, 1.55 - sd * 0.3, -0.1 + wv)
-			return inner.lerp(outer, out) + Vector3(0, absf(wv) * 0.25, 0)}
+			# up inside the cabin first (clear of the door card), then out over the door top through the open window, wave, and back the same way
+			var up := smoothstep(0.1, 0.6, t) * (1.0 - smoothstep(2.6, 3.0, t))
+			var out := smoothstep(0.7, 1.2, t) * (1.0 - smoothstep(2.2, 2.6, t))
+			var wv := sin(t * 11.0) * 0.09 * smoothstep(1.2, 1.4, t) * (1.0 - smoothstep(2.0, 2.2, t))
+			var rest := Vector3(-0.55, 1.15 - sd * 0.5, -0.25)
+			var hi := Vector3(-0.66, 1.62, -0.12)
+			var outer := Vector3(-1.2, 1.7, -0.12 + wv)
+			return rest.lerp(hi, up).lerp(outer, out) + Vector3(0, absf(wv) * 0.25, 0)}
