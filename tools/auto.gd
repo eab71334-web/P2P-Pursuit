@@ -260,6 +260,8 @@ func _process(d: float) -> void:
 			_film2(sc)
 		"cine":
 			_cine(sc)
+		"poster":
+			_poster(sc)
 		"icon":
 			_icon(sc)
 		"result":
@@ -1434,3 +1436,78 @@ func _cine(sc: Node) -> void:
 				shot("cine_%s_%s" % [car_id, cams[_cine_i]])
 				_cine_i += 1
 				_cine_t0 = t
+
+## store poster: StageArt painted scene + the real 3D car on top (transparent SubViewport). env: CINE_CAR, CINE_PAINT, CINE_THEME, CINE_WX, CINE_LAND, CINE_ANGLE
+const POSTER_CAM := {
+	"front34": [Vector3(-9.0, 1.0, -12.6), Vector3(0.8, 1.2, 0.0), 36.0, 24.0],
+	"low": [Vector3(-4.0, 0.3, -7.0), Vector3(0.0, 0.6, 0.0), 36.0, 20.0],
+	"wheel": [Vector3(-2.6, 0.18, -3.6), Vector3(-0.2, 0.45, -0.3), 52.0, 25.0],
+	"rear34": [Vector3(9.5, 1.2, 13.2), Vector3(3.0, 1.1, 0.0), 36.0, -24.0],
+	"side": [Vector3(-17.0, 1.0, -0.5), Vector3(-1.0, 0.9, 0.0), 26.0, 0.0],
+}
+func _poster(sc: Node) -> void:
+	if step == 0 and t > 1.5:
+		step = 1
+		sc.visible = false
+		var root := get_tree().root
+		var cl := CanvasLayer.new()
+		root.add_child(cl)
+		var art := StageArt.new(OS.get_environment("CINE_THEME"), OS.get_environment("CINE_WX"))
+		art.poster = true
+		art.landmark = OS.get_environment("CINE_LAND")
+		art.speed = 0.0
+		art._seed = 0.0
+		art._t = 0.0
+		art.set_process(false)
+		art.position = Vector2.ZERO
+		art.size = Vector2(1920, 1080)
+		cl.add_child(art)
+		var svc := SubViewportContainer.new()
+		svc.stretch = true
+		svc.size = Vector2(1920, 1080)
+		cl.add_child(svc)
+		var vp := SubViewport.new()
+		vp.size = Vector2i(1920, 1080)
+		vp.transparent_bg = true
+		vp.own_world_3d = true
+		vp.msaa_3d = Viewport.MSAA_4X
+		svc.add_child(vp)
+		var env := WorldEnvironment.new()
+		var e := Environment.new()
+		e.background_mode = Environment.BG_CLEAR_COLOR
+		e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		e.ambient_light_color = Color(0.62, 0.66, 0.78)
+		e.ambient_light_energy = 0.75
+		e.glow_enabled = true
+		e.glow_intensity = 0.6
+		env.environment = e
+		vp.add_child(env)
+		var key := DirectionalLight3D.new()
+		key.rotation_degrees = Vector3(-32, -45, 0)
+		key.light_energy = 1.5
+		vp.add_child(key)
+		var rim := DirectionalLight3D.new()
+		rim.rotation_degrees = Vector3(-12, 150, 0)
+		rim.light_color = Color(1.0, 0.7, 0.45)
+		rim.light_energy = 1.3
+		vp.add_child(rim)
+		var cid := OS.get_environment("CINE_CAR")
+		var lo := {"car": cid, "paint": OS.get_environment("CINE_PAINT"), "stripe": "white", "rim": "black", "glow": "none", "decal": "none", "spoiler": "gt", "front": "splitter", "hood": "none", "skirts": "none", "wheel": "centre"}
+		var car := Car.new()
+		car.setup(0, Color.WHITE, false, lo, true)
+		vp.add_child(car)
+		car.set_plate_text("")
+		var cfg: Array = POSTER_CAM[OS.get_environment("CINE_ANGLE")]
+		car.rotation_degrees.y = cfg[3]
+		var cam := Camera3D.new()
+		cam.fov = cfg[2] * float(OS.get_environment("CINE_ZOOM") if OS.get_environment("CINE_ZOOM") != "" else "1.0")
+		cam.position = cfg[0]
+		vp.add_child(cam)
+		cam.look_at(cfg[1], Vector3.UP)
+		cam.current = true
+		_cs_cam = cam
+	elif step == 1 and t > 5.0:
+		step = 2
+		shot("poster_%s_%s" % [OS.get_environment("CINE_CAR"), OS.get_environment("CINE_ANGLE")])
+	elif step == 2 and t > 5.3:
+		get_tree().quit()
