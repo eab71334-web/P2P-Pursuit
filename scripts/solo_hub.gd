@@ -13,7 +13,7 @@ var _badge: Label
 
 
 class Tile extends Button:
-	func _init(title: String, sub: String, th: String, wx: String, big: bool, locked: bool, badge: String, grade := Color(0, 0, 0, 0), lm := "") -> void:
+	func _init(title: String, sub: String, th: String, wx: String, big: bool, locked: bool, badge: String, grade := Color(0, 0, 0, 0), lm := "", mot := "cruise", ccol := Color(0.9, 0.91, 0.94), bamp := 0.55) -> void:
 		focus_mode = Control.FOCUS_NONE
 		size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -29,6 +29,10 @@ class Tile extends Button:
 		art.landmark = lm
 		art.grade = grade
 		art.speed = 1.4
+		art.show_car = true
+		art.motion = mot
+		art.car_col = ccol
+		art.bend_amp = bamp
 		art.dim = 0.55 if locked else 0.0
 		art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		art.offset_left = 9
@@ -36,13 +40,30 @@ class Tile extends Button:
 		art.offset_right = -9
 		art.offset_bottom = -9
 		add_child(art)
+		var scrim := TextureRect.new()
+		var gr := Gradient.new()
+		gr.set_color(0, Color(0, 0, 0, 0))
+		gr.set_color(1, Color(0.02, 0.03, 0.06, 0.88))
+		var gt := GradientTexture2D.new()
+		gt.gradient = gr
+		gt.fill_from = Vector2(0, 1)
+		gt.fill_to = Vector2(0, 0)
+		scrim.texture = gt
+		scrim.stretch_mode = TextureRect.STRETCH_SCALE
+		scrim.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+		scrim.offset_left = 9
+		scrim.offset_right = -9
+		scrim.offset_top = 9
+		scrim.offset_bottom = 150
+		scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(scrim)
 		var v := VBoxContainer.new()
-		v.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+		v.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 		v.offset_left = 30
 		v.offset_right = -30
-		v.offset_bottom = -28
-		v.offset_top = -120
-		v.alignment = BoxContainer.ALIGNMENT_END
+		v.offset_top = 22
+		v.offset_bottom = 140
+		v.alignment = BoxContainer.ALIGNMENT_BEGIN
 		v.add_theme_constant_override("separation", 4)
 		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(v)
@@ -54,14 +75,14 @@ class Tile extends Button:
 		bar.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		v.add_child(bar)
-		var sl := UI.lbl(v, sub, 15 if big else 14, Color(0.88, 0.9, 0.95), true)
+		var sl := UI.lbl(v, sub, 20 if big else 18, Color(1, 1, 1), true)
 		sl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		if badge != "":
 			var pill := PanelContainer.new()
 			pill.add_theme_stylebox_override("panel", UI.sb(Color(0, 0, 0, 0.62) if not locked else Color(0.15, 0.16, 0.2, 0.9), 14, Color(1, 1, 1, 0.18) if locked else UI.ACCENT, 1))
-			pill.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+			pill.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
 			pill.offset_left = 26
-			pill.offset_top = 24
+			pill.offset_top = -56
 			pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			add_child(pill)
 			var pm := MarginContainer.new()
@@ -101,7 +122,7 @@ func build() -> void:
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	add_child(body)
 	var big := Tile.new(UI.tx("CAREER", "المهنة"), UI.tx("20 stages in 4 championships. Win to earn stars, coins and chests.", "20 مرحلة في 4 بطولات. فُز لتكسب النجوم والعملات والصناديق."),
-		"autumn", "clear", true, false, "%d / %d  %s" % [got, Career.COUNT * 3, UI.tx("stars", "نجمة")], Color(1.0, 0.5, 0.1, 0.10), "bridge")
+		"autumn", "clear", true, false, "%d / %d  %s" % [got, Career.COUNT * 3, UI.tx("stars", "نجمة")], Color(1.0, 0.5, 0.1, 0.10), "bridge", "drift", Color(0.95, 0.35, 0.1), 0.9)
 	big.size_flags_stretch_ratio = 1.0
 	big.pressed.connect(func():
 		Sfx.play("click", -6.0)
@@ -115,20 +136,20 @@ func build() -> void:
 	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	grid.size_flags_stretch_ratio = 1.9
 	body.add_child(grid)
-	var t1 := Tile.new(UI.tx("CUSTOM RACE", "سباق مخصّص"), UI.tx("Opponents, level, weather and track", "المنافسون والمستوى والطقس والمضمار"), "mountain", "fog", false, false, "", Color(0.1, 0.3, 0.7, 0.12), "tower")
+	var t1 := Tile.new(UI.tx("CUSTOM RACE", "سباق مخصّص"), UI.tx("Opponents, level, weather and track", "المنافسون والمستوى والطقس والمضمار"), "mountain", "fog", false, false, "", Color(0.1, 0.3, 0.7, 0.12), "tower", "lane", Color(0.25, 0.5, 0.95), 0.4)
 	t1.pressed.connect(func():
 		Sfx.play("click", -6.0)
 		custom.emit())
 	grid.add_child(t1)
-	var t2 := Tile.new(UI.tx("QUICK START", "بداية سريعة"), UI.tx("A random stage, right now", "مرحلة عشوائية فوراً"), "snow", "night", false, false, "", Color(0.3, 0.1, 0.6, 0.12), "village")
+	var t2 := Tile.new(UI.tx("QUICK START", "بداية سريعة"), UI.tx("A random stage, right now", "مرحلة عشوائية فوراً"), "snow", "night", false, false, "", Color(0.3, 0.1, 0.6, 0.12), "village", "boost", Color(0.9, 0.2, 0.55), 0.3)
 	t2.pressed.connect(func():
 		Sfx.play("click", -6.0)
 		quick.emit())
 	grid.add_child(t2)
-	var t3 := Tile.new(UI.tx("LEADERBOARDS", "لوحة الترتيب"), UI.tx("Fastest time on every track", "أسرع زمن على كل مضمار"), "mountain", "clear", false, true, UI.tx("COMING SOON", "قريباً"), Color(0, 0, 0, 0), "tunnel")
+	var t3 := Tile.new(UI.tx("LEADERBOARDS", "لوحة الترتيب"), UI.tx("Fastest time on every track", "أسرع زمن على كل مضمار"), "mountain", "clear", false, true, UI.tx("COMING SOON", "قريباً"), Color(0, 0, 0, 0), "tunnel", "bounce", Color(0.95, 0.8, 0.2), 0.6)
 	t3.pressed.connect(func(): soon.emit())
 	grid.add_child(t3)
-	var t4 := Tile.new(UI.tx("WEEKLY CHALLENGE", "التحدي الأسبوعي"), UI.tx("A new event every week", "حدث جديد كل أسبوع"), "autumn", "storm", false, true, UI.tx("COMING SOON", "قريباً"), Color(0, 0, 0, 0), "bridge")
+	var t4 := Tile.new(UI.tx("WEEKLY CHALLENGE", "التحدي الأسبوعي"), UI.tx("A new event every week", "حدث جديد كل أسبوع"), "autumn", "storm", false, true, UI.tx("COMING SOON", "قريباً"), Color(0, 0, 0, 0), "bridge", "cruise", Color(0.3, 0.8, 0.45), 0.7)
 	t4.pressed.connect(func(): soon.emit())
 	grid.add_child(t4)
 	var all: Array = [big] + grid.get_children()

@@ -260,6 +260,20 @@ func _process(d: float) -> void:
 			_film2(sc)
 		"cine":
 			_cine(sc)
+		"hub":
+			if step == 0 and t > 2.0:
+				step = 1
+				sc._open_solo()
+			elif step == 1 and t > 5.0:
+				step = 2
+				shot("hub0")
+			elif step == 2 and t > 7.0:
+				step = 3
+				shot("hub1")
+			elif step == 3 and t > 9.5:
+				step = 4
+				shot("hub2")
+				get_tree().quit()
 		"poster":
 			_poster(sc)
 		"icon":

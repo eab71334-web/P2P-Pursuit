@@ -27,6 +27,9 @@ var cycle := false  # rotate the theme every few seconds (random track)
 var speed := 3.0
 var dim := 0.0
 var show_car := false
+var car_col := Color(0.9, 0.91, 0.94)
+var motion := "cruise"  # cruise | drift | bounce | boost | lane
+var bend_amp := 0.55
 var landmark := ""  # "", "village", "bridge", "tower", "tunnel"
 var poster := false  # richer cover look: warm grade, light rays, halftone, grain, vignette
 var grade := Color(0, 0, 0, 0)
@@ -133,7 +136,7 @@ func _draw() -> void:
 	var th: Dictionary = THEMES[scene_theme]
 	var wx: Dictionary = WX[weather]
 	var hz := h * 0.5
-	var bend := sin(_t * 0.4 + _seed) * 0.55
+	var bend := sin(_t * 0.4 + _seed) * bend_amp
 	# sky
 	var top: Color = wx["top"]
 	var bot: Color = wx["bot"]
@@ -315,27 +318,56 @@ func _tree(x: float, y: float, sz: float, kind: int, depth_u: float) -> void:
 
 
 func _car(w: float, h: float, hz: float, bend: float) -> void:
-	var p := 0.9
+	var p := 0.9 if not poster else 0.88
 	var y := hz + (h - hz) * p
 	var x := _cx(p, w, bend) + sin(_t * 1.3) * w * 0.006
 	var cw := _hw(p, w) * 0.46
 	var ch := cw * 0.62
+	var lean := 0.0
+	var lift := 0.0
+	match motion:
+		"drift":
+			var sw := sin(_t * 1.1)
+			x += sw * w * 0.045
+			lean = sw * cw * 0.22
+		"bounce":
+			lift = absf(sin(_t * 2.4)) * ch * 0.38
+		"boost":
+			x += sin(_t * 31.0) * w * 0.0012
+			lift = sin(_t * 17.0) * ch * 0.02
+		"lane":
+			var k := smoothstep(0.0, 1.0, 0.5 + 0.5 * sin(_t * 0.8))
+			x += (k - 0.5) * _hw(p, w) * 0.9
+			lean = (cos(_t * 0.8)) * cw * 0.1
 	var lit := 1.0 if (weather == "night" or weather == "storm") else 0.0
-	draw_rect(Rect2(x - cw * 1.02, y - ch * 0.12, cw * 2.04, ch * 0.2), Color(0, 0, 0, 0.35))
-	var body := _tc(Color(0.9, 0.91, 0.94), 0.0).lerp(Color(0.4, 0.42, 0.5), 0.3 * lit)
+	draw_rect(Rect2(x - cw * 1.02, y - ch * 0.12, cw * 2.04, ch * 0.2), Color(0, 0, 0, 0.35 - lift / ch * 0.4))
+	y -= lift
+	if motion == "boost":
+		for i in 9:
+			var f := fmod(_t * 3.0 + i * 0.37, 1.0)
+			var lx := x + (i - 4) * cw * 0.28
+			draw_line(Vector2(lx, y - ch * (0.9 - f * 0.5)), Vector2(lx, y - ch * (0.9 - f * 0.5) - ch * (0.7 + f)), Color(1, 1, 1, 0.35 * (1.0 - f)), 3.0)
+		for sx in [-1.0, 1.0]:
+			var fl := 0.7 + 0.3 * sin(_t * 40.0)
+			draw_colored_polygon(PackedVector2Array([Vector2(x + sx * cw * 0.5 - cw * 0.1, y), Vector2(x + sx * cw * 0.5 + cw * 0.1, y), Vector2(x + sx * cw * 0.5, y + ch * 0.9 * fl)]), Color(1.0, 0.55, 0.1, 0.85))
+	var body := _tc(car_col, 0.0).lerp(Color(0.4, 0.42, 0.5), 0.3 * lit)
 	var dark := Color(0.06, 0.07, 0.09)
 	draw_rect(Rect2(x - cw * 0.98, y - ch * 0.22, cw * 0.22, ch * 0.3), dark)
 	draw_rect(Rect2(x + cw * 0.76, y - ch * 0.22, cw * 0.22, ch * 0.3), dark)
 	draw_colored_polygon(PackedVector2Array([Vector2(x - cw, y - ch * 0.12), Vector2(x - cw * 0.9, y - ch * 0.6), Vector2(x + cw * 0.9, y - ch * 0.6), Vector2(x + cw, y - ch * 0.12)]), body)
-	draw_colored_polygon(PackedVector2Array([Vector2(x - cw * 0.72, y - ch * 0.6), Vector2(x - cw * 0.52, y - ch * 1.08), Vector2(x + cw * 0.52, y - ch * 1.08), Vector2(x + cw * 0.72, y - ch * 0.6)]), body.darkened(0.08))
-	draw_colored_polygon(PackedVector2Array([Vector2(x - cw * 0.62, y - ch * 0.64), Vector2(x - cw * 0.46, y - ch * 1.0), Vector2(x + cw * 0.46, y - ch * 1.0), Vector2(x + cw * 0.62, y - ch * 0.64)]), Color(0.05, 0.07, 0.1))
+	draw_colored_polygon(PackedVector2Array([Vector2(x - cw * 0.72 + lean, y - ch * 0.6), Vector2(x - cw * 0.52 + lean, y - ch * 1.08), Vector2(x + cw * 0.52 + lean, y - ch * 1.08), Vector2(x + cw * 0.72 + lean, y - ch * 0.6)]), body.darkened(0.08))
+	draw_colored_polygon(PackedVector2Array([Vector2(x - cw * 0.62 + lean, y - ch * 0.64), Vector2(x - cw * 0.46 + lean, y - ch * 1.0), Vector2(x + cw * 0.46 + lean, y - ch * 1.0), Vector2(x + cw * 0.62 + lean, y - ch * 0.64)]), Color(0.05, 0.07, 0.1))
 	var tl := Color(1.0, 0.12, 0.1)
 	for sx in [-1.0, 1.0]:
 		var lp := Vector2(x + sx * cw * 0.72, y - ch * 0.38)
 		draw_rect(Rect2(lp.x - cw * 0.17, lp.y - ch * 0.07, cw * 0.34, ch * 0.14), tl)
-		if lit > 0.0 or weather == "rain":
+		if lit > 0.0 or weather == "rain" or motion == "boost":
 			draw_circle(lp, cw * 0.4, Color(1.0, 0.1, 0.08, 0.16))
 	draw_rect(Rect2(x - cw * 0.9, y - ch * 0.14, cw * 1.8, ch * 0.06), Color(0.04, 0.05, 0.06))
+	if motion == "drift":
+		for i in 6:
+			var f := fmod(_t * 1.6 + i * 0.17, 1.0)
+			draw_circle(Vector2(x + (i % 2 * 2 - 1) * cw * 0.8 - lean * f * 2.0, y - ch * 0.05 + f * ch * 0.2), cw * (0.12 + f * 0.25), Color(0.85, 0.85, 0.9, 0.35 * (1.0 - f)))
 
 
 func _poster_fx(w: float, h: float, hz: float) -> void:
