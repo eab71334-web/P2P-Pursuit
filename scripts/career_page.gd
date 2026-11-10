@@ -269,6 +269,7 @@ func _build_tabs(tier: int) -> void:
 
 func _build_nodes(tier: int) -> void:
 	for c in _map.get_children():
+		_map.remove_child(c)
 		c.queue_free()
 	_map.pts.clear()
 	_map.rects.clear()
@@ -287,8 +288,8 @@ func _build_nodes(tier: int) -> void:
 		b.custom_minimum_size = sz
 		b.set_meta("j", j)
 		var on := i == sel
-		var edge := UI.ACCENT if on else (Color(1.0, 0.8, 0.25) if boss else Color(1, 1, 1, 0.16))
-		var plate := UI.sb(Color(0.07, 0.075, 0.095, 0.98) if op else Color(0.05, 0.055, 0.07, 0.96), 12, edge, 3 if (on or boss) else 1)
+		var edge := UI.ACCENT if on else (Color(0.78, 0.64, 0.28, 0.75) if boss else Color(1, 1, 1, 0.16))
+		var plate := UI.sb(Color(0.07, 0.075, 0.095, 0.98) if op else Color(0.05, 0.055, 0.07, 0.96), 12, edge, 4 if on else (2 if boss else 1))
 		for sn in ["normal", "hover", "pressed", "focus", "disabled"]:
 			b.add_theme_stylebox_override(sn, plate)
 		var h := HBoxContainer.new()
@@ -325,9 +326,9 @@ func _build_nodes(tier: int) -> void:
 		v.add_theme_constant_override("separation", 1)
 		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		h.add_child(v)
-		var nl := UI.title(v, "%02d%s" % [i + 1, ("  " + UI.tx("FINAL", "النهائي")) if boss else ""], 24, Color(1.0, 0.8, 0.25) if boss else Color.WHITE)
+		var nl := UI.title(v, "%02d%s" % [i + 1, ("  " + UI.tx("FINAL", "النهائي")) if boss else ""], 24, Color(0.95, 0.8, 0.35) if boss else Color.WHITE)
 		nl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var nm := UI.lbl(v, Career.stage_name(i), 13, UI.TXT2 if op else Color(0.45, 0.48, 0.55), true)
+		var nm := UI.lbl(v, Career.stage_name(i), 17, Color(0.95, 0.96, 1.0) if op else Color(0.6, 0.63, 0.7), true)
 		nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		if op:
 			v.add_child(StarRow.new(st, 9.0))
@@ -354,7 +355,7 @@ func _layout() -> void:
 	var j := 0
 	var nodes: Array = []
 	for c in _map.get_children():
-		if c is Button:
+		if c is Button and not c.is_queued_for_deletion():
 			nodes.append(c)
 	for c in nodes:
 		var f: Vector2 = NODE_FRAC[j]

@@ -260,6 +260,20 @@ func _process(d: float) -> void:
 			_film2(sc)
 		"cine":
 			_cine(sc)
+		"cmap":
+			if step == 0 and t > 2.0:
+				step = 1
+				Profile.career = {"0": 3, "1": 2, "2": 3, "3": 3}
+				sc._open_career()
+			elif step == 1 and t > 3.0:
+				step = 2
+				sc.career_page.sel = 3
+				sc.career_page.refresh()
+				sc.career_page.refresh()
+			elif step == 2 and t > 5.0:
+				step = 3
+				shot("cmap")
+				get_tree().quit()
 		"hub":
 			if step == 0 and t > 2.0:
 				step = 1
