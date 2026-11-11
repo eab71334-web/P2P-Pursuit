@@ -1,8 +1,8 @@
-name: iOS IPA (unsigned)
+name: iOS IPA (Godot 4.7 test)
 
 on:
   push:
-    branches: [main, master]
+    branches: [godot-4.7]
   workflow_dispatch:
 
 permissions:
@@ -14,10 +14,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Godot 4.3 + export templates
+      - name: Use the newest Xcode (Godot 4.7 needs the iOS 26 SDK)
+        run: |
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$X" ]; then sudo xcode-select -s "$X/Contents/Developer"; fi
+          xcodebuild -version
+
+      - name: Install Godot 4.7.2 + export templates
         uses: chickensoft-games/setup-godot@v2
         with:
-          version: 4.3.0
+          version: 4.7.2
           use-dotnet: false
           include-templates: true
 
@@ -92,8 +98,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view latest-ios >/dev/null 2>&1 || gh release create latest-ios --title "iOS IPA (unsigned) (latest)" --notes "Newest build from main" --prerelease
-          gh release upload latest-ios CoDriverRally.ipa --clobber
+          gh release view test47-ios >/dev/null 2>&1 || gh release create test47-ios --title "iOS IPA - Godot 4.7 TEST" --notes "Experimental build on Godot 4.7.2" --prerelease
+          gh release upload test47-ios CoDriverRally.ipa --clobber
 
       - uses: actions/upload-artifact@v4
         continue-on-error: true
