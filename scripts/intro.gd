@@ -123,7 +123,7 @@ func _build_ui() -> void:
 	_black.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	cl.add_child(_black)
 	_logo = TextureRect.new()
-	_logo.texture = load("res://art/sabak_logo.png")
+	_logo.texture = load("res://art/krg_logo.png")
 	_logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_logo.anchor_left = 0.5

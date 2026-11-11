@@ -182,7 +182,7 @@
 - عرض الطريق من 11 إلى 14 متر (`Track.ROAD_WIDTH`). شكل الطريق وطوله وانعطافاته بدون تغيير، والحواجز والجبال والإضاءة والفروع كلها تتبع العرض الجديد تلقائياً.
 
 ## التحديث 10 — الشعار والمقدمة والرخصة
-- **مقدمة اللعبة** (`scripts/intro.gd`): تظهر عند فتح اللعبة — شعار KRG Studios مع لمعة ضوء، ثم سيارة تدخل بحركة سينمائية مع أشرطة سوداء وعنوان اللعبة. أي لمسة أو زر تتخطاها. الشعار في `art/sabak_logo.png`.
+- **مقدمة اللعبة** (`scripts/intro.gd`): تظهر عند فتح اللعبة — شعار KRG Studios مع لمعة ضوء، ثم سيارة تدخل بحركة سينمائية مع أشرطة سوداء وعنوان اللعبة. أي لمسة أو زر تتخطاها. الشعار في `art/krg_logo.png`.
 - **الأيقونة والغلاف**: `art/icon.png` (1024×1024 أيقونة التطبيق) و`art/cover.png` (1920×1080 غلاف للمتجر وتيك توك/يوتيوب).
 - **الرخصة**: ملف `LICENSE` (عربي + إنجليزي) — ملكية خاصة لـ KRG Studios، ممنوع النسخ والتعديل والحذف وإعادة النشر ورفع اللعبة باسم أحد آخر. كل ملفات الكود فيها ترويسة حقوق، وفي الإعدادات قسم "حول اللعبة والرخصة".
 - **مهم**: الرخصة نص قانوني وليست حماية تقنية. الحماية الفعلية: خلّ مستودع GitHub **Private** ولا تشارك الكود أو الـ APK/IPA إلا مع من تثق به.
@@ -216,7 +216,7 @@
 - **Photo cards**: PHOTO button in the HUD, in the replay, and PHOTO CARD in the garage. Saves a PNG with the game name + KRG Studios logo to `user://share` (iPhone: Files app > Hairpin Rush). A real share sheet / video clip needs a native plugin - not included.
 
 ## Update 15 - studio rename
-Studio brand is now **KRG Studios** (logo `art/sabak_logo.png`; replaced AVF, Vexora, Barq, Zhyrex and Qimma during naming). Used in the intro, LICENSE, settings credits, source headers and photo cards. The name has NOT been checked on TikTok/Instagram/App Store/Google Play - check before publishing.
+Studio brand is now **KRG Studios** (logo `art/krg_logo.png`; replaced AVF, Vexora, Barq, Zhyrex and Qimma during naming). Used in the intro, LICENSE, settings credits, source headers and photo cards. The name has NOT been checked on TikTok/Instagram/App Store/Google Play - check before publishing.
 
 ## Update 16 — Solo upgrade
 - Solo page: Career / Custom Race / Quick Start.

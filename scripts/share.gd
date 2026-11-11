@@ -31,7 +31,7 @@ static func snap(host: Node, tag: String, title: String, hide_nodes := []) -> vo
 	accent.offset_top = -95
 	accent.offset_bottom = -92
 	layer.add_child(accent)
-	var logo := load("res://art/sabak_logo.png") as Texture2D
+	var logo := load("res://art/krg_logo.png") as Texture2D
 	if logo:
 		var tr := TextureRect.new()
 		tr.texture = logo
