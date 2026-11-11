@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
+# Copyright (c) 2026 KRG Studios. All rights reserved. See LICENSE.
 class_name ReplayDirector
 extends Node
 ## Instant replay: the world records the last seconds of every car (30 Hz). When a car blows up the player gets a

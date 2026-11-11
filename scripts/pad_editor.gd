@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
+# Copyright (c) 2026 KRG Studios. All rights reserved. See LICENSE.
 class_name PadEditor
 extends CanvasLayer
 ## Gamepad button map: every action with the button it is on; tap a row, then press the new pad button. Reset restores defaults.

@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
+# Copyright (c) 2026 KRG Studios. All rights reserved. See LICENSE.
 class_name HudLayout
 extends RefCounted
 ## Player-made layout of the essential driving buttons (gas, brake, horn, signals, lights, wipers):

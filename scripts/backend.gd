@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
+# Copyright (c) 2026 KRG Studios. All rights reserved. See LICENSE.
 extends Node
 ## Talks to the Sabak backend (backend/server.py): redeem codes, events, card payments, error reports.
 ## Set DEFAULT_URL (or the BACKEND_URL environment variable) to your server's https address before exporting.

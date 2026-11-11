@@ -1,7 +1,7 @@
-# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
+# Copyright (c) 2026 KRG Studios. All rights reserved. See LICENSE.
 class_name Share
 extends RefCounted
-## Photo cards: takes a screenshot of the game, stamps it with the game name + Sabak Studios logo + a title, saves it as a PNG.
+## Photo cards: takes a screenshot of the game, stamps it with the game name + KRG Studios logo + a title, saves it as a PNG.
 ## A real "share sheet" (WhatsApp / TikTok / Instagram) needs a native plugin; until it exists the picture is saved to
 ## user://share (iPhone: visible in the Files app, see export options) and the player shares it from there.
 

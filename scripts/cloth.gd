@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
+# Copyright (c) 2026 KRG Studios. All rights reserved. See LICENSE.
 class_name Cloth
 extends Node3D
 ## Light real-time cloth (position-based / verlet): a hanging band (scarf, cape) pinned to an anchor node.

@@ -10,7 +10,7 @@
 
 - اللعبة: **HAIRPIN RUSH / هيربن راش** — لعبة سباق سيارات (Godot 4.3، 3D مكعبات، Compatibility renderer) فيها وضع Solo/LAN/Online، سباق فرق (سائق + حامل خريطة)، كراج وتخصيص، مهنة (Career)، متجر، إعلانات AdMob، ولوحة إدارة منفصلة.
 - المالك يعمل **من الآيفون فقط** عبر موقع GitHub + GitHub Actions (لا كمبيوتر). يجرّب على أندرويد (APK) وآيفون (IPA غير موقّع). يتكلم **عربي ليبي** — أجبه بالعربي المختصر.
-- الاستوديو: **Sabak Studios (سَبَك)**. الترخيص مملوك (ملف `LICENSE`)؛ لا تنسخ/تنشر الكود.
+- الاستوديو: **KRG Studios**. الترخيص مملوك (ملف `LICENSE`)؛ لا تنسخ/تنشر الكود.
 - الرفع: `git push origin HEAD:main` إلى `eab71334-web/P2P-Pursuit` (المستودع انتقل: `https://github.com/eab71334-web/P2P-Pursuit.git`).
 - أي شيء تجرّبه: اختبره محلياً بصور Godot (xvfb) قبل الرفع، وقل للمالك بصدق ما اختُبر وما لم يُختبر (لم يُختبر على هاتف حقيقي إلا إذا أخبرك هو).
 
@@ -147,7 +147,7 @@ The owner asked for **two versions**: the main game keeps the original **block c
 |---|---|---|
 | Universal Animation Library (`assets/ual`) | Quaternius | CC0 |
 | Universal Base Characters + hair (`assets/ubc`) | Quaternius | CC0 (`assets/ubc/License_Standard.txt`) |
-| Game code, generated sounds, logos | Sabak Studios | proprietary (`LICENSE`) |
+| Game code, generated sounds, logos | KRG Studios | proprietary (`LICENSE`) |
 | Owner's forks (not used in game): JoltPhysics, godot-docs, Modeling-Cloth (Blender addon), BoolTool, fast-carve (Blender), Godot_Vertex_Animation_Textures_Plugin (needs Godot 4.5+), AnimationAttacher (Blender) | GitHub forks | — |
 
 Blender add-ons cannot run on the owner's iPhone nor in the sandbox (PyPI/bpy unreachable). Realistic cars were evaluated and NOT done:

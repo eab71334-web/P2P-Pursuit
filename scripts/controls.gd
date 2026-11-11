@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
+# Copyright (c) 2026 KRG Studios. All rights reserved. See LICENSE.
 extends Node
 ## Autoload "Controls": gamepad support (PS4 / PS5 / Xbox / any pad Godot recognises, also over Bluetooth) with buttons the player can
 ## re-map in Settings, and the touch-controls policy: with a pad connected the on-screen buttons are hidden ("auto").

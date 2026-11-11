@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
+# Copyright (c) 2026 KRG Studios. All rights reserved. See LICENSE.
 extends Node
 ## Autoload "Ads": AdMob on iOS (rewarded video, one test banner, consent form).
 ## On every build that has no AdMob plugin (desktop, Android for now) it does nothing and the

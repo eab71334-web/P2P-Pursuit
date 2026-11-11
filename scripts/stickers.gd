@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
+# Copyright (c) 2026 KRG Studios. All rights reserved. See LICENSE.
 class_name Stickers
 extends RefCounted
 ## In-race stickers: 12 flat badges drawn in code. A sticker floats above the sender's car for everybody

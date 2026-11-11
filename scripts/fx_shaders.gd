@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
+# Copyright (c) 2026 KRG Studios. All rights reserved. See LICENSE.
 class_name FxShaders
 extends RefCounted
 ## Small 3D / screen shader library (written for this game, works in the Compatibility renderer):

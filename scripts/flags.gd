@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
+# Copyright (c) 2026 KRG Studios. All rights reserved. See LICENSE.
 class_name Flags
 extends RefCounted
 ## Country flags for the car. Pictures are drawn in code (no image files). To use an exact picture instead,

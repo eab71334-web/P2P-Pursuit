@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
+# Copyright (c) 2026 KRG Studios. All rights reserved. See LICENSE.
 class_name CarActions
 extends Node
 ## Cabin controls the driver works with his own hands: horn, headlights, wipers, wing mirrors, radio.

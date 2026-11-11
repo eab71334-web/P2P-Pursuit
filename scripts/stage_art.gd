@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
+# Copyright (c) 2026 KRG Studios. All rights reserved. See LICENSE.
 class_name StageArt
 extends Control
 ## Animated stage picture drawn in code: sky, ridges, trees, a road that scrolls towards you, and the weather.

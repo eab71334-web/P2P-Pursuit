@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
+# Copyright (c) 2026 KRG Studios. All rights reserved. See LICENSE.
 extends Node
 ## Autoload "Score": the interactive race music. Three stems (calm / drive / intense, scripts: tools/make_score.py) play
 ## in sync inside one AudioStreamSynchronized; the world tells it the speed and the events and it fades the layers:

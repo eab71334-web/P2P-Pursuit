@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
+# Copyright (c) 2026 KRG Studios. All rights reserved. See LICENSE.
 class_name Career
 extends RefCounted
 ## Career mode: 20 fixed stages in a row. Every stage has its own track, weather and opponents; the opponents get

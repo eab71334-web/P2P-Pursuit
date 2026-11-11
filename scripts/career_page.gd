@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Sabak Studios. All rights reserved. See LICENSE.
+# Copyright (c) 2026 KRG Studios. All rights reserved. See LICENSE.
 class_name CareerPage
 extends VBoxContainer
 ## Career: championship tabs, an event map (stage nodes joined by roads) and a tall poster card for the selected stage.

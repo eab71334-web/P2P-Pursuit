@@ -1,6 +1,6 @@
 # Privacy Policy — Hairpin Rush
 
-**Developer:** Sabak Studios  
+**Developer:** KRG Studios  
 **Contact:** eab71334@gmail.com  
 **Last updated:** 9 November 2026
 
@@ -32,7 +32,7 @@ We may update this policy. The date at the top shows the latest version.
 
 # سياسة الخصوصية — Hairpin Rush
 
-**المطوّر:** Sabak Studios  
+**المطوّر:** KRG Studios  
 **التواصل:** eab71334@gmail.com  
 **آخر تحديث:** 9 نوفمبر 2026
 
