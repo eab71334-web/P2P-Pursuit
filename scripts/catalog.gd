@@ -134,10 +134,12 @@ const BODY_OPTS := {
 
 
 ## the body options a car can take for a slot (always starts with "none")
-## Level gates: level 5 opens every car, level 10 opens everything else.
-const ITEM_LVL := [1, 4, 7, 10]       # by rarity (gem items = 10)
-const PART_LVL := [3, 6, 9]           # fitted parts, tier 1..3
-const UP_LVL := [2, 4, 6, 8, 10]      # engine / upgrade levels 1..5
+## Level gates: level 5 opens every car; then one category per level, 10 opens everything.
+const SLOT_LVL := {"paint": 5, "stripe": 7, "glow": 7, "decal": 7, "flag": 7,
+	"spoiler": 6, "front": 6, "hood": 6, "skirts": 6, "rim": 8, "wheel": 8}
+const PART_LVL := [7, 7, 7]           # fitted parts (mods)
+const UP_LVL := [9, 9, 9, 9, 9]       # engine upgrades
+static var _slot_of: Dictionary = {}
 
 
 ## buying before the level is unlocked costs double
@@ -148,23 +150,19 @@ static func early(lvl_now: int, need: int) -> int:
 static func item_lvl(e: Dictionary) -> int:
 	if e.has("gem"):
 		return 10
-	return int(ITEM_LVL[clampi(int(e.get("r", 0)), 0, 3)])
+	if _slot_of.is_empty():
+		for sl in CAR_SLOTS:
+			for k in CAR_SLOTS[sl]:
+				_slot_of[CAR_SLOTS[sl][k].hash()] = sl
+	return int(SLOT_LVL.get(_slot_of.get(e.hash(), ""), 1))
 
 
 ## what a level opens (short text for the level-up toast)
 static func unlock_note(lv: int) -> String:
-	var a: Array = []
-	if lv == 5:
-		a.append(UI.tx("All cars", "كل السيارات"))
-	if ITEM_LVL.has(lv) and lv > 1:
-		a.append(UI.tx("new paints & items", "طلاء وعناصر جديدة"))
-	if PART_LVL.has(lv):
-		a.append(UI.tx("new parts", "قطع جديدة"))
-	if UP_LVL.has(lv):
-		a.append(UI.tx("engine upgrade", "ترقية محرك"))
-	if lv == 10:
-		a.append(UI.tx("EVERYTHING", "كل شيء"))
-	return ", ".join(a)
+	var m := {5: ["All cars + paints", "كل السيارات + الطلاء"], 6: ["Body shape", "الشكل (سبويلر ومصد وكبوت)"],
+		7: ["Mods & decor", "التعديلات والديكور"], 8: ["Wheels", "العجلات"], 9: ["Engine upgrades", "ترقيات المحرك"],
+		10: ["EVERYTHING", "كل شيء"]}
+	return UI.tx(m[lv][0], m[lv][1]) if m.has(lv) else ""
 
 
 static func body_opts(car_id: String, slot: String) -> Array:
