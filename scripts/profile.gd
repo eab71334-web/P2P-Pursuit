@@ -128,6 +128,8 @@ func _pay(e: Dictionary) -> bool:
 func buy(slot: String, id: String) -> bool:
 	if owns(slot, id):
 		return true
+	if level < Catalog.item_lvl(Catalog.entry(slot, id)):
+		return false
 	if not _pay(Catalog.entry(slot, id)):
 		return false
 	owned[slot + ":" + id] = true
@@ -192,7 +194,7 @@ func part_owned(slot: String, tier: int) -> bool:
 
 func buy_part(slot: String, tier: int) -> bool:
 	var price := int(Catalog.PARTS[slot]["price"][tier - 1])
-	if part_owned(slot, tier) or coins < price:
+	if part_owned(slot, tier) or coins < price or level < int(Catalog.PART_LVL[tier - 1]):
 		return false
 	coins -= price
 	owned["part:%s:%d" % [slot, tier]] = true
@@ -223,7 +225,7 @@ func upgrade(car_id: String, key: String) -> bool:
 	if lv >= Catalog.MAX_UP:
 		return false
 	var cost := Catalog.upgrade_cost(key, lv)
-	if coins < cost:
+	if coins < cost or level < int(Catalog.UP_LVL[lv]):
 		return false
 	coins -= cost
 	var d: Dictionary = up.get(car_id, {})
