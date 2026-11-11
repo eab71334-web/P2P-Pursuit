@@ -11,6 +11,8 @@ const DEFAULT_URL := "https://sabak-backend.onrender.com"
 const GAME := "hairpin"
 const VERSION := "1.0"
 const FLAG := "user://session.flag"
+const BAN_FILE := "user://ban.json"      # remembers a ban on the device so it holds even offline
+var _ban_layer: CanvasLayer
 
 var url := DEFAULT_URL
 var payments := false
@@ -35,6 +37,7 @@ func _ready() -> void:
 	url = url.rstrip("/")
 	if url == "":
 		return
+	_check_local_ban()
 	_load_cached_cfg()
 	_check_unclean_exit()
 	_set_flag(true)
@@ -110,13 +113,21 @@ func call_api(method: int, path: String, body: Variant, cb: Callable) -> void:
 
 
 func hello() -> void:
-	call_api(HTTPClient.METHOD_POST, "/api/player/hello", {"player_id": Profile.pid, "name": Profile.pname, "game": GAME, "platform": OS.get_name(), "version": VERSION}, func(code: int, d: Dictionary):
+	call_api(HTTPClient.METHOD_POST, "/api/player/hello", {"player_id": Profile.pid, "name": Profile.pname, "game": GAME, "platform": OS.get_name(), "version": VERSION, "device": _device()}, func(code: int, d: Dictionary):
 		if code != 200 or not d.get("ok", false):
 			return
 		if bool(d.get("banned", false)):
 			banned = true
-			_show_ban()
+			var until := int(d.get("ban_until", 0))
+			_save_ban(until, str(d.get("ban_reason", "")))
+			_show_ban(until)
 			return
+		if banned or FileAccess.file_exists(BAN_FILE):      # lifted (or expired) on the server
+			banned = false
+			if FileAccess.file_exists(BAN_FILE):
+				DirAccess.remove_absolute(ProjectSettings.globalize_path(BAN_FILE))
+			if is_instance_valid(_ban_layer):
+				_ban_layer.queue_free()
 		for m in d.get("messages", []):
 			call_api(HTTPClient.METHOD_POST, "/api/msg/ack", {"player_id": Profile.pid, "id": int(m.get("id", 0))}, Callable())
 			_notify("رسالة من الإدارة" if L.is_ar() else "Message from the team", str(m.get("text", "")))
@@ -297,9 +308,60 @@ func _next_notice() -> void:
 	_overlay(str(n["title"]), str(n["text"]), "حسناً" if L.is_ar() else "OK", func(): _next_notice())
 
 
-func _show_ban() -> void:
-	_overlay("تم حظر حسابك" if L.is_ar() else "Account banned",
-		"تم منع هذا الحساب من اللعبة. إذا كان هذا خطأ تواصل مع الدعم." if L.is_ar() else "This account is blocked from the game. If this is a mistake, contact support.", "", Callable())
+## stable id of this phone (not the save file), hashed. Empty when the OS gives none.
+func _device() -> String:
+	var u := OS.get_unique_id()
+	if u == "":
+		return ""
+	return (u + "|hairpin-dev").sha256_text().substr(0, 32)
+
+
+func _save_ban(until: int, reason: String) -> void:
+	var f := FileAccess.open(BAN_FILE, FileAccess.WRITE)
+	if f:
+		f.store_string(JSON.stringify({"until": until, "reason": reason, "last": int(Time.get_unix_time_from_system())}))
+
+
+## on launch, before any network: a ban saved on this device still blocks the game offline
+func _check_local_ban() -> void:
+	if not FileAccess.file_exists(BAN_FILE):
+		return
+	var f := FileAccess.open(BAN_FILE, FileAccess.READ)
+	if f == null:
+		return
+	var d: Variant = JSON.parse_string(f.get_as_text())
+	f.close()
+	if not (d is Dictionary):
+		return
+	var until := int(d.get("until", 0))
+	var t := maxi(int(Time.get_unix_time_from_system()), int(d.get("last", 0)))    # a clock set back does not help
+	if until == 0 or until > t:
+		banned = true
+		_save_ban_last(d, t)
+		_show_ban(until)
+	else:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(BAN_FILE))
+
+
+func _save_ban_last(d: Dictionary, t: int) -> void:
+	d["last"] = t
+	var f := FileAccess.open(BAN_FILE, FileAccess.WRITE)
+	if f:
+		f.store_string(JSON.stringify(d))
+
+
+func _show_ban(until := 0) -> void:
+	if is_instance_valid(_ban_layer):
+		_ban_layer.queue_free()
+	var when := ""
+	if until > 0:
+		var left := maxi(until - int(Time.get_unix_time_from_system()), 60)
+		var h := int(ceil(left / 3600.0))
+		when = ("\nالمدة المتبقية: نحو %d ساعة" if L.is_ar() else "\nTime left: about %d h") % h
+	else:
+		when = "" 
+	_ban_layer = _overlay("تم حظر هذا الجهاز" if L.is_ar() else "This device is blocked",
+		("تم منع هذا الجهاز من اللعب." + when + "\nإذا كان هذا خطأ تواصل مع الدعم.") if L.is_ar() else ("This device is blocked from the game." + when + "\nIf this is a mistake, contact support."), "", Callable(), false)
 
 
 func _btn(text: String, cb: Callable, plain := false) -> Button:
