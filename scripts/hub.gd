@@ -315,6 +315,9 @@ func _update_top() -> void:
 		var msg := "%s %d!  +%d" % [UI.tx("LEVEL UP!", "ارتقيت للمستوى"), lv[0], int(r["coins"])]
 		if int(r["gems"]) > 0:
 			msg += "  +%d %s" % [int(r["gems"]), UI.tx("gems", "جوهرة")]
+		var un := Catalog.unlock_note(int(lv[0]))
+		if un != "":
+			msg += "\n" + UI.tx("Unlocked: ", "فُتح: ") + un
 		say(msg)
 		Sfx.play("success", 2.0)
 

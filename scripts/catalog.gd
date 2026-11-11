@@ -146,6 +146,22 @@ static func item_lvl(e: Dictionary) -> int:
 	return int(ITEM_LVL[clampi(int(e.get("r", 0)), 0, 3)])
 
 
+## what a level opens (short text for the level-up toast)
+static func unlock_note(lv: int) -> String:
+	var a: Array = []
+	if lv == 5:
+		a.append(UI.tx("All cars", "كل السيارات"))
+	if ITEM_LVL.has(lv) and lv > 1:
+		a.append(UI.tx("new paints & items", "طلاء وعناصر جديدة"))
+	if PART_LVL.has(lv):
+		a.append(UI.tx("new parts", "قطع جديدة"))
+	if UP_LVL.has(lv):
+		a.append(UI.tx("engine upgrade", "ترقية محرك"))
+	if lv == 10:
+		a.append(UI.tx("EVERYTHING", "كل شيء"))
+	return ", ".join(a)
+
+
 static func body_opts(car_id: String, slot: String) -> Array:
 	var d: Dictionary = BODY_OPTS.get(car_id, BODY_OPTS["hatch"])
 	return d.get(slot, ["none"])
