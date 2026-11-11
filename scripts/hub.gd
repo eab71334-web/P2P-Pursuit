@@ -554,11 +554,11 @@ func _item_cell(slot: String, id: String, equipped: String, on_pick: Callable, g
 	elif owned:
 		var t := UI.lbl(vb, UI.tx("OWNED", "مملوك"), 13, UI.TXT2, false)
 		t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	elif Profile.level < Catalog.item_lvl(e):
-		var t := UI.lbl(vb, UI.tx("Unlocks at Lv ", "يُفتح عند م ") + str(Catalog.item_lvl(e)), 14, Color(1.0, 0.6, 0.45), false)
-		t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	else:
-		UI.price_row(vb, int(e["gem"]) if e.has("gem") else int(e["price"]), e.has("gem"), 15)
+		UI.price_row(vb, Profile.eff_price(e), e.has("gem"), 15)
+		if Profile.level < Catalog.item_lvl(e):
+			var t := UI.lbl(vb, UI.tx("Lv ", "م ") + str(Catalog.item_lvl(e)) + UI.tx(" · early x2", " · مبكر ×2"), 12, Color(1.0, 0.6, 0.45), false)
+			t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	b.pressed.connect(func():
 		browser_id = id
 		_action_bar(slot, id)
@@ -589,12 +589,11 @@ func _action_bar(slot: String, id: String) -> void:
 		b.disabled = id == eq
 	else:
 		var gem := e.has("gem")
-		var cost := int(e["gem"]) if gem else int(e["price"])
+		var cost := Profile.eff_price(e)
 		var b := UI.btn(action_box, "", UI.GOLD.darkened(0.35), func(): _buy(slot, id), 22, Vector2(230, 50))
-		b.disabled = not Profile.can_afford(e) or Profile.level < Catalog.item_lvl(e)
+		b.disabled = not Profile.can_afford(e)
 		if Profile.level < Catalog.item_lvl(e):
-			b.text = UI.tx("Unlocks at Lv ", "يُفتح عند م ") + str(Catalog.item_lvl(e))
-			return
+			var ei := UI.lbl(action_box, UI.tx("Early unlock x2 (Lv ", "فتح مبكر ×2 (م ") + str(Catalog.item_lvl(e)) + ")", 15, Color(1.0, 0.6, 0.45), false)
 		var ph := UI.price_row(null, cost, gem, 22)
 		ph.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 		ph.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -624,11 +623,7 @@ func _buy(slot: String, id: String) -> void:
 		say(UI.tx("Purchased!", "تم الشراء!"))
 		_equip(slot, id)
 	else:
-		var need := Catalog.item_lvl(Catalog.entry(slot, id))
-		if Profile.level < need:
-			say(UI.tx("Unlocks at level %d", "يُفتح عند المستوى %d") % need)
-		else:
-			say(UI.tx("Not enough funds", "رصيدك لا يكفي"))
+		say(UI.tx("Not enough funds", "رصيدك لا يكفي"))
 		Sfx.play("warn", -6.0)
 
 
@@ -988,9 +983,7 @@ func _mod_tiers(slot: String) -> void:
 				_rerender()
 		else:
 			cb = func():
-				if Profile.level < int(Catalog.PART_LVL[tier - 1]):
-					say(UI.tx("Unlocks at level %d", "يُفتح عند المستوى %d") % int(Catalog.PART_LVL[tier - 1]))
-				elif Profile.buy_part(slot, tier):
+				if Profile.buy_part(slot, tier):
 					Sfx.play("success", -2.0)
 					say(UI.tx("Bought and installed!", "تم الشراء والتركيب!"))
 					_rerender()
@@ -998,7 +991,8 @@ func _mod_tiers(slot: String) -> void:
 					say(UI.tx("Not enough coins", "العملات لا تكفي"))
 		var pname := str(names[ti]) if names.size() > ti else Catalog.txt(pd["tiers"][ti])
 		if kind == "buy" and Profile.level < int(Catalog.PART_LVL[ti]):
-			pname += "  (" + UI.tx("Lv ", "م ") + str(Catalog.PART_LVL[ti]) + ")"
+			pname += "  (" + UI.tx("Lv ", "م ") + str(Catalog.PART_LVL[ti]) + UI.tx(" early x2", " مبكر ×2") + ")"
+			price *= 2
 		_mod_cell(pname, eff, kind, price, cb, fitted == tier)
 
 
@@ -1014,11 +1008,9 @@ func _mod_level(key: String) -> void:
 	if lv >= Catalog.MAX_UP:
 		_mod_cell((str(stages[lv - 1]) if key == "engine" else Catalog.txt(u["n"])) + "  " + str(lv) + "/" + str(Catalog.MAX_UP), UI.tx("Fully upgraded", "مطوّر بالكامل"), "max", 0, func(): pass, false, true, lv)
 		return
-	var cost := Catalog.upgrade_cost(key, lv)
+	var cost := Catalog.upgrade_cost(key, lv) * Catalog.early(Profile.level, int(Catalog.UP_LVL[lv]))
 	_mod_cell((str(stages[lv]) if key == "engine" else Catalog.txt(u["n"])) + "  " + str(lv) + "/" + str(Catalog.MAX_UP), UI.tx("Next level", "المستوى التالي") + "  " + str(lv + 1), "buy", cost, func():
-		if Profile.level < int(Catalog.UP_LVL[lv]):
-			say(UI.tx("Unlocks at level %d", "يُفتح عند المستوى %d") % int(Catalog.UP_LVL[lv]))
-		elif Profile.upgrade(g_car, key):
+		if Profile.upgrade(g_car, key):
 			Sfx.play("success", -2.0)
 			say(UI.tx("Upgraded!", "تمت الترقية!"))
 			_rerender()

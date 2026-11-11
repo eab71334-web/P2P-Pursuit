@@ -140,6 +140,11 @@ const PART_LVL := [3, 6, 9]           # fitted parts, tier 1..3
 const UP_LVL := [2, 4, 6, 8, 10]      # engine / upgrade levels 1..5
 
 
+## buying before the level is unlocked costs double
+static func early(lvl_now: int, need: int) -> int:
+	return 2 if lvl_now < need else 1
+
+
 static func item_lvl(e: Dictionary) -> int:
 	if e.has("gem"):
 		return 10

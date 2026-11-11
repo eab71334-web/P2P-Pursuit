@@ -103,33 +103,36 @@ func owns(slot: String, id: String) -> bool:
 	return is_free(e) or owned.has(slot + ":" + id)
 
 
+func eff_price(e: Dictionary) -> int:
+	var base := int(e["gem"]) if e.has("gem") else int(e.get("price", 0))
+	return base * Catalog.early(level, Catalog.item_lvl(e))
+
+
 func price_text(e: Dictionary) -> String:
 	if e.has("gem"):
-		return "%d 💎" % int(e["gem"])
-	return "%d 🪙" % int(e.get("price", 0))
+		return "%d 💎" % eff_price(e)
+	return "%d 🪙" % eff_price(e)
 
 
 func can_afford(e: Dictionary) -> bool:
 	if e.has("gem"):
-		return gems >= int(e["gem"])
-	return coins >= int(e.get("price", 0))
+		return gems >= eff_price(e)
+	return coins >= eff_price(e)
 
 
 func _pay(e: Dictionary) -> bool:
 	if not can_afford(e):
 		return false
 	if e.has("gem"):
-		gems -= int(e["gem"])
+		gems -= eff_price(e)
 	else:
-		coins -= int(e.get("price", 0))
+		coins -= eff_price(e)
 	return true
 
 
 func buy(slot: String, id: String) -> bool:
 	if owns(slot, id):
 		return true
-	if level < Catalog.item_lvl(Catalog.entry(slot, id)):
-		return false
 	if not _pay(Catalog.entry(slot, id)):
 		return false
 	owned[slot + ":" + id] = true
@@ -193,8 +196,8 @@ func part_owned(slot: String, tier: int) -> bool:
 
 
 func buy_part(slot: String, tier: int) -> bool:
-	var price := int(Catalog.PARTS[slot]["price"][tier - 1])
-	if part_owned(slot, tier) or coins < price or level < int(Catalog.PART_LVL[tier - 1]):
+	var price := int(Catalog.PARTS[slot]["price"][tier - 1]) * Catalog.early(level, int(Catalog.PART_LVL[tier - 1]))
+	if part_owned(slot, tier) or coins < price:
 		return false
 	coins -= price
 	owned["part:%s:%d" % [slot, tier]] = true
@@ -224,8 +227,8 @@ func upgrade(car_id: String, key: String) -> bool:
 	var lv := up_level(car_id, key)
 	if lv >= Catalog.MAX_UP:
 		return false
-	var cost := Catalog.upgrade_cost(key, lv)
-	if coins < cost or level < int(Catalog.UP_LVL[lv]):
+	var cost := Catalog.upgrade_cost(key, lv) * Catalog.early(level, int(Catalog.UP_LVL[lv]))
+	if coins < cost:
 		return false
 	coins -= cost
 	var d: Dictionary = up.get(car_id, {})
