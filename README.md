@@ -243,7 +243,7 @@ Studio brand is now **KRG Studios** (logo `art/krg_logo.png`; replaced AVF, Vexo
 - Tunnels: mountain and snow stages get 1-2 real tunnels on long straights (arched tube with collision, ceiling lights, rock headwall). The co-driver calls "TUNNEL"; rain stops inside. Bots drive through them.
 - `backend/`: Python server (standard library + SQLite): redeem codes, events, card payments (Stripe adapter + test provider), error reports, admin API. `python3 backend/test_backend.py` runs 30 checks.
 - Game: `scripts/backend.gd` (autoload), `scripts/backend_ui.gd`. Shop tab: REDEEM CODE and EVENTS. Checkout pays by card through the backend. Crash/"unclean exit" and save-failure reports. Set `DEFAULT_URL` in backend.gd to your https server before exporting; empty = fully offline as before.
-- `admin-app/`: separate Godot mobile app "Sabak Admin" (portrait, Arabic): home, codes, events, payments, errors, game filter. Workflows: `.github/workflows/admin-android.yml`, `admin-ios.yml` (not run yet).
+- `admin-app/`: separate Godot mobile app "KRG" (portrait, Arabic): home, codes, events, payments, errors, game filter. Workflows: `.github/workflows/admin-android.yml`, `admin-ios.yml` (not run yet).
 - Not done / honest limits: real money was never charged (no gateway account/keys here); Godot 4.3 cannot capture script runtime errors automatically, only explicit reports + unclean-exit detection; player progress is still stored on the phone.
 
 ## Update 22 - AdMob (iOS only for now)

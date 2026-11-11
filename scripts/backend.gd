@@ -1,13 +1,13 @@
 # Copyright (c) 2026 KRG Studios. All rights reserved. See LICENSE.
 extends Node
-## Talks to the Sabak backend (backend/server.py): redeem codes, events, card payments, error reports.
+## Talks to the KRG backend (backend/server.py): redeem codes, events, card payments, error reports.
 ## Set DEFAULT_URL (or the BACKEND_URL environment variable) to your server's https address before exporting.
 ## With no address everything here quietly does nothing and the game works offline.
 
 signal config_ready
 signal wallet_changed(kind: String, amount: int)
 
-const DEFAULT_URL := "https://sabak-backend.onrender.com"
+const DEFAULT_URL := "https://krg-backend.onrender.com"
 const GAME := "hairpin"
 const VERSION := "1.0"
 const FLAG := "user://session.flag"

@@ -74,7 +74,7 @@ scripts/
 assets/ual/            Universal Animation Library (45 clips + mannequin) — CC0, Quaternius
 assets/ubc/            Universal Base Characters (male/female bodies + hair + beard) — CC0, Quaternius
 audio/ , art/ , fonts/ generated sounds (tools/make_*.py), logos, Arabic-capable font
-server/ , render.yaml  online server docs ; Render blueprint for the Sabak backend (backend/ lives in the admin repo)
+server/ , render.yaml  online server docs ; Render blueprint for the KRG backend (backend/ lives in the admin repo)
 tools/                 sound/score generators (python), montage/screenshot helpers, online_test.sh
 docs/AI_HANDOFF.md     this file
 ```
@@ -157,7 +157,7 @@ the cars are still blocky procedural models; realistic cars would need artist-ma
 
 ## 8. Backend / admin / ads (outside the game repo)
 
-- `sabak-admin-app` (separate repo): Python `server.py` backend (+ mobile admin app) hosted on Render (`render.yaml` here is the blueprint). Handles events, redeem codes, payments (test provider), error reports.
+- `sabak-admin-app` (repo name only) (separate repo): Python `server.py` backend (+ mobile admin app) hosted on Render (`render.yaml` here is the blueprint). Handles events, redeem codes, payments (test provider), error reports.
 - Game ↔ backend: `backend.gd`, `billing.gd`, `checkout.gd`, `backend_ui.gd`.
 - AdMob: `ads.gd`, `ios_admob/`, `ads_config.json` (test ids) — **`ads config LIVE.json` must be reviewed (real ids) and kept out of public history**.
 - Online: `server/README_SERVER.md` (one room per mode per server; tested only locally).
