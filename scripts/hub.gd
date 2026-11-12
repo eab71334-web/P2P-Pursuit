@@ -707,6 +707,7 @@ const MOD_NAMES := {"paint": ["Colour", "اللون"], "stripe": ["Stripes", "ا
 	"spoiler": ["Rear wing", "المؤخرة"], "front": ["Front", "المقدمة"], "hood": ["Hood", "الغطاء"], "skirts": ["Sides", "الجوانب"]}
 const SEC_NAMES := {"paint": ["PAINT", "الطلاء"], "body": ["BODY", "الشكل"], "mods": ["MODS", "التعديلات"], "wheels": ["WHEELS", "العجلات"], "engine": ["ENGINE", "المحرك"]}
 var mod_section := "paint"
+var _mod_stats: Control
 var mod_sub := {}
 var _mod_chips: HBoxContainer
 var _mod_strip: HBoxContainer
@@ -893,6 +894,7 @@ func _tab_modify() -> Control:
 	stat_box.add_theme_constant_override("separation", 4)
 	sv.add_child(stat_box)
 	_stats(stat_box, g_car)
+	_mod_stats = sp
 	# bottom: options bar (full width) + section tabs
 	var bp := PanelContainer.new()
 	bp.add_theme_stylebox_override("panel", UI.sb(UI.PANEL, 0, UI.LINE, 1))
@@ -952,6 +954,8 @@ func _mod_fill() -> void:
 		var on: bool = tb.get_meta("sec") == mod_section
 		for st in ["normal", "hover", "pressed", "focus"]:
 			(tb as Button).add_theme_stylebox_override(st, UI.sb(UI.ACCENT if on else UI.CARD2, 8))
+	if _mod_stats and is_instance_valid(_mod_stats):
+		_mod_stats.visible = mod_section in ["mods", "body"]      # close-up tabs need the whole screen for the car
 	var subs: Array = MOD_SUBS[mod_section]
 	if mod_section == "body":
 		subs = subs.filter(func(x): return Catalog.body_opts(g_car, x).size() > 1)

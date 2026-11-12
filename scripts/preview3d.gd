@@ -39,6 +39,7 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	resized.connect(func(): if view != "car" and _cam_ready: _apply_view())
 	vp = SubViewport.new()
 	vp.own_world_3d = true
 	vp.msaa_3d = Gfx.subviewport_msaa()
@@ -160,8 +161,8 @@ func _apply_view() -> void:
 		"wheel":
 			_tyaw = -PI * 0.5
 			var wh := Vector3(0.95, 0.45, -1.3).rotated(Vector3.UP, _tyaw)
-			_tlook = wh
-			_tpos = wh + Vector3(0.3, 0.5, 3.3) * zoom * 1.6
+			_tlook = wh + Vector3(0, -0.2, 0)
+			_tpos = wh + Vector3(0.3, 0.45, 3.3) * zoom * 1.7
 			_tfov = 30.0
 		"stick_side":
 			_tyaw = -PI * 0.5
@@ -183,6 +184,12 @@ func _apply_view() -> void:
 			_tlook = Vector3(0, 0.9, 0)
 			_tpos = Vector3(0, 3.8 * zoom, 10.6 * zoom)
 			_tfov = 38.0
+	if view != "car":
+		# short screens (wide phones): pull the camera back so the car is not cut off
+		var k := 1.0
+		if size.y > 10.0:
+			k = clampf(400.0 / size.y, 1.0, 1.55)
+		_tpos = _tlook + (_tpos - _tlook) * k
 
 
 func _frame_avatar() -> void:
