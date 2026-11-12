@@ -8,7 +8,7 @@ signal leveled(level: int, reward: Dictionary)
 const SAVE := "user://profile.json"
 
 var pname := ""
-var hud_flip := true          # mirror the driving buttons left <-> right
+var hud_flip := false         # mirror the driving buttons left <-> right
 var steer_mode := ""          # "" = not chosen yet | buttons | wheel | wheel360
 var coins := 1000
 var gems := 20
@@ -57,7 +57,7 @@ func _load() -> void:
 	pid = str(d.get("pid", ""))
 	pending_order = str(d.get("pending_order", ""))
 	steer_mode = str(d.get("steer_mode", ""))
-	hud_flip = bool(d.get("hud_flip", true))
+	hud_flip = bool(d.get("hud_flip2", false))
 	coins = int(d.get("coins", coins))
 	gems = int(d.get("gems", gems))
 	xp = int(d.get("xp", xp))
@@ -90,7 +90,7 @@ func save() -> void:
 	if f == null and has_node("/root/Backend"):
 		Backend.report("error", "Could not write the save file (%s)" % error_string(FileAccess.get_open_error()))
 	if f:
-		f.store_string(JSON.stringify({"pid": pid, "pending_order": pending_order, "pname": pname, "steer_mode": steer_mode, "hud_flip": hud_flip, "coins": coins, "gems": gems, "xp": xp, "level": level, "owned": owned, "cars": cars, "car": car,
+		f.store_string(JSON.stringify({"pid": pid, "pending_order": pending_order, "pname": pname, "steer_mode": steer_mode, "hud_flip2": hud_flip, "coins": coins, "gems": gems, "xp": xp, "level": level, "owned": owned, "cars": cars, "car": car,
 			"carset": carset, "up": up, "outfit": outfit, "quests": quests, "chests": chests, "adbox": adbox, "login": login, "stats": stats, "career": career, "solo_pref": solo_pref}))
 	changed.emit()
 
