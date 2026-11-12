@@ -12,6 +12,13 @@ var spin := true
 var zoom := 1.0
 var hero := false             # big menu background showroom
 var yaw := 0.4
+var view := "car"             # "car" (turntable), "engine" (hood open, looking into the bay), "wheel" (close on a front wheel)
+var _tpos := Vector3.ZERO
+var _tlook := Vector3(0, 0.9, 0)
+var _clook := Vector3(0, 0.9, 0)
+var _tfov := 38.0
+var _tyaw := 0.0
+var _cam_ready := false
 var _drag := false
 var _t := 0.0
 var _flash := 0.0
@@ -113,8 +120,46 @@ func _frame_car() -> void:
 		cam.position = Vector3(0, 3.5, 13.6)
 		cam.look_at(Vector3(0, 0.9, 0))
 		return
-	cam.position = Vector3(0, 3.8 * zoom, 10.6 * zoom)
-	cam.look_at(Vector3(0, 0.9, 0))
+	_apply_view()
+	if not _cam_ready:       # first frame: no sliding in from nowhere
+		cam.position = _tpos
+		cam.fov = _tfov
+		cam.look_at(_tlook)
+		_clook = _tlook
+		_cam_ready = true
+
+
+## garage sections move the camera: the engine tab opens the hood and looks into the bay, the wheels tab goes in close on a wheel
+func set_view(v: String) -> void:
+	if v == view:
+		return
+	view = v
+	if not hero:
+		spin = (v == "car")
+	if car:
+		car.hood_up = (v == "engine")
+	_apply_view()
+	_kick()
+
+
+func _apply_view() -> void:
+	match view:
+		"engine":
+			_tyaw = PI + 0.95
+			var bay := Vector3(0.0, 1.0, -1.7).rotated(Vector3.UP, _tyaw)
+			_tlook = bay + Vector3(0, 0.3, 0)
+			_tpos = bay + Vector3(0.0, 2.4, 4.0) * zoom * 1.2
+			_tfov = 38.0
+		"wheel":
+			_tyaw = -PI * 0.5
+			var wh := Vector3(0.95, 0.45, -1.3).rotated(Vector3.UP, _tyaw)
+			_tlook = wh
+			_tpos = wh + Vector3(0.3, 0.5, 3.3) * zoom * 1.6
+			_tfov = 30.0
+		_:
+			_tlook = Vector3(0, 0.9, 0)
+			_tpos = Vector3(0, 3.8 * zoom, 10.6 * zoom)
+			_tfov = 38.0
 
 
 func _frame_avatar() -> void:
@@ -143,6 +188,7 @@ func show_car(lo: Dictionary) -> void:
 	var rar := int(Catalog.CARS.get(lo.get("car", "hatch"), Catalog.CARS["hatch"])["r"])
 	((_ring.material_override) as StandardMaterial3D).albedo_color = Catalog.RARITY_COLOR[rar]
 	((_ring.material_override) as StandardMaterial3D).emission = Catalog.RARITY_COLOR[rar]
+	car.hood_up = (view == "engine")
 	_frame_car()
 	_flash = 1.0
 	_kick()
@@ -184,7 +230,15 @@ func _process(d: float) -> void:
 	_t += d
 	if spin and not _drag:
 		yaw += d * (0.3 if hero else 0.55)
+	if view != "car" and not hero:
+		yaw = lerp_angle(yaw, _tyaw, clampf(d * 3.5, 0.0, 1.0))
 	pivot.rotation.y = yaw
+	if not hero and avatar == null and _cam_ready:
+		var k := clampf(d * 4.0, 0.0, 1.0)
+		cam.position = cam.position.lerp(_tpos, k)
+		cam.fov = lerpf(cam.fov, _tfov, k)
+		_clook = _clook.lerp(_tlook, k)
+		cam.look_at(_clook)
 	if hero:
 		pivot.position.y = sin(_t * 1.6) * 0.025
 		cam.position.x = sin(_t * 0.35) * 0.8

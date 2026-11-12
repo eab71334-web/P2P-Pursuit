@@ -883,6 +883,8 @@ func _mod_fill() -> void:
 	if not subs.has(cs):
 		cs = subs[0]
 	mod_sub[mod_section] = cs
+	if preview and is_instance_valid(preview):
+		preview.set_view("engine" if mod_section == "engine" else ("wheel" if mod_section == "wheels" else "car"))
 	for sname in subs:
 		var on: bool = sname == cs
 		var b := UI.btn(_mod_chips, _sub_name(sname), UI.ACCENT if on else UI.CARD2, func():

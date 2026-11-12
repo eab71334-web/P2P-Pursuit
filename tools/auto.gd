@@ -232,9 +232,10 @@ func _process(d: float) -> void:
 			# SECS="paint,mods,wheels,engine" shots of each section of the modify page
 			if step == 0 and t > 2.5:
 				step = 1; Profile.level = 20; Profile.coins = 99999; Profile.car = (OS.get_environment("CAR") if OS.get_environment("CAR") != "" else "coupe"); Profile.cars[Profile.car] = true
-				Profile.buy_part("turbo", 2); Profile.buy_part("aero", 3)
+				Profile.buy_part("turbo", 2); Profile.buy_part("aero", 3); Profile.buy_part("exhaust", 2); Profile.buy_part("susp", 1)
+				for _i in 3: Profile.upgrade(Profile.car, "engine")
 				sc.hub.select("modify")
-			elif step >= 1 and step <= 8 and t > 3.5 + step * 1.0:
+			elif step >= 1 and step <= 8 and t > 3.5 + step * 3.2:
 				var secs: Array = ["paint", "mods", "wheels", "engine"]
 				var sec: String = secs[(step - 1) % 4]
 				if step <= 4:
@@ -250,7 +251,7 @@ func _process(d: float) -> void:
 					if step > 5:
 						get_tree().quit()
 				step += 1
-				await get_tree().create_timer(0.6).timeout
+				await get_tree().create_timer(2.2).timeout
 				shot("mod_%s" % (sec if step <= 5 else "decal"))
 		"promo":
 			_promo(sc)
