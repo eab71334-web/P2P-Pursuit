@@ -246,13 +246,33 @@ func _process(d: float) -> void:
 					sc.hub.mod_sub["paint"] = OS.get_environment("SUB") if OS.get_environment("SUB") != "" else "decal"
 					Profile.owned["decal:rs"] = true
 					Profile.equip_car_part("decal", "rs")
+					if OS.get_environment("DPF") != "":
+						Profile.set_decal_place({"f": OS.get_environment("DPF"), "x": 0.2, "y": 0.1, "s": 1.4, "r": 25.0})
 					sc.hub._mod_fill()
 					sc.hub._rerender()
 					if step > 5:
 						get_tree().quit()
 				step += 1
 				await get_tree().create_timer(2.2).timeout
+				if sc.hub.preview and sc.hub.preview.car: print("DBG hood_up=", sc.hub.preview.car.hood_up, " ang=", sc.hub.preview.car._hood_ang, " view=", sc.hub.preview.view)
 				shot("mod_%s" % (sec if step <= 5 else "decal"))
+		"rpaint":
+			if step == 0 and t > 2.5:
+				step = 1; Profile.level = 20; Profile.coins = 99999; Profile.gems = 500; Profile.car = "coupe"; Profile.cars["coupe"] = true
+				sc.hub.select("modify")
+			elif step == 1 and t > 4.0:
+				step = 2; sc.hub.mod_section = "paint"; sc.hub._mod_fill(); sc.hub._random_paint_open()
+			elif step == 2 and t > 6.0:
+				step = 3; shot("rp_0")
+				for b in sc.hub.find_children("*", "Button", true, false):
+					if str(b.text).begins_with("افتح"): b.pressed.emit()
+			elif step == 3 and t > 8.0:
+				step = 4; shot("rp_1")
+			elif step == 4 and t > 12.5:
+				step = 5; shot("rp_2")
+				print("GEMS ", Profile.gems)
+			elif step == 5 and t > 13.5:
+				get_tree().quit()
 		"promo":
 			_promo(sc)
 		"film":

@@ -427,7 +427,7 @@ func _stats(parent: Node, car_id: String) -> void:
 
 func _lo_for(car_id: String, over := {}) -> Dictionary:
 	var cs: Dictionary = Profile.car_set(car_id)
-	var lo := {"car": car_id, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"], "flag": cs["flag"], "spoiler": cs["spoiler"], "front": cs["front"], "hood": cs["hood"], "skirts": cs["skirts"], "wheel": cs["wheel"], "up": Profile.up.get(car_id, {}), "outfit": Profile.outfit}
+	var lo := {"car": car_id, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"], "flag": cs["flag"], "spoiler": cs["spoiler"], "front": cs["front"], "hood": cs["hood"], "skirts": cs["skirts"], "wheel": cs["wheel"], "dp": cs["dp"], "up": Profile.up.get(car_id, {}), "outfit": Profile.outfit}
 	for k in over:
 		lo[k] = over[k]
 	return lo
@@ -864,6 +864,8 @@ func _tab_modify() -> Control:
 
 
 func _mod_fill() -> void:
+	for old in get_tree().get_nodes_in_group("decal_card"):
+		old.queue_free()
 	for c in _mod_chips.get_children():
 		c.queue_free()
 	for c in _mod_strip.get_children():
@@ -884,7 +886,14 @@ func _mod_fill() -> void:
 		cs = subs[0]
 	mod_sub[mod_section] = cs
 	if preview and is_instance_valid(preview):
-		preview.set_view("engine" if mod_section == "engine" else ("wheel" if mod_section == "wheels" else "car"))
+		var vw := "car"
+		if mod_section == "engine":
+			vw = "engine"
+		elif mod_section == "wheels":
+			vw = "wheel"
+		elif mod_section == "paint" and cs == "decal" and _equipped("decal") != "none":
+			vw = "stick_hood" if str(Profile.car_set()["dp"].get("f", "side")) == "hood" else "stick_side"
+		preview.set_view(vw)
 	for sname in subs:
 		var on: bool = sname == cs
 		var b := UI.btn(_mod_chips, _sub_name(sname), UI.ACCENT if on else UI.CARD2, func():
@@ -908,13 +917,180 @@ func _mod_cosmetics(slot: String) -> void:
 		ids = Catalog.body_opts(g_car, slot)
 	elif slot == "wheel":
 		ids = Catalog.wheel_opts(g_car)
+	if slot == "paint":
+		var rb := UI.btn(_mod_strip, "", Color(0.35, 0.2, 0.6), func(): _random_paint_open(), 18, Vector2(196, 136))
+		var rv := VBoxContainer.new()
+		rv.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		rv.alignment = BoxContainer.ALIGNMENT_CENTER
+		rv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		rb.add_child(rv)
+		var t1 := UI.lbl(rv, UI.tx("Random paint", "طلاء عشوائي"), 20, Color.WHITE, false)
+		t1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var pr := UI.price_row(rv, Profile.RANDOM_PAINT_GEMS, true, 20)
+		pr.alignment = BoxContainer.ALIGNMENT_CENTER
+		var t2 := UI.lbl(rv, UI.tx("Any new colour - even legendary", "أي لون جديد - حتى الأسطوري"), 12, Color(0.85, 0.8, 1.0), false)
+		t2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	for id in ids:
 		var cell := _item_cell(slot, id, eq, func(sl: String, i: String):
 			preview.show_car(_lo_for(g_car, {sl: i})), _mod_strip)
 		cell.size_flags_horizontal = Control.SIZE_FILL
 		cell.custom_minimum_size = Vector2(196 if slot != "rim" else 150, 136)
 		_mod_strip.add_child(cell)
+	if slot == "decal" and eq != "none":
+		_decal_card()
 	_action_bar(slot, eq)
+
+
+## move the sticker around the car: pick the door or the hood, then slide it, resize it, turn it. Changes show on the car right away.
+func _decal_card() -> void:
+	var dp: Dictionary = (Profile.car_set()["dp"] as Dictionary).duplicate()
+	var host := action_box.get_parent()
+	var card := UI.panel(host, UI.CARD2, 12)
+	card.add_to_group("decal_card")
+	host.move_child(card, action_box.get_index())
+	card.custom_minimum_size = Vector2(0, 112)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 4)
+	card.add_child(v)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 6)
+	v.add_child(top)
+	var apply := func():
+		Profile.set_decal_place(dp)
+		if preview and preview.car:
+			CarStyle.restick(preview.car, preview.car.get("_hood_pivot"), _lo_for(g_car))
+	for f in [["side", "الأبواب", "Doors"], ["hood", "الغطاء", "Hood"]]:
+		var on: bool = str(dp.get("f", "side")) == f[0]
+		var fb := UI.btn(top, UI.tx(f[2], f[1]), UI.ACCENT if on else UI.CARD, func():
+			dp["f"] = f[0]
+			dp["x"] = 0.41 if f[0] == "side" else 0.0
+			dp["y"] = 0.0
+			Profile.set_decal_place(dp)
+			_mod_fill(), 16, Vector2(0, 36))
+		fb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var rb := UI.btn(top, UI.tx("Reset", "إعادة"), UI.CARD, func():
+		Profile.set_decal_place(CarStyle.DEFAULT_DP.duplicate())
+		_mod_fill(), 16, Vector2(0, 36))
+	rb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 0)
+	v.add_child(grid)
+	for sl in [["x", "أفقي", "Slide", -1.0, 1.0], ["y", "عمودي", "Up/down", -1.0, 1.0], ["s", "الحجم", "Size", 0.5, 2.2], ["r", "تدوير", "Turn", -180.0, 180.0]]:
+		var lb := UI.lbl(grid, UI.tx(sl[2], sl[1]), 14, UI.TXT2, false)
+		var hs := HSlider.new()
+		hs.min_value = sl[3]
+		hs.max_value = sl[4]
+		hs.step = 0.01
+		hs.value = float(dp.get(sl[0], 0.0))
+		hs.custom_minimum_size = Vector2(150, 30)
+		hs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grid.add_child(hs)
+		hs.value_changed.connect(func(val: float):
+			dp[sl[0]] = val
+			apply.call())
+
+
+# ---------------------------------------------------------------- random paint (100 gems)
+func _random_paint_open() -> void:
+	var pool := Profile.random_paint_pool()
+	if pool.is_empty():
+		say(UI.tx("You already own every paint", "عندك كل الألوان"))
+		return
+	var layer := CanvasLayer.new()
+	layer.layer = 90
+	add_child(layer)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.78)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(dim)
+	var cc := CenterContainer.new()
+	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(cc)
+	var card := UI.panel(cc, UI.PANEL, 18)
+	card.custom_minimum_size = Vector2(640, 0)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 12)
+	card.add_child(v)
+	var title := UI.lbl(v, UI.tx("Random paint", "طلاء عشوائي"), 30, Color.WHITE, false)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var sub := UI.lbl(v, UI.tx("Common 50%  -  Rare 30%  -  Epic 15%  -  Legendary 5%", "عادي 50%  -  نادر 30%  -  ملحمي 15%  -  أسطوري 5%"), 14, UI.TXT2, false)
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# the roulette window
+	var win := Control.new()
+	win.custom_minimum_size = Vector2(600, 130)
+	win.clip_contents = true
+	v.add_child(win)
+	win.layout_direction = Control.LAYOUT_DIRECTION_LTR      # the strip must run left to right in Arabic too
+	var strip := HBoxContainer.new()
+	strip.add_theme_constant_override("separation", 10)
+	win.add_child(strip)
+	strip.position = Vector2(0, 8)
+	var idx := 36
+	var all: Array = Catalog.PAINT_ORDER
+	var cell_w := 110.0
+	var make_cell := func(pid: String) -> void:
+		var pc := Panel.new()
+		pc.custom_minimum_size = Vector2(cell_w, 114)
+		var pe: Dictionary = Catalog.PAINTS[pid]
+		pc.add_theme_stylebox_override("panel", UI.sb(pe["c"], 12, Catalog.RARITY_COLOR[int(pe["r"])], 4))
+		strip.add_child(pc)
+	for i in range(48):
+		make_cell.call(all[randi() % all.size()])
+	var pointer := ColorRect.new()
+	pointer.color = Color(1, 0.85, 0.2)
+	pointer.custom_minimum_size = Vector2(4, 130)
+	pointer.size = Vector2(4, 130)
+	pointer.position = Vector2(298, 0)
+	win.add_child(pointer)
+	var res := UI.lbl(v, UI.tx("100 gems for one new paint.", "100 جوهرة مقابل لون جديد."), 20, UI.TXT, false)
+	res.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	v.add_child(row)
+	var busy := {"on": false}
+	var go: Button = UI.btn(row, UI.tx("Open  (100 gems)", "افتح  (100 جوهرة)"), UI.ACCENT, func(): pass, 22, Vector2(0, 56))
+	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var close := UI.btn(row, UI.tx("Close", "إغلاق"), UI.CARD2, func():
+		if not busy["on"]:
+			layer.queue_free(), 22, Vector2(0, 56))
+	close.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	go.pressed.connect(func():
+		if busy["on"]:
+			return
+		if Profile.gems < Profile.RANDOM_PAINT_GEMS:
+			say(UI.tx("Not enough gems", "الجواهر لا تكفي"))
+			Sfx.play("warn", -6.0)
+			return
+		var got := Profile.buy_random_paint()
+		if got == "":
+			return
+		busy["on"] = true
+		go.disabled = true
+		close.disabled = true
+		var gp: Dictionary = Catalog.PAINTS[got]
+		# put the winner under the pointer at slot idx
+		var holder: Panel = strip.get_child(idx)
+		holder.add_theme_stylebox_override("panel", UI.sb(gp["c"], 12, Catalog.RARITY_COLOR[int(gp["r"])], 4))
+		var target := -(idx * (cell_w + 10.0)) + 300.0 - cell_w * 0.5 + randf_range(-30.0, 30.0)
+		var tw := create_tween()
+		tw.tween_property(strip, "position:x", target, 4.2).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+		Sfx.play("whoosh", -6.0)
+		await tw.finished
+		var rar := int(gp["r"])
+		res.text = Catalog.nm(gp) + "  -  " + Catalog.rar_name(rar)
+		res.add_theme_color_override("font_color", Catalog.RARITY_COLOR[rar])
+		res.add_theme_font_size_override("font_size", 30)
+		Sfx.play("fanfare" if rar >= 2 else "success", 0.0)
+		Profile.equip_car_part("paint", got)
+		go.visible = false
+		close.text = UI.tx("Great!", "ممتاز!")
+		close.disabled = false
+		busy["on"] = false
+		_rerender()
+		_update_top()
+	)
 
 
 ## a card with title / effect / button used for parts and levels. kind: install | remove | buy | max

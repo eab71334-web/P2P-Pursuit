@@ -47,10 +47,14 @@ const PAINTS := {
 	"purple": {"n": ["Violet Pearl", "بنفسجي لؤلؤي"], "r": 1, "price": 1200, "c": Color(0.5, 0.15, 0.8), "m": 0.6, "ro": 0.25},
 	"matte": {"n": ["Stealth Matte", "رمادي مطفي"], "r": 2, "price": 2500, "c": Color(0.22, 0.24, 0.27), "m": 0.1, "ro": 0.9},
 	"candy": {"n": ["Candy Pink", "وردي كاندي"], "r": 2, "price": 3000, "c": Color(1.0, 0.2, 0.55), "m": 0.7, "ro": 0.2},
+	"mint": {"n": ["Mint Pearl", "نعناعي لؤلؤي"], "r": 1, "price": 1100, "c": Color(0.3, 0.88, 0.7), "m": 0.55, "ro": 0.3},
+	"crimson": {"n": ["Crimson Metal", "قرمزي معدني"], "r": 2, "price": 2600, "c": Color(0.55, 0.02, 0.12), "m": 0.8, "ro": 0.2},
+	"sunset": {"n": ["Sunset Glow", "غروب متوهج"], "r": 2, "price": 2800, "c": Color(1.0, 0.3, 0.28), "m": 0.7, "ro": 0.2},
+	"cosmic": {"n": ["Cosmic Violet", "بنفسجي كوني"], "r": 3, "price": 0, "gem": 180, "c": Color(0.35, 0.2, 0.95), "m": 1.0, "ro": 0.1},
 	"gold": {"n": ["Liquid Gold", "ذهب سائل"], "r": 3, "price": 0, "gem": 120, "c": Color(1.0, 0.75, 0.15), "m": 0.95, "ro": 0.18},
 	"chrome": {"n": ["Mirror Chrome", "كروم مرآة"], "r": 3, "price": 0, "gem": 150, "c": Color(0.85, 0.88, 0.95), "m": 1.0, "ro": 0.08},
 }
-const PAINT_ORDER := ["red", "blue", "white", "black", "yellow", "green", "orange", "purple", "estoril", "papaya", "granite", "matte", "candy", "gold", "chrome"]
+const PAINT_ORDER := ["red", "blue", "white", "black", "yellow", "green", "orange", "purple", "estoril", "papaya", "granite", "matte", "candy", "mint", "crimson", "sunset", "gold", "chrome", "cosmic"]
 
 const STRIPES := {
 	"none": {"n": ["No stripes", "بدون خطوط"], "r": 0, "price": 0, "c": Color.WHITE},

@@ -682,6 +682,7 @@ func _update_damage_fx(delta: float) -> void:
 	_hood_pivot.rotation.x = deg_to_rad(_hood_ang)
 	_cover_ang = lerpf(_cover_ang, 85.0 if cover_up else 0.0, clampf(delta * 6.0, 0.0, 1.0))
 	_cover_pivot.rotation.x = deg_to_rad(_cover_ang)
+	_cover_pivot.visible = _hood_ang > 12.0 or cover_up      # the little orange lid only shows once the hood is up
 	_lever_ang = lerpf(_lever_ang, -38.0 if latched else 0.0, clampf(delta * 8.0, 0.0, 1.0))
 	_lever_pivot.rotation.x = deg_to_rad(_lever_ang)
 	# smoke

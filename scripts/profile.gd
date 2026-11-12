@@ -140,6 +140,40 @@ func buy(slot: String, id: String) -> bool:
 	return true
 
 
+const RANDOM_PAINT_GEMS := 100
+const RANDOM_PAINT_ODDS := [50, 30, 15, 5]     # common / rare / epic / legendary
+
+
+## paints the player does not have yet (the random pull only gives new ones)
+func random_paint_pool() -> Array:
+	var out: Array = []
+	for id in Catalog.PAINT_ORDER:
+		if not owns("paint", id):
+			out.append(id)
+	return out
+
+
+## 100 gems for a random new paint. Rarity decides the odds; every level lock is ignored. Returns the paint id, or "" if it cannot be bought.
+func buy_random_paint() -> String:
+	var pool := random_paint_pool()
+	if pool.is_empty() or gems < RANDOM_PAINT_GEMS:
+		return ""
+	var tot := 0
+	for id in pool:
+		tot += int(RANDOM_PAINT_ODDS[int(Catalog.PAINTS[id]["r"])])
+	var roll := randi() % maxi(tot, 1)
+	var pick: String = pool[0]
+	for id in pool:
+		roll -= int(RANDOM_PAINT_ODDS[int(Catalog.PAINTS[id]["r"])])
+		if roll < 0:
+			pick = id
+			break
+	gems -= RANDOM_PAINT_GEMS
+	owned["paint:" + pick] = true
+	save()
+	return pick
+
+
 func buy_car(id: String) -> bool:
 	var e: Dictionary = Catalog.CARS[id]
 	if cars.has(id) or level < int(e["lvl"]):
@@ -167,7 +201,7 @@ func car_set(id := "") -> Dictionary:
 		id = car
 	var d: Dictionary = carset.get(id, {})
 	var cd: Dictionary = Catalog.CARS.get(id, {})
-	return {"paint": d.get("paint", cd.get("paint", "red")), "stripe": d.get("stripe", cd.get("stripe", "none")), "rim": d.get("rim", cd.get("rim", "steel")), "glow": d.get("glow", "none"), "decal": d.get("decal", "none"), "flag": d.get("flag", "none"), "spoiler": d.get("spoiler", "none"), "front": d.get("front", "none"), "hood": d.get("hood", "none"), "skirts": d.get("skirts", "none"), "wheel": d.get("wheel", "stock")}
+	return {"paint": d.get("paint", cd.get("paint", "red")), "stripe": d.get("stripe", cd.get("stripe", "none")), "rim": d.get("rim", cd.get("rim", "steel")), "glow": d.get("glow", "none"), "decal": d.get("decal", "none"), "flag": d.get("flag", "none"), "spoiler": d.get("spoiler", "none"), "front": d.get("front", "none"), "hood": d.get("hood", "none"), "skirts": d.get("skirts", "none"), "wheel": d.get("wheel", "stock"), "dp": d.get("dp", CarStyle.DEFAULT_DP.duplicate())}
 
 
 func equip_car_part(slot: String, id: String) -> void:
@@ -175,6 +209,14 @@ func equip_car_part(slot: String, id: String) -> void:
 		return
 	var d: Dictionary = car_set()
 	d[slot] = id
+	carset[car] = d
+	save()
+
+
+## where the sticker sits on the car (face, x, y, size, rotation)
+func set_decal_place(dp: Dictionary) -> void:
+	var d: Dictionary = car_set()
+	d["dp"] = dp
 	carset[car] = d
 	save()
 
@@ -241,7 +283,7 @@ func upgrade(car_id: String, key: String) -> bool:
 ## what is sent to the other players / used by the server physics
 func loadout() -> Dictionary:
 	var cs := car_set()
-	return {"car": car, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"], "flag": cs["flag"], "spoiler": cs["spoiler"], "front": cs["front"], "hood": cs["hood"], "skirts": cs["skirts"], "wheel": cs["wheel"],
+	return {"car": car, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"], "flag": cs["flag"], "spoiler": cs["spoiler"], "front": cs["front"], "hood": cs["hood"], "skirts": cs["skirts"], "wheel": cs["wheel"], "dp": cs["dp"],
 		"up": (up.get(car, {}) as Dictionary).duplicate(), "outfit": outfit.duplicate()}
 
 

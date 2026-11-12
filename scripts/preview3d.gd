@@ -156,6 +156,17 @@ func _apply_view() -> void:
 			_tlook = wh
 			_tpos = wh + Vector3(0.3, 0.5, 3.3) * zoom * 1.6
 			_tfov = 30.0
+		"stick_side":
+			_tyaw = -PI * 0.5
+			_tlook = Vector3(0, 0.95, 0)
+			_tpos = Vector3(0.0, 1.5, 7.0) * zoom * 1.35
+			_tfov = 38.0
+		"stick_hood":
+			_tyaw = PI
+			var hc := Vector3(0.0, 1.2, -1.65).rotated(Vector3.UP, _tyaw)
+			_tlook = hc
+			_tpos = hc + Vector3(0.0, 2.6, 2.4) * zoom * 1.3
+			_tfov = 38.0
 		_:
 			_tlook = Vector3(0, 0.9, 0)
 			_tpos = Vector3(0, 3.8 * zoom, 10.6 * zoom)

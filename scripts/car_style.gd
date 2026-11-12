@@ -312,13 +312,7 @@ static func decorate(car: Node3D, model: String, lo: Dictionary, body_mat: Stand
 		ol.light_color = gc
 		car.add_child(ol)
 
-	# --- stickers: round badge with text on both doors
-	var dk: String = str(lo.get("decal", "none"))
-	if dk != "none" and Catalog.DECALS.has(dk):
-		var de: Dictionary = Catalog.DECALS[dk]
-		for sx in [-1.0, 1.0]:
-			cyl(car, 0.17, 0.012, Vector3(sx * 0.965, 0.86, 0.45), mat(de["bg"], 0.0, 0.5), Vector3(0, 0, 90))
-			_number(car, str(de["t"]), Vector3(sx * 0.975, 0.86, 0.45), de["c"], 90.0 * sx, 0.2)
+	_add_stickers(car, hood, lo)
 
 	# --- model specific parts
 	var n_stock := car.get_child_count()
@@ -609,6 +603,66 @@ static func _fitted_parts(car: Node3D, up: Dictionary, body_mat: StandardMateria
 			box(car, Vector3(1.4, 0.07, 0.08), Vector3(0, 1.12, -2.22), mat(CHROME, 0.9, 0.2))
 
 
+const DEFAULT_DP := {"f": "side", "x": 0.41, "y": 0.0, "s": 1.0, "r": 0.0}
+
+
+## the chosen sticker (a round badge with text), placed where the player put it: on the doors (both sides) or on the hood.
+## f = face, x / y = position on that face (-1..1), s = size, r = rotation in degrees. Called again live while the player drags the sliders.
+static func _add_stickers(car: Node3D, hood: Node3D, lo: Dictionary) -> void:
+	var dk: String = str(lo.get("decal", "none"))
+	if dk == "none" or not Catalog.DECALS.has(dk):
+		return
+	var de: Dictionary = Catalog.DECALS[dk]
+	var dp: Dictionary = DEFAULT_DP.duplicate()
+	var got: Variant = lo.get("dp", null)
+	if got is Dictionary:
+		for k in got:
+			dp[k] = got[k]
+	var sc := clampf(float(dp["s"]), 0.5, 2.2)
+	var rot := float(dp["r"])
+	var bg := mat(de["bg"], 0.0, 0.5)
+	if str(dp["f"]) == "hood" and hood != null:
+		var h := Node3D.new()
+		h.add_to_group("sticker_node")
+		h.position = Vector3(clampf(float(dp["x"]), -1.0, 1.0) * 0.62, 0.055, -0.49 - clampf(float(dp["y"]), -1.0, 1.0) * 0.34)
+		h.rotation_degrees = Vector3(-90, 0, 0)
+		hood.add_child(h)
+		_badge(h, sc, rot, bg, de)
+		return
+	for sx in [-1.0, 1.0]:
+		var h := Node3D.new()
+		h.add_to_group("sticker_node")
+		h.position = Vector3(sx * 0.97, 0.86 + clampf(float(dp["y"]), -1.0, 1.0) * 0.3, clampf(float(dp["x"]), -1.0, 1.0) * 1.1)
+		h.rotation_degrees = Vector3(0, 90.0 * sx, 0)
+		car.add_child(h)
+		_badge(h, sc, rot * sx if false else rot, bg, de)
+
+
+## a flat disc + text, built facing the holder's local +Z
+static func _badge(h: Node3D, sc: float, rot: float, bg: Material, de: Dictionary) -> void:
+	var disc := cyl(h, 0.17 * sc, 0.012, Vector3.ZERO, bg, Vector3(90, 0, 0))
+	disc.rotation_degrees.z = rot
+	var lab := Label3D.new()
+	lab.text = str(de["t"])
+	lab.font_size = 96
+	lab.pixel_size = 0.2 * sc / 70.0
+	lab.modulate = de["c"]
+	lab.outline_size = 0
+	lab.double_sided = false
+	lab.position = Vector3(0, 0, 0.012)
+	lab.rotation_degrees = Vector3(0, 0, rot)
+	h.add_child(lab)
+
+
+## live re-placement from the garage: removes the old stickers and draws them again from the new loadout
+static func restick(car: Node3D, hood: Node3D, lo: Dictionary) -> void:
+	for n in car.get_tree().get_nodes_in_group("sticker_node"):
+		if n.get_parent() != null and (car.is_ancestor_of(n)):
+			n.get_parent().remove_child(n)
+			n.free()
+	_add_stickers(car, hood, lo)
+
+
 ## what the engine bay looks like under the hood: a different engine per car, dressed by the upgrades the player owns.
 ## layout: i4 / flat4 / v8 / v6 / i6 / flat6 / hybrid. Stage 0..5 colours the covers, turbo / exhaust / suspension / cooling add parts.
 const ENGINE_KIND := {"hatch": "i4", "sierra": "i4", "buggy": "flat4", "muscle": "v8", "charger": "v8", "pickup": "v6", "coupe": "i6", "m4": "i6", "gt3": "flat6", "hyper": "hybrid"}
@@ -624,36 +678,36 @@ static func _engine_bay(car: Node3D, model: String, up: Dictionary) -> void:
 	var cover := mat(STAGE_COL[st], 0.7 if st > 0 else 0.3, 0.35, 0.5 if st == 5 else 0.0)
 	var metal := mat(Color(0.5, 0.52, 0.58), 0.9, 0.3)
 	var dark := mat(Color(0.06, 0.06, 0.08), 0.3, 0.6)
-	var z0 := -1.7
-	var top := 1.2
+	var z0 := -1.6          # everything stays between the fascia (z -1.95) and the windshield (z -1.2)
+	var top := 0.92         # the closed hood's underside is at y 1.11: nothing may poke through it
 	# ---- the engine itself
 	match kind:
 		"i4", "i6":
 			var n := 4 if kind == "i4" else 6
-			var len_z := 0.42 * (n / 4.0) + 0.1
+			var len_z := 0.3 * (n / 4.0) + 0.1
 			box(bay, Vector3(0.62, 0.12, len_z), Vector3(0, top + 0.02, z0), cover)           # valve cover
 			for k in range(n):
 				var zz := z0 - len_z * 0.5 + 0.1 + k * ((len_z - 0.2) / maxf(n - 1, 1))
-				cyl(bay, 0.04, 0.2, Vector3(-0.22, top + 0.1, zz), metal, Vector3(0, 0, 0))   # intake runner
+				cyl(bay, 0.04, 0.12, Vector3(-0.22, top + 0.06, zz), metal, Vector3(0, 0, 0))   # intake runner
 				cyl(bay, 0.03, 0.1, Vector3(0.0, top + 0.1, zz), dark)                         # coil
 		"flat4", "flat6":
 			var n2 := 2 if kind == "flat4" else 3
 			for sx in [-0.42, 0.42]:                                                           # two horizontally opposed heads
-				box(bay, Vector3(0.26, 0.3, 0.2 + 0.2 * n2), Vector3(sx, 0.98, z0), cover)
+				box(bay, Vector3(0.26, 0.3, 0.15 + 0.14 * n2), Vector3(sx, 0.98, z0), cover)
 				cyl(bay, 0.08, 0.1, Vector3(sx * 1.3, 0.98, z0), metal, Vector3(0, 0, 90))
 		"v8", "v6":
 			var nn := 4 if kind == "v8" else 3
 			for sx in [-0.26, 0.26]:                                                           # V banks
-				box(bay, Vector3(0.28, 0.14, 0.2 + 0.18 * nn), Vector3(sx, top + 0.02, z0), cover, Vector3(0, 0, -sx * 60.0))
-			box(bay, Vector3(0.3, 0.08, 0.5), Vector3(0, top - 0.05, z0), dark)
+				box(bay, Vector3(0.28, 0.14, 0.14 + 0.1 * nn), Vector3(sx, top + 0.02, z0), cover, Vector3(0, 0, -sx * 60.0))
+			box(bay, Vector3(0.3, 0.08, 0.4), Vector3(0, top - 0.05, z0), dark)
 		"hybrid":
 			for sx in [-0.26, 0.26]:
-				box(bay, Vector3(0.28, 0.14, 0.72), Vector3(sx, top + 0.02, z0), cover, Vector3(0, 0, -sx * 60.0))
-			box(bay, Vector3(0.7, 0.07, 0.95), Vector3(0, top + 0.12, z0), mat(Color(0.7, 0.55, 0.15), 0.9, 0.3, 0.3))   # gold cover plate
+				box(bay, Vector3(0.28, 0.14, 0.55), Vector3(sx, top + 0.02, z0), cover, Vector3(0, 0, -sx * 60.0))
+			box(bay, Vector3(0.6, 0.07, 0.6), Vector3(0, top + 0.12, z0), mat(Color(0.7, 0.55, 0.15), 0.9, 0.3, 0.3))   # gold cover plate
 	# ---- engine stage: airbox grows and changes colour
 	if st >= 1:
-		box(bay, Vector3(0.28, 0.14, 0.3), Vector3(0.5, top + 0.12, z0 - 0.3), cover)
-		cyl(bay, 0.05, 0.3, Vector3(0.5, top + 0.08, z0 - 0.55), metal, Vector3(90, 0, 0))
+		box(bay, Vector3(0.26, 0.12, 0.26), Vector3(0.5, top + 0.06, z0 - 0.05), cover)
+		cyl(bay, 0.045, 0.16, Vector3(0.5, top + 0.04, z0 - 0.26), metal, Vector3(90, 0, 0))
 	if st >= 3:
 		box(bay, Vector3(0.5, 0.03, 0.4), Vector3(0, top + 0.12, z0 + 0.38), mat(CARBON, 0.6, 0.3))
 	# ---- turbo / supercharger
@@ -662,12 +716,12 @@ static func _engine_bay(car: Node3D, model: String, up: Dictionary) -> void:
 		var tcol: Color = [Color(0.6, 0.62, 0.68), Color(0.75, 0.78, 0.85), Color(0.95, 0.6, 0.15)][tu - 1]
 		var tm := mat(tcol, 0.95, 0.2, 0.0 if tu < 3 else 0.5)
 		if kind == "v8" and model == "muscle":
-			box(bay, Vector3(0.36, 0.2, 0.4), Vector3(0, top + 0.22, z0), tm)                       # supercharger case
-			cyl(bay, 0.1, 0.12, Vector3(0, top + 0.36, z0 - 0.3), dark, Vector3(90, 0, 0))          # blower snout
+			box(bay, Vector3(0.36, 0.14, 0.4), Vector3(0, top + 0.1, z0), tm)                       # supercharger case
+			cyl(bay, 0.06, 0.12, Vector3(0, top + 0.1, z0 - 0.26), dark, Vector3(90, 0, 0))          # blower snout
 		else:
 			var r := 0.08 + 0.025 * tu
-			cyl(bay, r, 0.2, Vector3(0.52, 0.98, z0 + 0.12), tm, Vector3(0, 0, 90))                 # snail
-			cyl(bay, r * 0.6, 0.26, Vector3(0.52, 0.98, z0 + 0.12), mat(Color(1.0, 0.4, 0.05), 0.5, 0.3, 1.4 if tu == 3 else 0.2), Vector3(0, 0, 90))
+			cyl(bay, r, 0.2, Vector3(0.55, 0.98, z0 + 0.12), tm, Vector3(0, 0, 90))                 # snail
+			cyl(bay, r * 0.6, 0.26, Vector3(0.55, 0.98, z0 + 0.12), mat(Color(1.0, 0.4, 0.05), 0.5, 0.3, 1.4 if tu == 3 else 0.2), Vector3(0, 0, 90))
 			if tu >= 2:
 				box(bay, Vector3(0.9, 0.2, 0.06), Vector3(0, 0.9, -1.96), mat(Color(0.55, 0.58, 0.64), 0.9, 0.3))   # intercooler
 			beam(bay, Vector3(0.52, 0.98, z0 + 0.2), Vector3(0.1, top, z0 - 0.4), 0.05, mat(Color(0.15, 0.3, 0.9), 0.5, 0.4))
