@@ -283,7 +283,7 @@ func upgrade(car_id: String, key: String) -> bool:
 ## what is sent to the other players / used by the server physics
 func loadout() -> Dictionary:
 	var cs := car_set()
-	return {"car": car, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"], "flag": cs["flag"], "spoiler": cs["spoiler"], "front": cs["front"], "hood": cs["hood"], "skirts": cs["skirts"], "wheel": cs["wheel"], "dp": cs["dp"],
+	return {"car": car, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"], "flag": cs["flag"], "spoiler": cs["spoiler"], "front": cs["front"], "hood": cs["hood"], "skirts": cs["skirts"], "wheel": cs["wheel"], "dp": cs["dp"], "lv": Livery.exists(car),
 		"up": (up.get(car, {}) as Dictionary).duplicate(), "outfit": outfit.duplicate()}
 
 

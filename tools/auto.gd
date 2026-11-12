@@ -258,6 +258,56 @@ func _process(d: float) -> void:
 				await get_tree().create_timer(2.2).timeout
 				if sc.hub.preview and sc.hub.preview.car: print("DBG hood_up=", sc.hub.preview.car.hood_up, " ang=", sc.hub.preview.car._hood_ang, " view=", sc.hub.preview.view)
 				shot("mod_%s" % (sec if step <= 5 else "decal"))
+		"liv":
+			if step == 0 and t > 2.5:
+				step = 1; Profile.level = 20; Profile.car = "coupe"; Profile.cars["coupe"] = true
+				var sd := Image.create(Livery.W, Livery.SIDE_H, false, Image.FORMAT_RGBA8)
+				sd.fill_rect(Rect2i(0, 150, Livery.W, 40), Color(1, 1, 1, 1))
+				sd.fill_rect(Rect2i(400, 100, 60, 250), Color(1, 0.1, 0.1, 1))
+				sd.fill_rect(Rect2i(0, 0, 60, 400), Color(0, 0.5, 1, 1))
+				sd.fill_rect(Rect2i(980, 0, 60, 400), Color(1, 0.8, 0, 1))
+				sd.save_png(Livery.path("coupe", "side"))
+				var tp := Image.create(Livery.W, Livery.TOP_H, false, Image.FORMAT_RGBA8)
+				tp.fill_rect(Rect2i(0, 220, Livery.W, 80), Color(1, 1, 1, 1))
+				tp.fill_rect(Rect2i(0, 0, 60, 520), Color(0, 0.5, 1, 1))
+				tp.fill_rect(Rect2i(980, 0, 60, 520), Color(1, 0.8, 0, 1))
+				tp.save_png(Livery.path("coupe", "top"))
+				sc.hub.select("garage")
+			elif step == 1 and t > 5.0:
+				step = 2; shot("liv0")
+			elif step == 2 and t > 6.6:
+				step = 3; shot("liv1")
+			elif step == 3 and t > 7.5:
+				Livery.clear("coupe"); get_tree().quit()
+		"studio":
+			if step == 0 and t > 2.5:
+				step = 1; Profile.level = 20; Profile.coins = 99999; Profile.car = "coupe"; Profile.cars["coupe"] = true
+				Livery.clear("coupe")
+				sc.hub.select("garage")
+			elif step == 1 and t > 4.0:
+				step = 2; sc.hub.g_car = "coupe"; sc.hub._open_studio()
+			elif step == 2 and t > 8.0:
+				step = 3; shot("st0")
+				var st: PaintStudio = null
+				for n in sc.hub.find_children("*", "Control", true, false):
+					if n is PaintStudio: st = n
+				if st:
+					st._begin(Vector2(300, 200)); st._move(Vector2(520, 230)); st._move(Vector2(700, 180)); st._end()
+					st.colour = Color(1, 0.8, 0); st._brush_cache.clear(); st.tool = "fine"
+					st._begin(Vector2(200, 260)); st._move(Vector2(800, 280)); st._end()
+					st._tpl_random()
+					print("INVIS ", (st.layers["side"] as Image).is_invisible())
+			elif step == 3 and t > 9.5:
+				step = 4; shot("st1")
+			elif step == 4 and t > 10.5:
+				step = 5
+				for n in sc.hub.find_children("*", "Control", true, false):
+					if n is PaintStudio: n._show_3d()
+			elif step == 5 and t > 13.5:
+				step = 6; shot("st2")
+				Livery.clear("coupe")
+			elif step == 6 and t > 14.0:
+				get_tree().quit()
 		"rpaint":
 			if step == 0 and t > 2.5:
 				step = 1; Profile.level = 20; Profile.coins = 99999; Profile.gems = 500; Profile.car = "coupe"; Profile.cars["coupe"] = true

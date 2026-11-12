@@ -302,6 +302,8 @@ func _build_visuals() -> void:
 	_build_cluster()
 	_build_engine_bay(c)
 	CarStyle.decorate(self, model, lo, body_mat, team_color)
+	if lo.get("lv", false) and not is_remote or lo.get("lv", false) and preview:
+		Livery.apply(self, body_mat, model)
 	_box(self, Vector3(1.9, 0.3, 0.2), Vector3(0, 0.5, -2.05), DARK)            # bumpers
 	_box(self, Vector3(1.9, 0.3, 0.2), Vector3(0, 0.5, 2.05), DARK)
 	CarInterior.build(self, model, sd, drop)                                   # dash, console, seats, door cards, liner

@@ -467,7 +467,7 @@ func _stats_cmp(parent: Node, car_id: String) -> void:
 
 func _lo_for(car_id: String, over := {}) -> Dictionary:
 	var cs: Dictionary = Profile.car_set(car_id)
-	var lo := {"car": car_id, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"], "flag": cs["flag"], "spoiler": cs["spoiler"], "front": cs["front"], "hood": cs["hood"], "skirts": cs["skirts"], "wheel": cs["wheel"], "dp": cs["dp"], "up": Profile.up.get(car_id, {}), "outfit": Profile.outfit}
+	var lo := {"car": car_id, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"], "flag": cs["flag"], "spoiler": cs["spoiler"], "front": cs["front"], "hood": cs["hood"], "skirts": cs["skirts"], "wheel": cs["wheel"], "dp": cs["dp"], "lv": Livery.exists(car_id), "up": Profile.up.get(car_id, {}), "outfit": Profile.outfit}
 	for k in over:
 		lo[k] = over[k]
 	return lo
@@ -790,6 +790,8 @@ func _tab_garage() -> Control:
 		UI.lbl(iv, Catalog.nm(m), 30, Catalog.RARITY_COLOR[int(m["r"])], false)
 		UI.lbl(iv, Catalog.txt(m["d"]), 16, UI.TXT2, true)
 		UI.lbl(iv, Catalog.rar_name(int(m["r"])), 14, UI.TXT2, false)
+		if Profile.cars.has(g_car):
+			UI.btn(av, UI.tx("SPRAY STUDIO", "استوديو الرش"), Color(0.78, 0.25, 0.1), func(): _open_studio(), 18, Vector2(210, 44))
 		UI.btn(av, UI.tx("PHOTO CARD", "بطاقة صورة"), UI.CARD2, func():
 			Sfx.play("click", -6.0)
 			Share.snap(self, "car_" + g_car, Catalog.nm(m)), 18, Vector2(210, 44))
@@ -992,6 +994,16 @@ func _mod_cosmetics(slot: String) -> void:
 	elif slot == "wheel":
 		ids = Catalog.wheel_opts(g_car)
 	if slot == "paint":
+		var stb := UI.btn(_mod_strip, "", Color(0.78, 0.25, 0.1), func(): _open_studio(), 18, Vector2(170, 136))
+		var stv := VBoxContainer.new()
+		stv.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		stv.alignment = BoxContainer.ALIGNMENT_CENTER
+		stv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		stb.add_child(stv)
+		var st1 := UI.lbl(stv, UI.tx("Spray studio", "استوديو الرش"), 21, Color.WHITE, true)
+		st1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var st2 := UI.lbl(stv, UI.tx("Paint it yourself", "ارسم بيدك"), 13, Color(1.0, 0.9, 0.8), true)
+		st2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		var rb := UI.btn(_mod_strip, "", Color(0.35, 0.2, 0.6), func(): _random_paint_open(), 18, Vector2(196, 136))
 		var rv := VBoxContainer.new()
 		rv.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -1024,6 +1036,13 @@ func _mod_cosmetics(slot: String) -> void:
 	if slot == "decal" and eq != "none":
 		_decal_card()
 	_action_bar(slot, eq)
+
+
+func _open_studio() -> void:
+	Sfx.play("click")
+	PaintStudio.open(self, g_car, _lo_for(g_car), func(ch: bool):
+		if ch and preview and is_instance_valid(preview):
+			preview.show_car(_lo_for(g_car)))
 
 
 ## one tap: a matching paint + stripe + rim + glow combo made only from parts the player already owns
