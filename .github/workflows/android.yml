@@ -25,17 +25,17 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install Godot 4.3 + export templates
+      - name: Install Godot 4.7.2 + export templates
         uses: chickensoft-games/setup-godot@v2
         with:
-          version: 4.3.0
+          version: 4.7.2
           use-dotnet: false
           include-templates: true
 
       - name: Install Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: "platform-tools build-tools;34.0.0 platforms;android-34"
+          packages: "platform-tools build-tools;35.0.1 build-tools;36.0.0 platforms;android-35 platforms;android-36"
 
       - name: Write Android export preset
         run: |
@@ -89,7 +89,7 @@ jobs:
 
           mkdir -p ~/.config/godot
 
-          cat > ~/.config/godot/editor_settings-4.3.tres <<EOT
+          cat > ~/.config/godot/editor_settings-4.7.tres <<EOT
           [gd_resource type="EditorSettings" format=3]
 
           [resource]
