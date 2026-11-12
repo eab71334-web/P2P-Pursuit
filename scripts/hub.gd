@@ -565,7 +565,21 @@ func _item_cell(slot: String, id: String, equipped: String, on_pick: Callable, g
 	var kind := slot
 	if slot == "skin":
 		kind = "shirt"
-	if Catalog.CAR_SLOTS.has(slot):
+	if slot == "paint":
+		var dot := Panel.new()
+		dot.custom_minimum_size = Vector2(60, 60)
+		dot.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		var dsb := StyleBoxFlat.new()
+		dsb.bg_color = col.lightened(0.12) if float(e.get("m", 0.0)) > 0.5 else col
+		dsb.set_corner_radius_all(30)
+		dsb.set_border_width_all(4)
+		dsb.border_color = rc
+		dsb.shadow_color = Color(col.r, col.g, col.b, 0.5)
+		dsb.shadow_size = 8
+		dot.add_theme_stylebox_override("panel", dsb)
+		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vb.add_child(dot)
+	elif Catalog.CAR_SLOTS.has(slot):
 		var sw := HubArt.SwatchArt.new()
 		sw.slot = slot
 		sw.model = g_car
@@ -841,7 +855,7 @@ func _sub_name(sub: String) -> String:
 func _tab_modify() -> Control:
 	g_car = Profile.car
 	var root := Control.new()
-	var bar_h := 276
+	var bar_h := 252
 	preview = Preview3D.new()
 	preview.zoom = 0.74
 	root.add_child(preview)
@@ -899,7 +913,7 @@ func _tab_modify() -> Control:
 	head.add_child(action_box)
 	var ssc := TScroll.new()
 	ssc.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	ssc.custom_minimum_size = Vector2(0, 144)
+	ssc.custom_minimum_size = Vector2(0, 140)
 	bv.add_child(ssc)
 	_mod_strip = HBoxContainer.new()
 	_mod_strip.add_theme_constant_override("separation", 10)
@@ -910,7 +924,7 @@ func _tab_modify() -> Control:
 	for sec in MOD_SECTIONS:
 		var tb := Button.new()
 		tb.text = UI.tx(SEC_NAMES[sec][0], SEC_NAMES[sec][1])
-		tb.custom_minimum_size = Vector2(0, 54)
+		tb.custom_minimum_size = Vector2(0, 46)
 		tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		tb.add_theme_font_size_override("font_size", 21)
 		tb.set_meta("sec", sec)
@@ -990,15 +1004,52 @@ func _mod_cosmetics(slot: String) -> void:
 		pr.alignment = BoxContainer.ALIGNMENT_CENTER
 		var t2 := UI.lbl(rv, UI.tx("Any new colour - even legendary", "أي لون جديد - حتى الأسطوري"), 12, Color(0.85, 0.8, 1.0), false)
 		t2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	if slot == "paint":
+		var sb2 := UI.btn(_mod_strip, "", Color(0.12, 0.45, 0.55), func(): _suggest_design(), 18, Vector2(150, 136))
+		var sv2 := VBoxContainer.new()
+		sv2.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		sv2.alignment = BoxContainer.ALIGNMENT_CENTER
+		sv2.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		sb2.add_child(sv2)
+		var s1 := UI.lbl(sv2, UI.tx("Suggested design", "تصميم مقترح"), 18, Color.WHITE, true)
+		s1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var s2 := UI.lbl(sv2, UI.tx("One tap, matching look", "بضغطة واحدة"), 12, Color(0.8, 0.95, 1.0), true)
+		s2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	for id in ids:
 		var cell := _item_cell(slot, id, eq, func(sl: String, i: String):
 			preview.show_car(_lo_for(g_car, {sl: i})), _mod_strip)
 		cell.size_flags_horizontal = Control.SIZE_FILL
-		cell.custom_minimum_size = Vector2(196 if slot != "rim" else 150, 136)
+		cell.custom_minimum_size = Vector2(196 if slot not in ["rim", "paint"] else (150 if slot == "rim" else 124), 136)
 		_mod_strip.add_child(cell)
 	if slot == "decal" and eq != "none":
 		_decal_card()
 	_action_bar(slot, eq)
+
+
+## one tap: a matching paint + stripe + rim + glow combo made only from parts the player already owns
+const SUGGEST := [
+	["black", "gold", "gold", "none"], ["white", "black", "black", "blue"], ["red", "white", "black", "none"],
+	["blue", "white", "steel", "blue"], ["orange", "black", "black", "none"], ["purple", "cyan", "neon", "pink"],
+	["green", "black", "bronze", "green"], ["yellow", "black", "black", "none"], ["matte", "flame", "red", "none"],
+	["crimson", "gold", "gold", "none"], ["mint", "white", "steel", "white"], ["cosmic", "cyan", "neon", "pink"], ["chrome", "black", "black", "blue"], ["gold", "black", "black", "none"]]
+var _sug_i := -1
+
+
+func _suggest_design() -> void:
+	var slots := ["paint", "stripe", "rim", "glow"]
+	for k in SUGGEST.size():
+		_sug_i = (_sug_i + 1) % SUGGEST.size()
+		var pr: Array = SUGGEST[_sug_i]
+		if Profile.owns("paint", pr[0]) and Profile.owns("stripe", pr[1]) and Profile.owns("rim", pr[2]) and Profile.owns("glow", pr[3]):
+			for i in 4:
+				Profile.equip_car_part(slots[i], pr[i])
+			Sfx.play("success", -4.0)
+			say(UI.tx("Suggested design applied", "تم تطبيق التصميم المقترح"))
+			if preview:
+				preview.show_car(_lo_for(g_car))
+			_mod_fill()
+			return
+	say(UI.tx("Own more colours to unlock suggestions", "اشتر ألواناً أكثر لتظهر التصاميم المقترحة"))
 
 
 ## move the sticker around the car: pick the door or the hood, then slide it, resize it, turn it. Changes show on the car right away.
