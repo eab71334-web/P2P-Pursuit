@@ -19,6 +19,13 @@ var _clook := Vector3(0, 0.9, 0)
 var _tfov := 38.0
 var _tyaw := 0.0
 var _cam_ready := false
+var _painter: Avatar
+var _gun: Node3D
+var _mist: CPUParticles3D
+var _spray_t := -1.0
+var _spray_final := ""
+var _spray_done := Callable()
+var _spray_old := Color.WHITE
 var _drag := false
 var _t := 0.0
 var _flash := 0.0
@@ -161,6 +168,11 @@ func _apply_view() -> void:
 			_tlook = Vector3(0, 0.95, 0)
 			_tpos = Vector3(0.0, 1.5, 7.0) * zoom * 1.35
 			_tfov = 38.0
+		"spray":
+			_tyaw = -PI * 0.5
+			_tlook = Vector3(1.0, 1.0, 0.0)
+			_tpos = Vector3(0.9, 1.8, 8.0) * zoom * 1.5
+			_tfov = 38.0
 		"stick_hood":
 			_tyaw = PI
 			var hc := Vector3(0.0, 1.2, -1.65).rotated(Vector3.UP, _tyaw)
@@ -239,6 +251,8 @@ func play_emote(id: String) -> void:
 
 func _process(d: float) -> void:
 	_t += d
+	if _spray_t >= 0.0 and _painter and _gun:
+		_spray_step(d)
 	if spin and not _drag:
 		yaw += d * (0.3 if hero else 0.55)
 	if view != "car" and not hero:
@@ -259,6 +273,113 @@ func _process(d: float) -> void:
 	if _flash > 0.0:
 		_flash = maxf(0.0, _flash - d * 2.0)
 		pivot.scale = Vector3.ONE * (1.0 + sin(_flash * PI) * 0.04)
+
+
+# ---------------------------------------------------------------- spray-paint reveal (random paint)
+
+## a painter walks up with a spray gun and re-sprays the car; the colour flickers through random paints and settles on the winner
+func play_spray(final_paint: String, on_done: Callable) -> void:
+	if car == null:
+		return
+	end_spray()
+	set_view("spray")
+	_spray_final = final_paint
+	_spray_done = on_done
+	_spray_t = 0.0
+	_spray_old = car.body_color
+	_painter = Avatar.new()
+	_painter.role = "preview"
+	_painter.helmet_color = Color(0.85, 0.12, 0.14)
+	_painter.shirt_color = Color(0.9, 0.9, 0.95)
+	_painter.outfit = Profile.outfit
+	_painter.position = Vector3(3.5, 0.97, 0.2)
+	vp.add_child(_painter)
+	_painter.go_outside(Vector3(3.5, 0.97, 0.2))
+	_painter.work = 3
+	_painter.rotation.y = PI * 0.5
+	_gun = Node3D.new()
+	var gm := StandardMaterial3D.new()
+	gm.albedo_color = Color(0.15, 0.15, 0.18)
+	gm.metallic = 0.6
+	var cm := StandardMaterial3D.new()
+	cm.albedo_color = Color(0.9, 0.9, 0.95)
+	cm.metallic = 0.8
+	cm.roughness = 0.3
+	for part in [[Vector3(0.07, 0.1, 0.26), Vector3(0, 0, 0), gm], [Vector3(0.04, 0.04, 0.16), Vector3(0, 0.02, -0.2), cm], [Vector3(0.1, 0.14, 0.1), Vector3(0, 0.12, 0.02), cm]]:
+		var mi := MeshInstance3D.new()
+		var bx := BoxMesh.new()
+		bx.size = part[0]
+		mi.mesh = bx
+		mi.material_override = part[2]
+		mi.position = part[1]
+		_gun.add_child(mi)
+	vp.add_child(_gun)
+	_mist = CPUParticles3D.new()
+	_mist.emitting = false
+	_mist.amount = 90
+	_mist.lifetime = 0.55
+	_mist.direction = Vector3(0, 0, -1)
+	_mist.spread = 9.0
+	_mist.initial_velocity_min = 3.2
+	_mist.initial_velocity_max = 4.4
+	_mist.gravity = Vector3(0, -0.6, 0)
+	var sm := SphereMesh.new()
+	sm.radius = 0.05
+	sm.height = 0.1
+	_mist.mesh = sm
+	_mist.scale_amount_min = 0.5
+	_mist.scale_amount_max = 1.6
+	var mm := StandardMaterial3D.new()
+	mm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mm.vertex_color_use_as_albedo = true
+	mm.albedo_color = Color.WHITE
+	_mist.material_override = mm
+	_mist.color = Color.WHITE
+	_gun.add_child(_mist)
+	_mist.position = Vector3(0, 0.02, -0.3)
+
+
+func end_spray() -> void:
+	_spray_t = -1.0
+	for n in [_painter, _gun]:
+		if n and is_instance_valid(n):
+			n.queue_free()
+	_painter = null
+	_gun = null
+	_mist = null
+
+
+func _spray_step(d: float) -> void:
+	_spray_t += d
+	var t := _spray_t
+	var tgt: Color = Catalog.PAINTS[_spray_final]["c"]
+	# the gun follows the painter's right hand and sweeps over the front of the car
+	var hand := _painter.hand_world("r")
+	var aim := Vector3(2.0, 0.95 + 0.35 * sin(t * 3.1), sin(t * 1.7) * 0.9)
+	_gun.global_position = hand
+	_gun.look_at(aim, Vector3.UP)
+	var spraying := t > 0.7 and t < 4.6
+	_mist.emitting = spraying
+	var shown: Color
+	if t < 0.7:
+		shown = _spray_old
+	elif t < 3.6:
+		var pal: Array = Catalog.PAINT_ORDER
+		shown = Catalog.PAINTS[pal[int(t * 9.0) % pal.size()]]["c"]        # the colour flickers through the paints
+	else:
+		shown = (Catalog.PAINTS[Catalog.PAINT_ORDER[int(3.6 * 9.0) % Catalog.PAINT_ORDER.size()]]["c"] as Color).lerp(tgt, clampf((t - 3.6) / 1.0, 0.0, 1.0))
+	_mist.color = shown
+	if car and car.body_mat:
+		car.body_mat.albedo_color = shown
+		if t > 4.6:
+			car.body_mat.metallic = float(Catalog.PAINTS[_spray_final]["m"])
+			car.body_mat.roughness = float(Catalog.PAINTS[_spray_final]["ro"])
+	if t > 5.0:
+		var cb := _spray_done
+		end_spray()
+		set_view("car")
+		if cb.is_valid():
+			cb.call()
 
 
 func _gui_input(event: InputEvent) -> void:

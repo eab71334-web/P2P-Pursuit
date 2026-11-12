@@ -575,6 +575,16 @@ func _blast_step(delta: float) -> void:
 	_solve("R")
 
 
+## world position of a hand of the rigged body (used to put a tool in it). side "r" or "l".
+func hand_world(side := "r") -> Vector3:
+	if _rig_sk == null:
+		return global_position + Vector3(0, 0.4, 0)
+	var bi := _rig_sk.find_bone("hand_" + side)
+	if bi < 0:
+		return global_position + Vector3(0, 0.4, 0)
+	return _rig_sk.global_transform * _rig_sk.get_bone_global_pose(bi).origin
+
+
 func go_outside(pos: Vector3) -> void:
 	if not outside:
 		_seat_pos = position

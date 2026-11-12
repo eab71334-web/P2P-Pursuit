@@ -998,66 +998,44 @@ func _random_paint_open() -> void:
 	if pool.is_empty():
 		say(UI.tx("You already own every paint", "عندك كل الألوان"))
 		return
+	# small card at the bottom - the car stays visible while the painter works on it
 	var layer := CanvasLayer.new()
 	layer.layer = 90
 	add_child(layer)
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.78)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	layer.add_child(dim)
-	var cc := CenterContainer.new()
+	var cc := Control.new()
 	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(cc)
 	var card := UI.panel(cc, UI.PANEL, 18)
-	card.custom_minimum_size = Vector2(640, 0)
+	card.custom_minimum_size = Vector2(620, 0)
+	card.anchor_left = 0.5
+	card.anchor_right = 0.5
+	card.anchor_top = 1.0
+	card.anchor_bottom = 1.0
+	card.offset_left = -310
+	card.offset_right = 310
+	card.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	card.offset_top = -150
+	card.offset_bottom = -24
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 12)
+	v.add_theme_constant_override("separation", 8)
 	card.add_child(v)
-	var title := UI.lbl(v, UI.tx("Random paint", "طلاء عشوائي"), 30, Color.WHITE, false)
+	var title := UI.lbl(v, UI.tx("Random paint", "طلاء عشوائي"), 26, Color.WHITE, false)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var sub := UI.lbl(v, UI.tx("Common 50%  -  Rare 30%  -  Epic 15%  -  Legendary 5%", "عادي 50%  -  نادر 30%  -  ملحمي 15%  -  أسطوري 5%"), 14, UI.TXT2, false)
-	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	# the roulette window
-	var win := Control.new()
-	win.custom_minimum_size = Vector2(600, 130)
-	win.clip_contents = true
-	v.add_child(win)
-	win.layout_direction = Control.LAYOUT_DIRECTION_LTR      # the strip must run left to right in Arabic too
-	var strip := HBoxContainer.new()
-	strip.add_theme_constant_override("separation", 10)
-	win.add_child(strip)
-	strip.position = Vector2(0, 8)
-	var idx := 36
-	var all: Array = Catalog.PAINT_ORDER
-	var cell_w := 110.0
-	var make_cell := func(pid: String) -> void:
-		var pc := Panel.new()
-		pc.custom_minimum_size = Vector2(cell_w, 114)
-		var pe: Dictionary = Catalog.PAINTS[pid]
-		pc.add_theme_stylebox_override("panel", UI.sb(pe["c"], 12, Catalog.RARITY_COLOR[int(pe["r"])], 4))
-		strip.add_child(pc)
-	for i in range(48):
-		make_cell.call(all[randi() % all.size()])
-	var pointer := ColorRect.new()
-	pointer.color = Color(1, 0.85, 0.2)
-	pointer.custom_minimum_size = Vector2(4, 130)
-	pointer.size = Vector2(4, 130)
-	pointer.position = Vector2(298, 0)
-	win.add_child(pointer)
-	var res := UI.lbl(v, UI.tx("100 gems for one new paint.", "100 جوهرة مقابل لون جديد."), 20, UI.TXT, false)
+	var res := UI.lbl(v, UI.tx("Common 50%  -  Rare 30%  -  Epic 15%  -  Legendary 5%", "عادي 50%  -  نادر 30%  -  ملحمي 15%  -  أسطوري 5%"), 14, UI.TXT2, false)
 	res.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	v.add_child(row)
 	var busy := {"on": false}
-	var go: Button = UI.btn(row, UI.tx("Open  (100 gems)", "افتح  (100 جوهرة)"), UI.ACCENT, func(): pass, 22, Vector2(0, 56))
+	var go: Button = UI.btn(row, UI.tx("Spray  (100 gems)", "افتح  (100 جوهرة)"), UI.ACCENT, func(): pass, 22, Vector2(0, 56))
 	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var close := UI.btn(row, UI.tx("Close", "إغلاق"), UI.CARD2, func():
 		if not busy["on"]:
 			layer.queue_free(), 22, Vector2(0, 56))
 	close.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	go.pressed.connect(func():
-		if busy["on"]:
+		if busy["on"] or preview == null or preview.car == null:
 			return
 		if Profile.gems < Profile.RANDOM_PAINT_GEMS:
 			say(UI.tx("Not enough gems", "الجواهر لا تكفي"))
@@ -1069,27 +1047,25 @@ func _random_paint_open() -> void:
 		busy["on"] = true
 		go.disabled = true
 		close.disabled = true
-		var gp: Dictionary = Catalog.PAINTS[got]
-		# put the winner under the pointer at slot idx
-		var holder: Panel = strip.get_child(idx)
-		holder.add_theme_stylebox_override("panel", UI.sb(gp["c"], 12, Catalog.RARITY_COLOR[int(gp["r"])], 4))
-		var target := -(idx * (cell_w + 10.0)) + 300.0 - cell_w * 0.5 + randf_range(-30.0, 30.0)
-		var tw := create_tween()
-		tw.tween_property(strip, "position:x", target, 4.2).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+		title.text = UI.tx("Painting...", "جاري الرش...")
+		res.text = ""
 		Sfx.play("whoosh", -6.0)
-		await tw.finished
+		var gp: Dictionary = Catalog.PAINTS[got]
 		var rar := int(gp["r"])
-		res.text = Catalog.nm(gp) + "  -  " + Catalog.rar_name(rar)
-		res.add_theme_color_override("font_color", Catalog.RARITY_COLOR[rar])
-		res.add_theme_font_size_override("font_size", 30)
-		Sfx.play("fanfare" if rar >= 2 else "success", 0.0)
-		Profile.equip_car_part("paint", got)
-		go.visible = false
-		close.text = UI.tx("Great!", "ممتاز!")
-		close.disabled = false
-		busy["on"] = false
-		_rerender()
-		_update_top()
+		preview.play_spray(got, func():
+			res.text = Catalog.nm(gp) + "  -  " + Catalog.rar_name(rar)
+			res.add_theme_color_override("font_color", Catalog.RARITY_COLOR[rar])
+			res.add_theme_font_size_override("font_size", 30)
+			title.text = UI.tx("Done!", "تم!")
+			Sfx.play("fanfare" if rar >= 2 else "success", 0.0)
+			Profile.equip_car_part("paint", got)
+			go.visible = false
+			close.text = UI.tx("Great!", "ممتاز!")
+			close.disabled = false
+			busy["on"] = false
+			_rerender()
+			_update_top()
+		)
 	)
 
 

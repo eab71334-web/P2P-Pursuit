@@ -265,10 +265,10 @@ func _process(d: float) -> void:
 			elif step == 2 and t > 6.0:
 				step = 3; shot("rp_0")
 				for b in sc.hub.find_children("*", "Button", true, false):
-					if str(b.text).begins_with("افتح"): b.pressed.emit()
-			elif step == 3 and t > 8.0:
+					if str(b.text).begins_with("افتح") or str(b.text).begins_with("Spray"): b.pressed.emit()
+			elif step == 3 and t > 7.6:
 				step = 4; shot("rp_1")
-			elif step == 4 and t > 12.5:
+			elif step == 4 and t > 10.0:
 				step = 5; shot("rp_2")
 				print("GEMS ", Profile.gems)
 			elif step == 5 and t > 13.5:
