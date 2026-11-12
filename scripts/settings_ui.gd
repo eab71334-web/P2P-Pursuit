@@ -33,6 +33,8 @@ func _build() -> void:
 		sm.append([m, SteerUI.mode_name(m)])
 	_row(UI.tx("Steering (touch)", "طريقة التوجيه (اللمس)"), SteerUI.mode_desc(Profile.steer_mode if Profile.steer_mode != "" else "buttons"),
 		_seg(sm, Profile.steer_mode if Profile.steer_mode != "" else "buttons", func(v): Profile.steer_mode = v; Profile.save(); _rebuild()))
+	_row(UI.tx("Flip button sides", "عكس جهة الأزرار"), UI.tx("Swap left and right: steering and pedals change sides.", "يبدّل اليمين واليسار: التوجيه والدواسات يغيّرون مكانهم."),
+		_seg([["on", UI.tx("Flipped", "معكوس")], ["off", UI.tx("Normal", "عادي")]], "on" if Profile.hud_flip else "off", func(v): Profile.hud_flip = (v == "on"); Profile.save(); _rebuild()))
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 8)
 	UI.btn(hb, UI.tx("Customize", "تخصيص"), UI.ACCENT, func():

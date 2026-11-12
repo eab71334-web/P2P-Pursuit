@@ -216,6 +216,7 @@ func _ready() -> void:
 			_picker.queue_free()
 			_picker = null
 			_apply_steer_mode()
+			_flip_hud()
 			_after_steer())
 	else:
 		_after_steer()
@@ -1426,6 +1427,33 @@ func _apply_steer_mode() -> void:
 			tm.car.wheel_gain = SteerUI.LOCK[steer_mode]
 
 
+## mirror the bottom driving controls (pedals, steering, buttons) left <-> right when the player chose it
+func _flip_hud() -> void:
+	if not Profile.hud_flip:
+		return
+	var list: Array = []
+	for k in zones:
+		list.append(zones[k])
+	if wheel_ui:
+		list.append(wheel_ui)
+	for c in list:
+		var ctl := c as Control
+		if ctl == null or not is_instance_valid(ctl) or ctl.anchor_top < 0.99:
+			continue
+		if ctl.has_meta("fl_l") and is_equal_approx(ctl.offset_left, float(ctl.get_meta("fl_l"))) and is_equal_approx(ctl.anchor_left, float(ctl.get_meta("fl_a"))):
+			continue                    # already mirrored and not moved since
+		var al := ctl.anchor_left
+		var ar := ctl.anchor_right
+		var ol := ctl.offset_left
+		var orr := ctl.offset_right
+		ctl.anchor_left = 1.0 - ar
+		ctl.anchor_right = 1.0 - al
+		ctl.offset_left = -orr
+		ctl.offset_right = -ol
+		ctl.set_meta("fl_l", ctl.offset_left)
+		ctl.set_meta("fl_a", ctl.anchor_left)
+
+
 func _wheel_rect() -> Rect2:
 	if wheel_ui == null:
 		return Rect2()
@@ -1465,6 +1493,7 @@ func _open_hud_editor() -> void:
 	ed.closed.connect(func():
 		_hud_editor = null
 		HudLayout.apply_world(zones)
+		_flip_hud()
 		_cab_page(1))
 	hud_root.add_child(ed)
 
@@ -2384,6 +2413,7 @@ func _build_hud() -> void:
 			clipboard.set_track(track)
 			hud_root.add_child(clipboard)
 	HudLayout.apply_world(zones)
+	_flip_hud()
 
 
 func _my_actions() -> CarActions:

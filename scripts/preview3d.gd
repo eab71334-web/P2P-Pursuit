@@ -9,6 +9,7 @@ var cam: Camera3D
 var car: Car
 var avatar: Avatar
 var spin := true
+var _free := false            # the player turned the car by hand in a close-up view: stop pulling it back
 var zoom := 1.0
 var hero := false             # big menu background showroom
 var yaw := 0.4
@@ -142,6 +143,7 @@ func set_view(v: String) -> void:
 	if v == view:
 		return
 	view = v
+	_free = false
 	if not hero:
 		spin = (v == "car")
 	if car:
@@ -262,7 +264,7 @@ func _process(d: float) -> void:
 		_spray_step(d)
 	if spin and not _drag:
 		yaw += d * (0.3 if hero else 0.55)
-	if view != "car" and not hero:
+	if view != "car" and not hero and not _free:
 		yaw = lerp_angle(yaw, _tyaw, clampf(d * 3.5, 0.0, 1.0))
 	pivot.rotation.y = yaw
 	if not hero and avatar == null and _cam_ready:
@@ -394,5 +396,7 @@ func _gui_input(event: InputEvent) -> void:
 		_drag = event.pressed
 	elif event is InputEventMouseMotion and _drag:
 		yaw += event.relative.x * 0.012
+		_free = true
 	elif event is InputEventScreenDrag:
 		yaw += event.relative.x * 0.012
+		_free = true
