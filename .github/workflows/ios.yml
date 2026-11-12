@@ -1,8 +1,7 @@
 name: iOS IPA (unsigned)
 
+# macOS minutes cost 10x on GitHub, so the iOS build only runs when you start it by hand (Actions > this workflow > Run workflow).
 on:
-  push:
-    branches: [main, master]
   workflow_dispatch:
 
 permissions:
