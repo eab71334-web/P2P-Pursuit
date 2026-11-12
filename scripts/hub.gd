@@ -425,6 +425,46 @@ func _stats(parent: Node, car_id: String) -> void:
 	_bar(g, UI.tx("Cooling", "التبريد"), heat / 230.0, Color(0.5, 0.85, 0.95))
 
 
+## 0-100 stat values of a car (with its upgrades) for the garage comparison
+func _stat_vals(car_id: String) -> Dictionary:
+	var m: Dictionary = Catalog.CARS[car_id]
+	var up: Dictionary = Profile.up.get(car_id, {})
+	var fm := Catalog.fit_mods(up)
+	var power := float(m["power"]) * (1.0 + 0.06 * int(up.get("engine", 0))) * float(fm["power"])
+	var top := float(m["top"]) * (1.0 + 0.03 * int(up.get("engine", 0))) * float(fm["top"])
+	var grip := float(m["grip"]) * (1.0 + 0.05 * int(up.get("tires", 0))) * float(fm["grip"])
+	var tough := 1.0 / (float(m["armor"]) * (1.0 - 0.08 * int(up.get("armor", 0))) * float(fm["armor"]))
+	return {"power": clampf(power / 2.0, 0, 1) * 100.0, "speed": clampf(top / 260.0, 0, 1) * 100.0, "grip": clampf(grip / 1.9, 0, 1) * 100.0, "armor": clampf(tough / 2.2, 0, 1) * 100.0}
+
+
+## stat rows: bar + number + green/red arrow against the car the player is using now
+func _stats_cmp(parent: Node, car_id: String) -> void:
+	var mine := _stat_vals(car_id)
+	var cur := _stat_vals(Profile.car)
+	var rows := [["power", UI.tx("Power", "القوة"), Color(0.95, 0.35, 0.2)], ["speed", UI.tx("Speed", "السرعة"), Color(0.95, 0.75, 0.2)], ["grip", UI.tx("Grip", "الثبات"), Color(0.3, 0.8, 0.4)], ["armor", UI.tx("Armor", "المتانة"), Color(0.3, 0.6, 0.95)]]
+	for r in rows:
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 8)
+		parent.add_child(h)
+		var nm := UI.lbl(h, r[1], 15, UI.TXT2, false)
+		nm.custom_minimum_size = Vector2(70, 0)
+		var b := ProgressBar.new()
+		b.custom_minimum_size = Vector2(130, 10)
+		b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		b.show_percentage = false
+		b.max_value = 100.0
+		b.value = mine[r[0]]
+		b.add_theme_stylebox_override("fill", UI.sb(r[2], 5))
+		b.add_theme_stylebox_override("background", UI.sb(Color(1, 1, 1, 0.1), 5))
+		h.add_child(b)
+		var val := UI.lbl(h, str(int(round(mine[r[0]]))), 16, UI.TXT, false)
+		val.custom_minimum_size = Vector2(30, 0)
+		var diff := int(round(mine[r[0]])) - int(round(cur[r[0]]))
+		if car_id != Profile.car and diff != 0:
+			var ar := UI.lbl(h, ("+%d" if diff > 0 else "%d") % diff, 15, Color(0.3, 0.9, 0.45) if diff > 0 else Color(1.0, 0.4, 0.35), false)
+			ar.custom_minimum_size = Vector2(50, 0)
+
+
 func _lo_for(car_id: String, over := {}) -> Dictionary:
 	var cs: Dictionary = Profile.car_set(car_id)
 	var lo := {"car": car_id, "paint": cs["paint"], "stripe": cs["stripe"], "rim": cs["rim"], "glow": cs["glow"], "decal": cs["decal"], "flag": cs["flag"], "spoiler": cs["spoiler"], "front": cs["front"], "hood": cs["hood"], "skirts": cs["skirts"], "wheel": cs["wheel"], "dp": cs["dp"], "up": Profile.up.get(car_id, {}), "outfit": Profile.outfit}
@@ -699,14 +739,22 @@ func _tab_garage() -> Control:
 	sp.offset_top = -(DOCK_H + 14)
 	sp.offset_bottom = -(DOCK_H + 14)
 	var sv := VBoxContainer.new()
-	sv.custom_minimum_size = Vector2(380, 0)
+	sv.custom_minimum_size = Vector2(320, 0)
 	sv.add_theme_constant_override("separation", 4)
 	sp.add_child(sv)
 	UI.lbl(sv, UI.tx("CAR STATS", "قدرات السيارة"), 15, UI.TXT2, false)
 	stat_box = VBoxContainer.new()
 	stat_box.add_theme_constant_override("separation", 4)
 	sv.add_child(stat_box)
-	_stats(stat_box, g_car)
+	_stats_cmp(stat_box, g_car)
+	# the one big action button, centred just above the dock
+	var main_btn_host := VBoxContainer.new()
+	root.add_child(main_btn_host)
+	_anchor(main_btn_host, 0.5, 1, 0.5, 1)
+	main_btn_host.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	main_btn_host.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	main_btn_host.offset_top = -(DOCK_H + 20)
+	main_btn_host.offset_bottom = -(DOCK_H + 20)
 	# dock: full-width bar with every car
 	var dock := PanelContainer.new()
 	dock.add_theme_stylebox_override("panel", UI.sb(UI.PANEL, 0, UI.LINE, 1))
@@ -731,23 +779,35 @@ func _tab_garage() -> Control:
 		UI.btn(av, UI.tx("PHOTO CARD", "بطاقة صورة"), UI.CARD2, func():
 			Sfx.play("click", -6.0)
 			Share.snap(self, "car_" + g_car, Catalog.nm(m)), 18, Vector2(210, 44))
+		# one big button that depends on the state of the car
+		for c in main_btn_host.get_children():
+			c.queue_free()
+		var need := int(m["lvl"])
+		var mb: Button
 		if Profile.cars.has(g_car):
-			UI.btn(av, UI.tx("MODIFY", "تعديل"), UI.ACCENT, func():
-				Sfx.play("click")
-				select("modify"), 24, Vector2(210, 58))
+			if g_car == Profile.car:
+				mb = UI.btn(main_btn_host, UI.tx("MODIFY", "تعديل"), UI.ACCENT, func():
+					Sfx.play("click")
+					select("modify"), 26, Vector2(300, 64))
+			else:
+				mb = UI.btn(main_btn_host, UI.tx("USE", "استخدم"), UI.OK.darkened(0.2), func():
+					Profile.select_car(g_car)
+					Sfx.play("success")
+					select("garage"), 26, Vector2(300, 64))
+		elif Profile.level < need:
+			mb = UI.btn(main_btn_host, UI.tx("Locked until level %d", "مقفل حتى المستوى %d") % need, Color(0.3, 0.3, 0.36), func(): Sfx.play("warn", -6.0), 22, Vector2(300, 64))
 		else:
-			var need := int(m["lvl"])
-			var b := UI.btn(av, "", UI.GOLD.darkened(0.35), func():
+			mb = UI.btn(main_btn_host, "", UI.GOLD.darkened(0.35), func():
 				if Profile.buy_car(g_car):
 					Sfx.play("success")
 					say(UI.tx("New car!", "سيارة جديدة!"))
-					select("garage"), 22, Vector2(210, 58))
-			b.disabled = Profile.level < need or Profile.coins < int(m["price"])
-			var ph := UI.price_row(null, int(m["price"]), false, 24)
+					select("garage")
+				else:
+					say(UI.tx("Not enough coins", "العملات لا تكفي")), 22, Vector2(300, 64))
+			var ph := UI.price_row(null, int(m["price"]), false, 26)
 			ph.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-			b.add_child(ph)
-			if Profile.level < need:
-				UI.lbl(av, UI.tx("Level %d needed", "يحتاج مستوى %d") % need, 17, Color(1.0, 0.55, 0.45), false)
+			mb.add_child(ph)
+			mb.modulate = Color.WHITE if Profile.coins >= int(m["price"]) else Color(1, 1, 1, 0.6)
 	var fill_dock: Callable
 	fill_dock = func() -> void:
 		for c in cars.get_children():
@@ -761,7 +821,7 @@ func _tab_garage() -> Control:
 				rebuild_info.call()
 				for c in stat_box.get_children():
 					c.queue_free()
-				_stats(stat_box, id)
+				_stats_cmp(stat_box, id)
 				fill_dock.call()))
 	fill_dock.call()
 	rebuild_info.call()

@@ -168,8 +168,10 @@ func _process(d: float) -> void:
 				step = 2; shot("garage0")
 			elif step == 2 and t > 5.0:
 				step = 3
-				sc.hub.g_car = "hyper"
-				sc.hub.select("garage")
+				var cards: Array = []
+				for b in sc.hub.find_children("*", "Button", true, false):
+					if b.custom_minimum_size == Vector2(236, 160): cards.append(b)
+				if cards.size() > 5: cards[5].pressed.emit()
 			elif step == 3 and t > 7.0:
 				step = 4; shot("garage1")
 			elif step == 4 and t > 7.5:
