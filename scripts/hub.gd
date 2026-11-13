@@ -27,6 +27,7 @@ var browser_id := ""
 var browser_box: Control
 var action_box: HBoxContainer
 var stat_box: VBoxContainer
+var _gar_btn: Control            # host of the one big garage button (also read by the self-test)
 var _toast_tw: Tween
 var _pending_levelups: Array = []
 
@@ -618,6 +619,8 @@ func _item_cell(slot: String, id: String, equipped: String, on_pick: Callable, g
 		_action_bar(slot, id)
 		on_pick.call(slot, id)
 		for c in grid.get_children():
+			if not c.has_meta("id"):
+				continue                  # the studio / random / suggested buttons live in the same strip
 			var cid: String = c.get_meta("id")
 			var eq := _equipped(slot)
 			var st := UI.sb(UI.CARD2, 14, rc, 4)
@@ -765,6 +768,7 @@ func _tab_garage() -> Control:
 	# the one big action button, centred just above the dock
 	var main_btn_host := VBoxContainer.new()
 	root.add_child(main_btn_host)
+	_gar_btn = main_btn_host
 	_anchor(main_btn_host, 0.5, 1, 0.5, 1)
 	main_btn_host.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	main_btn_host.grow_vertical = Control.GROW_DIRECTION_BEGIN
@@ -825,8 +829,8 @@ func _tab_garage() -> Control:
 			ph.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 			mb.add_child(ph)
 			mb.modulate = Color.WHITE if Profile.coins >= int(m["price"]) else Color(1, 1, 1, 0.6)
-	var fill_dock: Callable
-	fill_dock = func() -> void:
+	var fd := {}              # a lambda cannot call itself through a captured variable: keep it in a dictionary
+	fd["f"] = func() -> void:
 		for c in cars.get_children():
 			c.queue_free()
 		for id in Catalog.CAR_ORDER:
@@ -839,8 +843,8 @@ func _tab_garage() -> Control:
 				for c in stat_box.get_children():
 					c.queue_free()
 				_stats_cmp(stat_box, id)
-				fill_dock.call()))
-	fill_dock.call()
+				(fd["f"] as Callable).call()))
+	(fd["f"] as Callable).call()
 	rebuild_info.call()
 	return root
 

@@ -115,6 +115,7 @@ func _run() -> void:
 	await _sec_tracks()
 	await _sec_cars()
 	await _sec_avatar()
+	await _sec_screens()
 	await _sec_backend()
 	_head(UI.tx("Not covered by this check", "غير مشمول بهذا الفحص"))
 	_add("warn", UI.tx("Real touch driving, multiplayer rooms, purchases, ads and gamepad need a person to test them.", "القيادة باللمس الفعلي، غرف اللعب الجماعي، الشراء، الإعلانات، ويد التحكم تحتاج شخصاً يجربها."))
@@ -337,6 +338,118 @@ func _sec_cars() -> void:
 		await _step("variants " + slot)
 	_check(bad.is_empty(), UI.tx("Every paint / stripe / rim / kit / wheel builds", "كل طلاء / خط / جنط / طقم / عجلة يُبنى"), ", ".join(bad.slice(0, 8)))
 	vp.queue_free()
+
+
+func _find_hub() -> Hub:
+	for n in get_tree().root.find_children("*", "Control", true, false):
+		if n is Hub:
+			return n
+	return null
+
+
+## opens the real car-selection (garage) and modify screens and uses them like a player would, without buying anything
+func _sec_screens() -> void:
+	_head(UI.tx("Car selection and garage", "اختيار السيارة والكراج"))
+	var hub := _find_hub()
+	if hub == null:
+		_add("warn", UI.tx("Hub screen not found", "شاشة الكراج غير موجودة"), "open the check from the main menu settings")
+		return
+	var keep_car := Profile.car
+	hub.select("garage")
+	await get_tree().create_timer(0.5).timeout
+	var cards: Array = []
+	for b in hub.find_children("*", "Button", true, false):
+		if (b as Button).custom_minimum_size == Vector2(236, 160):
+			cards.append(b)
+	_check(cards.size() == Catalog.CAR_ORDER.size(), UI.tx("Car cards in the garage bar", "بطاقات السيارات في الشريط"), "%d of %d" % [cards.size(), Catalog.CAR_ORDER.size()], str(cards.size()))
+	_check(hub.preview != null and hub.preview.car != null, UI.tx("Big 3D car shows", "السيارة الكبيرة تظهر"), "no car in preview")
+	var bad: Array = []
+	for i in Catalog.CAR_ORDER.size():
+		var id: String = Catalog.CAR_ORDER[i]
+		await _step("garage " + id)
+		var cds: Array = []
+		for b2 in hub.find_children("*", "Button", true, false):
+			if (b2 as Button).custom_minimum_size == Vector2(236, 160):
+				cds.append(b2)
+		if i >= cds.size():
+			bad.append(id + ":card")
+			continue
+		cds[i].pressed.emit()
+		await get_tree().create_timer(0.25).timeout
+		var why: Array = []
+		if hub.preview == null or hub.preview.car == null or hub.preview.car.model != id:
+			why.append("preview")
+		if hub._gar_btn == null or hub._gar_btn.get_child_count() != 1:
+			why.append("button")
+		if hub.stat_box == null or hub.stat_box.get_child_count() < 1:
+			why.append("stats")
+		var owned: bool = Profile.cars.has(id)
+		var m: Dictionary = Catalog.CARS[id]
+		if hub._gar_btn and hub._gar_btn.get_child_count() == 1:
+			var gb := hub._gar_btn.get_child(0) as Button
+			if not owned and Profile.level < int(m["lvl"]) and not gb.text.contains(str(m["lvl"])):
+				why.append("lock text")
+		if not why.is_empty():
+			bad.append("%s:%s" % [id, "+".join(why)])
+	_check(bad.is_empty(), UI.tx("Pick every car: preview, stats and main button", "اختيار كل سيارة: المعاينة والقدرات والزر"), ", ".join(bad.slice(0, 8)))
+	# modify screens
+	Profile.select_car(keep_car)
+	hub.select("modify")
+	await get_tree().create_timer(0.5).timeout
+	var mbad: Array = []
+	var cells := 0
+	for sec in Hub.MOD_SECTIONS:
+		hub.mod_section = sec
+		var subs: Array = Hub.MOD_SUBS[sec]
+		for sub in subs:
+			await _step("modify %s/%s" % [sec, sub])
+			hub.mod_sub[sec] = sub
+			hub._mod_fill()
+			await get_tree().process_frame
+			var strip: Control = hub._mod_strip
+			if sub in ["spoiler", "front", "hood", "skirts"] and Catalog.body_opts(keep_car, sub).size() <= 1:
+				continue
+			if Catalog.PARTS.has(sub) and not Catalog.has_part(keep_car, sub):
+				continue
+			if strip == null or strip.get_child_count() == 0:
+				mbad.append("%s/%s empty" % [sec, sub])
+				continue
+			if hub.preview == null or hub.preview.car == null:
+				mbad.append("%s/%s preview" % [sec, sub])
+			# tap each item cell (preview only; buying needs the separate buy button)
+			var taps := 0
+			for c in strip.get_children():
+				if c is Button and c.has_meta("id") and taps < 4:
+					(c as Button).pressed.emit()
+					taps += 1
+					cells += 1
+					await get_tree().process_frame
+	_check(mbad.is_empty(), UI.tx("Modify: 5 tabs, every sub tab, item previews (%d taps)", "التعديل: 5 تبويبات وكل تبويب فرعي ومعاينة العناصر (%d ضغطة)") % cells, ", ".join(mbad.slice(0, 8)))
+	# spray studio opens and gets ready
+	hub.mod_section = "paint"
+	hub._mod_fill()
+	var ready := {"v": false, "s": null}
+	PaintStudio.open(hub, keep_car, hub._lo_for(keep_car), func(_c): pass)
+	var w := 0.0
+	while w < 8.0 and not ready["v"]:
+		await get_tree().create_timer(0.25).timeout
+		w += 0.25
+		for n in hub.find_children("*", "Control", true, false):
+			if n is PaintStudio:
+				ready["s"] = n
+				ready["v"] = (n as PaintStudio)._ready_ok
+	_check(ready["v"], UI.tx("Spray studio opens", "استوديو الرش يفتح"), "not ready after 8 s", "%.1f s" % w)
+	if ready["s"]:
+		var st: PaintStudio = ready["s"]
+		st._begin(Vector2(300, 150))
+		st._move(Vector2(420, 170))
+		st._end()
+		st._do_undo()
+		_add("ok", UI.tx("Spray, undo", "رش وتراجع"))
+		st._close()
+	# back to where the player was
+	Profile.select_car(keep_car)
+	hub.select("settings")
 
 
 func _sec_avatar() -> void:

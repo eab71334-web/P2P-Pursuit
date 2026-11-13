@@ -311,12 +311,12 @@ func _process(d: float) -> void:
 		"selftest":
 			if step == 0 and t > 2.5:
 				step = 1; Profile.level = 20; SelfTest.open(get_tree().root)
-			elif step == 1 and t > 50.0:
-				step = 2
+			elif step == 1 and t > 5.0:
 				for n in get_tree().root.find_children("*", "Control", true, false):
-					if n is SelfTest:
+					if n is SelfTest and n._done:
+						step = 2
 						print("REPORT_START"); print(n._report()); print("REPORT_END"); shot("selftest")
-			elif step == 2 and t > 51.0:
+			elif step == 2:
 				get_tree().quit()
 		"rpaint":
 			if step == 0 and t > 2.5:
