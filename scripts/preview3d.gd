@@ -9,6 +9,7 @@ var cam: Camera3D
 var car: Car
 var avatar: Avatar
 var spin := true
+var _drag_t := 0.0            # a finger drag was seen recently: the auto-spin waits
 var _free := false            # the player turned the car by hand in a close-up view: stop pulling it back
 var zoom := 1.0
 var hero := false             # big menu background showroom
@@ -262,7 +263,8 @@ func _process(d: float) -> void:
 	_t += d
 	if _spray_t >= 0.0 and _painter and _gun:
 		_spray_step(d)
-	if spin and not _drag:
+	_drag_t = maxf(0.0, _drag_t - d)
+	if spin and not _drag and _drag_t <= 0.0:
 		yaw += d * (0.3 if hero else 0.55)
 	if view != "car" and not hero and not _free:
 		yaw = lerp_angle(yaw, _tyaw, clampf(d * 3.5, 0.0, 1.0))
@@ -400,3 +402,4 @@ func _gui_input(event: InputEvent) -> void:
 	elif event is InputEventScreenDrag:
 		yaw += event.relative.x * 0.012
 		_free = true
+		_drag_t = 0.6

@@ -340,6 +340,37 @@ func _sec_cars() -> void:
 	vp.queue_free()
 
 
+## drag the 3D car around a full turn like a finger would, and check it follows and does not snap back
+func _spin_checks(hub: Hub, label: String, close_up := false) -> void:
+	var pv: Preview3D = hub.preview
+	if pv == null or pv.car == null:
+		_add("fail", label + ": " + UI.tx("turn car", "لف السيارة"), "no preview")
+		return
+	if not close_up and pv.spin:
+		var y0 := pv.yaw
+		await get_tree().create_timer(0.6).timeout
+		_check(absf(angle_difference(y0, pv.yaw)) > 0.05, label + ": " + UI.tx("car turns by itself", "السيارة تدور لحالها"), "not turning")
+	var start := pv.yaw
+	var total := 0.0
+	var step := 14.0
+	while total < TAU:
+		var ev := InputEventScreenDrag.new()
+		ev.relative = Vector2(step, 0)
+		pv._gui_input(ev)
+		total += step * 0.012
+		await get_tree().process_frame
+	var followed := absf(pv.yaw - start - total) < 0.2 or absf(angle_difference(start + total, pv.yaw)) < 0.2
+	_check(followed, label + ": " + UI.tx("full 360 turn by finger", "لفة كاملة 360 بالإصبع"), "yaw %.2f expected %.2f" % [pv.yaw, start + total])
+	var held := pv.yaw
+	await get_tree().create_timer(0.7).timeout
+	var drift := absf(angle_difference(held, pv.yaw))
+	if close_up:
+		_check(drift < 0.1, label + ": " + UI.tx("stays where you left it", "تبقى مكانها بعد اللف"), "snapped back by %.2f rad" % drift)
+	else:
+		_add("ok", label + ": " + UI.tx("after the turn", "بعد اللف"), "moved %.2f rad (auto-spin continues)" % drift)
+	_check(is_equal_approx(pv.pivot.rotation.y, pv.yaw) or absf(angle_difference(pv.pivot.rotation.y, pv.yaw)) < 0.3, label + ": " + UI.tx("3D car follows", "السيارة ثلاثية الأبعاد تتبع"), "pivot differs")
+
+
 func _find_hub() -> Hub:
 	for n in get_tree().root.find_children("*", "Control", true, false):
 		if n is Hub:
@@ -392,6 +423,8 @@ func _sec_screens() -> void:
 		if not why.is_empty():
 			bad.append("%s:%s" % [id, "+".join(why)])
 	_check(bad.is_empty(), UI.tx("Pick every car: preview, stats and main button", "اختيار كل سيارة: المعاينة والقدرات والزر"), ", ".join(bad.slice(0, 8)))
+	# turning the car: automatic spin, then a full 360 by hand
+	await _spin_checks(hub, UI.tx("Garage", "الكراج"))
 	# modify screens
 	Profile.select_car(keep_car)
 	hub.select("modify")
@@ -425,6 +458,12 @@ func _sec_screens() -> void:
 					cells += 1
 					await get_tree().process_frame
 	_check(mbad.is_empty(), UI.tx("Modify: 5 tabs, every sub tab, item previews (%d taps)", "التعديل: 5 تبويبات وكل تبويب فرعي ومعاينة العناصر (%d ضغطة)") % cells, ", ".join(mbad.slice(0, 8)))
+	# turning in the close-up tabs: the car must stay where the player left it
+	for sec2 in ["engine", "wheels", "paint"]:
+		hub.mod_section = sec2
+		hub._mod_fill()
+		await get_tree().create_timer(0.8).timeout
+		await _spin_checks(hub, UI.tx("Modify / ", "التعديل / ") + sec2, sec2 != "paint")
 	# spray studio opens and gets ready
 	hub.mod_section = "paint"
 	hub._mod_fill()
