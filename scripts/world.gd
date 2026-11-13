@@ -2267,6 +2267,7 @@ func _build_hud() -> void:
 	hud = CanvasLayer.new()
 	add_child(hud)
 	hud_root = Control.new()
+	hud_root.layout_direction = Control.LAYOUT_DIRECTION_LTR      # the driving screen keeps one layout in every language (Arabic would mirror it)
 	hud_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(hud_root)

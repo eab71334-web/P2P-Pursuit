@@ -26,6 +26,12 @@ func _build() -> void:
 	_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_box.add_theme_constant_override("separation", 10)
 	sc.add_child(_box)
+	# ---- temporary full check
+	_head(UI.tx("FULL GAME CHECK", "فحص شامل"))
+	var tb := HBoxContainer.new()
+	UI.btn(tb, UI.tx("Run check", "ابدأ الفحص"), Color(0.2, 0.45, 0.65), func(): SelfTest.open(get_tree().root), 20, Vector2(160, 46))
+	_row(UI.tx("Check everything in the game (temporary)", "فحص كل شيء في اللعبة (مؤقت)"),
+		UI.tx("Tests cars, items, sounds, stages, spray studio, storage and server on this device, then shows a report you can copy or send.", "يفحص السيارات والعناصر والأصوات والمراحل واستوديو الرش والتخزين والخادم على جهازك، ويعرض تقريراً تقدر تنسخه أو ترسله."), tb)
 	# ---- controls
 	_head(UI.tx("CONTROLS", "التحكم"))
 	var sm: Array = []
