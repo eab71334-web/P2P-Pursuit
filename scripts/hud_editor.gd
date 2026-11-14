@@ -78,8 +78,8 @@ func _ready() -> void:
 	tsb.border_width_bottom = 3
 	tsb.content_margin_left = 12
 	tsb.content_margin_right = 12
-	tsb.content_margin_top = 8
-	tsb.content_margin_bottom = 8
+	tsb.content_margin_top = 5
+	tsb.content_margin_bottom = 5
 	top.add_theme_stylebox_override("panel", tsb)
 	top.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	add_child(top)
@@ -110,6 +110,7 @@ func _ready() -> void:
 	add_child(tg)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
+	_bh = 40.0
 	var tv := VBoxContainer.new()
 	tv.add_theme_constant_override("separation", 6)
 	top.add_child(tv)
@@ -169,6 +170,7 @@ func _ready() -> void:
 	_tbtn(row, UI.tx("▣ Save", "▣ حفظ"), OKC, _save_slot, 18, 90)
 	_tbtn(row, UI.tx("✕ Delete", "✕ مسح"), DANGER, _del_slot, 18, 90)
 	_tbtn(row, UI.tx("✓ Done", "✓ تم"), UI.ACCENT, _done, 20, 90)
+	_bh = 46.0
 	# ---- hint under the strip
 	var hint := PanelContainer.new()
 	hint.add_theme_stylebox_override("panel", UI.sb(Color(0, 0, 0, 0.45), 12))
@@ -229,12 +231,12 @@ func _ready() -> void:
 		_place_pill(), 17, 120)
 	_tbtn(pb, UI.tx("－ Size", "－ حجم"), UI.CARD2, _scale.bind(-0.1), 17, 78)
 	_tbtn(pb, UI.tx("＋ Size", "＋ حجم"), UI.CARD2, _scale.bind(0.1), 17, 78)
-	_tbtn(pb, UI.tx("↺ Turn", "↺ لفّ"), UI.CARD2, _rot.bind(-15.0), 17, 78)
-	_tbtn(pb, UI.tx("↻ Turn", "↻ لفّ"), UI.CARD2, _rot.bind(15.0), 17, 78)
+	_tbtn(pb, UI.tx("⟲ Turn", "⟲ لفّ"), UI.CARD2, _rot.bind(-15.0), 17, 78)
+	_tbtn(pb, UI.tx("⟳ Turn", "⟳ لفّ"), UI.CARD2, _rot.bind(15.0), 17, 78)
 	for nd in [["◀", -1.0, 0.0], ["▶", 1.0, 0.0], ["▲", 0.0, -1.0], ["▼", 0.0, 1.0]]:
 		_tbtn(pb, nd[0], NEUTRAL, _nudge.bind(nd[1], nd[2]), 20, 56)
-	_tbtn(pb, UI.tx("Bar -", "الشريط -"), UI.CARD2, _pill_zoom.bind(-0.15), 16, 90)
-	_tbtn(pb, UI.tx("Bar +", "الشريط +"), UI.CARD2, _pill_zoom.bind(0.15), 16, 90)
+	_tbtn(pb, UI.tx("－ Bar", "－ الشريط"), UI.CARD2, _pill_zoom.bind(-0.15), 16, 90)
+	_tbtn(pb, UI.tx("＋ Bar", "＋ الشريط"), UI.CARD2, _pill_zoom.bind(0.15), 16, 90)
 	_tbtn(pr, "✕", DANGER, func(): _pill_set(false), 18, 48)
 	_place_pill()
 	pill.gui_input.connect(func(ev: InputEvent):
@@ -278,11 +280,14 @@ func _build_mocks() -> void:
 		var p := Panel.new()
 		p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var l := Label.new()
-		l.text = nm[id]
+		var lk := HudLayout.look(id)
+		l.text = str(lk.get("txt", "")) if str(lk.get("txt", "")) != "" else nm[id]
 		l.set_anchors_preset(Control.PRESET_FULL_RECT)
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		l.add_theme_font_size_override("font_size", 24 if id == "gas" or id == "brake" else (17 if nm[id].length() > 9 else 20))
+		l.add_theme_font_size_override("font_size", int(lk.get("fs", 24 if id == "gas" or id == "brake" else 20)))
+		l.add_theme_color_override("font_outline_color", Color.BLACK)
+		l.add_theme_constant_override("outline_size", 8)
 		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		p.add_child(l)
 		_layer.add_child(p)
@@ -387,13 +392,41 @@ func _picker_fill() -> void:
 			g.add_child(b)
 
 
+const GLYPH_ICO := {"✕": "close", "＋": "plus", "－": "minus", "↺": "reset", "↶": "undo", "↻": "redo", "⟲": "rot_l", "⟳": "rot_r",
+	"✓": "check", "▣": "save", "▤": "hide", "⇄": "move", "◀": "left", "▶": "right", "▲": "up", "▼": "down"}
+var _bh := 46.0
+
+
+## editor button: a leading glyph in the text becomes a drawn icon (icon only when nothing follows it)
 func _tbtn(parent: Node, text: String, col: Color, cb: Callable, fs: int, w: float) -> Button:
-	var b := UI.btn(parent, text, col, cb, fs, Vector2(w, 46))
+	var ico := ""
+	if text != "" and GLYPH_ICO.has(text.substr(0, 1)):
+		ico = GLYPH_ICO[text.substr(0, 1)]
+		text = text.substr(1).strip_edges()
+	var b := UI.btn(parent, text, col, cb, fs, Vector2(w, _bh))
 	for st in ["normal", "hover", "pressed", "focus"]:
 		var sbx := b.get_theme_stylebox(st) as StyleBoxFlat
 		sbx.set_corner_radius_all(12)
-		sbx.content_margin_left = 8
+		sbx.content_margin_left = 34 if (ico != "" and text != "") else 8
 		sbx.content_margin_right = 8
+	if ico != "":
+		var ic := Ico.new(ico)
+		ic.layout_direction = Control.LAYOUT_DIRECTION_LTR
+		ic.anchor_top = 0.5
+		ic.anchor_bottom = 0.5
+		ic.offset_top = -11
+		ic.offset_bottom = 11
+		if text == "":
+			ic.anchor_left = 0.5
+			ic.anchor_right = 0.5
+			ic.offset_left = -11
+			ic.offset_right = 11
+		else:
+			ic.anchor_left = 0.0
+			ic.anchor_right = 0.0
+			ic.offset_left = 9
+			ic.offset_right = 31
+		b.add_child(ic)
 	return b
 
 
@@ -507,14 +540,37 @@ func _sync_alpha() -> void:
 
 func _style_all() -> void:
 	for id in _mock:
+		var pn := _mock[id] as Panel
 		var sb := StyleBoxFlat.new()
 		var on: bool = _selset.has(id)
-		sb.bg_color = Color(1.0, 0.6, 0.05, 0.55) if on else Color(1, 1, 1, 0.2)
+		sb.bg_color = Color(1.0, 0.6, 0.05, 0.4) if on else Color(1, 1, 1, 0.18)        # same fill / border as in the race
 		sb.set_corner_radius_all(14)
-		sb.border_color = Color(1.0, 0.8, 0.2) if on else Color(1, 1, 1, 0.55)
-		sb.set_border_width_all(4 if on else 3)
-		(_mock[id] as Panel).add_theme_stylebox_override("panel", sb)
-		(_mock[id] as Panel).modulate.a = float(HudLayout.entry(id).get("al", 1.0))
+		sb.border_color = Color(1.0, 0.8, 0.2) if on else Color(1, 1, 1, 0.5)
+		sb.set_border_width_all(3)
+		pn.add_theme_stylebox_override("panel", sb)
+		pn.modulate.a = float(HudLayout.entry(id).get("al", 1.0))
+		var glow := pn.get_node_or_null("Glow") as Panel
+		if on and glow == null:
+			glow = Panel.new()
+			glow.name = "Glow"
+			glow.set_anchors_preset(Control.PRESET_FULL_RECT)
+			glow.offset_left = -5
+			glow.offset_top = -5
+			glow.offset_right = 5
+			glow.offset_bottom = 5
+			glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var gs := StyleBoxFlat.new()
+			gs.bg_color = Color(0, 0, 0, 0)
+			gs.set_corner_radius_all(18)
+			gs.border_color = Color(1.0, 0.75, 0.2)
+			gs.set_border_width_all(3)
+			glow.add_theme_stylebox_override("panel", gs)
+			pn.add_child(glow)
+			var tw := glow.create_tween().set_loops()
+			tw.tween_property(glow, "modulate:a", 0.25, 0.55)
+			tw.tween_property(glow, "modulate:a", 1.0, 0.55)
+		elif not on and glow != null:
+			glow.queue_free()
 	_sync_alpha()
 
 
@@ -674,11 +730,11 @@ func _do_undo() -> void:
 
 
 func _fade_bars(on: bool) -> void:
-	var a := 0.22 if on else 1.0
-	if _top != null:
-		_top.modulate.a = a
-	if _pill != null:
-		_pill.modulate.a = a
+	var a := 0.2 if on else 1.0
+	for n in [_top, _pill]:
+		if n != null:
+			var tw := (n as Control).create_tween()
+			tw.tween_property(n, "modulate:a", a, 0.15)
 
 
 func _snap_guides(id: String, e: Dictionary) -> void:
@@ -938,3 +994,60 @@ static func intro(parent: Control, on_done: Callable) -> void:
 		ed.closed.connect(finish)
 		root.add_child(ed), 22, Vector2(230, 54))
 	parent.add_child(root)
+
+
+## small vector icons drawn in code (no image files): used on the editor buttons
+class Ico extends Control:
+	var kind := "plus"
+
+	func _init(k := "plus") -> void:
+		kind = k
+		custom_minimum_size = Vector2(22, 22)
+		size = Vector2(22, 22)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var c := Color(1, 1, 1, 0.95)
+		var w := 2.6
+		var m := Vector2(11, 11)
+		match kind:
+			"close":
+				draw_line(Vector2(5, 5), Vector2(17, 17), c, w, true)
+				draw_line(Vector2(17, 5), Vector2(5, 17), c, w, true)
+			"plus":
+				draw_line(Vector2(4, 11), Vector2(18, 11), c, w, true)
+				draw_line(Vector2(11, 4), Vector2(11, 18), c, w, true)
+			"minus":
+				draw_line(Vector2(4, 11), Vector2(18, 11), c, w, true)
+			"check":
+				draw_polyline(PackedVector2Array([Vector2(4, 12), Vector2(9, 17), Vector2(18, 6)]), c, w + 0.4, true)
+			"save":
+				draw_rect(Rect2(4, 4, 14, 14), c, false, w)
+				draw_rect(Rect2(7, 4, 8, 5), c, true)
+				draw_rect(Rect2(7, 12, 8, 6), c, false, 2.0)
+			"hide":
+				draw_rect(Rect2(3, 4, 16, 14), c, false, 2.2)
+				draw_line(Vector2(3, 8), Vector2(19, 8), c, 2.2)
+			"move":
+				draw_line(Vector2(3, 8), Vector2(18, 8), c, w, true)
+				draw_colored_polygon(PackedVector2Array([Vector2(18, 4), Vector2(19, 8), Vector2(18, 12)]), c)
+				draw_line(Vector2(4, 15), Vector2(19, 15), c, w, true)
+				draw_colored_polygon(PackedVector2Array([Vector2(4, 11), Vector2(3, 15), Vector2(4, 19)]), c)
+			"reset":
+				draw_arc(m, 6.5, deg_to_rad(-70), deg_to_rad(215), 20, c, w, true)
+				draw_colored_polygon(PackedVector2Array([Vector2(11, 1), Vector2(11, 9), Vector2(17, 5)]), c)
+				draw_circle(m, 2.0, c)
+			"undo", "rot_l":
+				draw_arc(m, 6.5, deg_to_rad(-60), deg_to_rad(210), 20, c, w, true)
+				draw_colored_polygon(PackedVector2Array([Vector2(3, 5), Vector2(3, 12), Vector2(10, 9)]), c)
+			"redo", "rot_r":
+				draw_arc(m, 6.5, deg_to_rad(-30), deg_to_rad(240), 20, c, w, true)
+				draw_colored_polygon(PackedVector2Array([Vector2(19, 5), Vector2(19, 12), Vector2(12, 9)]), c)
+			"left":
+				draw_colored_polygon(PackedVector2Array([Vector2(15, 4), Vector2(15, 18), Vector2(5, 11)]), c)
+			"right":
+				draw_colored_polygon(PackedVector2Array([Vector2(7, 4), Vector2(7, 18), Vector2(17, 11)]), c)
+			"up":
+				draw_colored_polygon(PackedVector2Array([Vector2(4, 15), Vector2(18, 15), Vector2(11, 5)]), c)
+			"down":
+				draw_colored_polygon(PackedVector2Array([Vector2(4, 7), Vector2(18, 7), Vector2(11, 17)]), c)

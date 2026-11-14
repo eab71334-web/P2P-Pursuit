@@ -154,6 +154,13 @@ static func entry(id: String) -> Dictionary:
 static var _real := {}                 # where the game really put each button on THIS screen (centre fractions + size)
 
 
+## font size + text the game really uses for this button ({} when unknown)
+static func look(id: String) -> Dictionary:
+	if _real.has(id):
+		return {"fs": int((_real[id] as Dictionary).get("fs", 20)), "txt": str((_real[id] as Dictionary).get("txt", ""))}
+	return {}
+
+
 ## does this button exist in the race the player is in (solo has no punch, drivers no gesture row ...)
 static func exists(id: String) -> bool:
 	return _real.is_empty() or _real.has(id) or EXTRA.has(id)
@@ -232,6 +239,10 @@ static func apply_world(zones: Dictionary) -> void:
 			if P.x > 10.0 and P.y > 10.0:
 				_real[id] = {"fx": z.anchor_left + (z.offset_left + z.offset_right) * 0.5 / P.x, "fy": z.anchor_top + (z.offset_top + z.offset_bottom) * 0.5 / P.y,
 					"w": z.offset_right - z.offset_left, "h": z.offset_bottom - z.offset_top}
+				if z.get_child_count() > 0 and z.get_child(0) is Label:       # how the game writes it, so the editor shows the same
+					var gl := z.get_child(0) as Label
+					_real[id]["fs"] = gl.get_theme_font_size("font_size")
+					_real[id]["txt"] = gl.text
 		if is_removed(id):
 			z.visible = false
 			_hid[key] = true
