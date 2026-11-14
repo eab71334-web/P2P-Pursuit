@@ -24,7 +24,7 @@ func _ready() -> void:
 	UI.lbl(v, UI.tx("GAMEPAD BUTTONS", "أزرار اليد"), 26, UI.ACCENT)
 	_hint = UI.lbl(v, "", 15, UI.TXT2)
 	_hint.custom_minimum_size = Vector2(600, 0)
-	var sc := ScrollContainer.new()
+	var sc := TScroll.new()                 # finger-drag scrolling, no white scrollbar
 	sc.custom_minimum_size = Vector2(600, 380)
 	sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED

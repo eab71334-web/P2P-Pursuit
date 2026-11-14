@@ -26,6 +26,8 @@ const COOLDOWN := 2.5
 ## the artwork (256 x 256), used in the picker and as the texture of the 3D badge
 class Face extends Control:
 	var id := "gg"
+	var k := 1.0
+	var ofs := Vector2.ZERO
 
 	func _init(p_id := "gg") -> void:
 		id = p_id
@@ -45,6 +47,7 @@ class Face extends Control:
 		draw_circle(Vector2(128, 130), 68, col)
 
 	func _draw() -> void:
+		draw_set_transform(ofs, 0.0, Vector2(k, k))
 		draw_circle(Vector2(128, 128), 122, Color(0.06, 0.07, 0.1, 0.94))
 		draw_arc(Vector2(128, 128), 118, 0, TAU, 64, Color(1, 1, 1, 0.92), 7.0)
 		var c := Vector2(128, 128)
@@ -213,11 +216,54 @@ static func show_on(car: Node3D, idx: int, with_sound := true) -> void:
 		Sfx.play3d(snd, car, -3.0, float(LIST[idx]["pitch"]))
 
 
+## one tappable sticker cell: draws its own background and face (no nested controls to mis-place)
+class Cell extends Face:
+	signal pressed
+	var _hot := false
+
+	func _init(p_id := "gg") -> void:
+		super(p_id)
+		k = 0.27
+		ofs = Vector2(8, 4)
+		layout_direction = Control.LAYOUT_DIRECTION_LTR
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		custom_minimum_size = Vector2(86, 98)
+		size = Vector2(86, 98)
+
+	func _gui_input(e: InputEvent) -> void:
+		if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
+			if e.pressed:
+				_hot = true
+				queue_redraw()
+			else:
+				_hot = false
+				queue_redraw()
+				if Rect2(Vector2.ZERO, size).has_point(e.position):
+					pressed.emit()
+			accept_event()
+
+	func _draw() -> void:
+		draw_style_box(UI.sb(Color(1, 1, 1, 0.12 if _hot else 0.05), 12, UI.ACCENT if _hot else Color(1, 1, 1, 0.1), 2 if _hot else 1), Rect2(Vector2.ZERO, size))
+		super._draw()
+
+
 ## the 12-sticker window. `picked(idx)` when one is chosen.
 class Picker extends PanelContainer:
 	signal picked(idx: int)
 
+	## render each face for a few frames, then stop updating it
+	func get_tree_deferred(vp: SubViewport) -> void:
+		var t := Timer.new()
+		t.wait_time = 0.5
+		t.one_shot = true
+		t.autostart = true
+		t.timeout.connect(func():
+			vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+			t.queue_free())
+		vp.add_child(t)
+
 	func _init() -> void:
+		layout_direction = Control.LAYOUT_DIRECTION_LTR
 		add_theme_stylebox_override("panel", UI.sb(Color(0.06, 0.065, 0.085, 0.96), 16, Color(1, 1, 1, 0.16), 1))
 		var m := MarginContainer.new()
 		for s in ["left", "right", "top", "bottom"]:
@@ -234,30 +280,16 @@ class Picker extends PanelContainer:
 		vb.add_child(g)
 		for i in Stickers.LIST.size():
 			var idx := i
-			var b := Button.new()
+			var b := Cell.new(str(Stickers.LIST[i]["id"]))
 			b.custom_minimum_size = Vector2(86, 98)
-			b.focus_mode = Control.FOCUS_NONE
-			var n := UI.sb(Color(1, 1, 1, 0.05), 12, Color(1, 1, 1, 0.1), 1)
-			var hv := UI.sb(Color(1, 1, 1, 0.12), 12, UI.ACCENT, 2)
-			b.add_theme_stylebox_override("normal", n)
-			b.add_theme_stylebox_override("hover", hv)
-			b.add_theme_stylebox_override("pressed", hv)
-			b.add_theme_stylebox_override("focus", n)
 			b.pressed.connect(func(): picked.emit(idx))
-			var holder := Control.new()
-			holder.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-			holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			b.add_child(holder)
-			var f := Face.new(str(Stickers.LIST[i]["id"]))
-			f.scale = Vector2(0.27, 0.27)
-			f.position = Vector2(8, 4)
-			holder.add_child(f)
 			var lb := Label.new()
 			lb.text = ("%s" % UI.tx(Stickers.LIST[i]["n"][0], Stickers.LIST[i]["n"][1])) + ("  ♪" if str(Stickers.LIST[i]["snd"]) != "" else "")
 			lb.add_theme_font_size_override("font_size", 13)
-			lb.position = Vector2(0, 74)
-			lb.size = Vector2(86, 20)
 			lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			lb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			holder.add_child(lb)
+			lb.layout_direction = Control.LAYOUT_DIRECTION_LTR
+			lb.position = Vector2(0, 74)
+			lb.size = Vector2(86, 20)
+			b.add_child(lb)
 			g.add_child(b)

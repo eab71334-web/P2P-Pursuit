@@ -57,6 +57,19 @@ func _ready() -> void:
 	top.add_child(row)
 	_tbtn(row, UI.tx("Exit", "خروج"), Color(0.42, 0.16, 0.16), _exit, 18, 92)
 	_tbtn(row, UI.tx("+ / -  Buttons", "إضافة / حذف أزرار"), Color(0.16, 0.34, 0.56), _open_picker, 18, 170)
+	var oc := UI.lbl(row, UI.tx("Opacity", "الشفافية"), 15, UI.TXT2, false)
+	oc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var os := HSlider.new()
+	os.min_value = 0.2
+	os.max_value = 1.0
+	os.step = 0.05
+	os.value = HudLayout.get_opacity()
+	os.custom_minimum_size = Vector2(130, 30)
+	os.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(os)
+	os.value_changed.connect(func(v: float):
+		HudLayout.set_opacity(v)
+		_style_all())
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(sp)
@@ -209,7 +222,7 @@ func _picker_fill() -> void:
 		_picker_box.remove_child(c)
 		c.queue_free()
 	var nm := HudLayout.names()
-	for sec in [[UI.tx("Driving", "السواقة"), HudLayout.ESSENTIAL], [UI.tx("Cabin extras", "إضافات الكابينة"), HudLayout.EXTRA]]:
+	for sec in [[UI.tx("Driving", "السواقة"), HudLayout.ESSENTIAL], [UI.tx("Cabin extras", "إضافات الكابينة"), HudLayout.EXTRA], [UI.tx("Other buttons (switch off / on)", "أزرار أخرى (إيقاف / تشغيل)"), HudLayout.HIDEABLE]]:
 		var l := UI.lbl(_picker_box, sec[0], 17, UI.TXT2, false)
 		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var g := GridContainer.new()
@@ -354,6 +367,7 @@ func _style_all() -> void:
 		sb.border_color = Color(1.0, 0.8, 0.2) if on else Color(1, 1, 1, 0.55)
 		sb.set_border_width_all(4 if on else 3)
 		(_mock[id] as Panel).add_theme_stylebox_override("panel", sb)
+		(_mock[id] as Panel).modulate.a = HudLayout.get_opacity()
 
 
 func _hit(pos: Vector2) -> String:

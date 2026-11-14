@@ -970,6 +970,7 @@ func _health(delta: float) -> void:
 
 
 func _process(delta: float) -> void:
+	_hud_tick()
 	_health(delta)
 	_weather_process(delta)
 	if director and not teams.is_empty():
@@ -1452,6 +1453,42 @@ func _flip_hud() -> void:
 		ctl.offset_right = -ol
 		ctl.set_meta("fl_l", ctl.offset_left)
 		ctl.set_meta("fl_a", ctl.anchor_left)
+
+
+var _alpha_applied := -1.0
+
+
+## every frame: switched-off buttons stay off, and the player's transparency is applied to all driving buttons
+func _hud_tick() -> void:
+	for id in HudLayout.HIDEABLE:
+		if zones.has(id) and HudLayout.is_removed(id):
+			(zones[id] as Control).visible = false
+	var a := HudLayout.get_opacity()
+	if not is_equal_approx(a, _alpha_applied):
+		_alpha_applied = a
+		for k in zones:
+			(zones[k] as Control).modulate.a = a
+		if wheel_ui:
+			wheel_ui.modulate.a = a
+	elif wheel_ui and not is_equal_approx(wheel_ui.modulate.a, a):
+		wheel_ui.modulate.a = a
+
+
+func _open_pause_menu() -> void:
+	if _pause != null and is_instance_valid(_pause):
+		return
+	var pm := PauseMenu.new()
+	pm.hud_editor_cb = _open_hud_editor if my_role == "driver" else Callable()
+	pm.exit_cb = func(): Net.return_to_menu()
+	pm.steer_cb = func():
+		_apply_steer_mode()
+		_flip_hud()
+		HudLayout.apply_world(zones)
+	_pause = pm
+	hud_root.add_child(pm)
+
+
+var _pause: Control
 
 
 func _wheel_rect() -> Rect2:
@@ -2342,6 +2379,7 @@ func _build_hud() -> void:
 	_make_zone("photo", UI.tx("PHOTO", "صورة"), 1.0, 0.0, -150, sy + 112, -14, sy + 158, 20, _take_photo)
 	if my_role == "driver":
 		_make_zone("hudcfg", UI.tx("BUTTONS", "الأزرار"), 0.0, 0.0, 14, 94, 150, 136, 17, _open_hud_editor)
+	_make_zone("menu", UI.tx("MENU", "القائمة"), 0.0, 0.0, 14, 144 if my_role == "driver" else 94, 150, 186 if my_role == "driver" else 136, 17, _open_pause_menu)
 	# driver cabin controls (his own hand does them): big buttons in a 3x3 block above the steering buttons, left side
 	if my_role == "driver":
 		var items := [

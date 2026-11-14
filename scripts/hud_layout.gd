@@ -15,14 +15,38 @@ const DEFAULTS := {
 	"c_sigr": {"fx": 0.238, "fy": 0.458, "w": 110.0, "h": 68.0},
 	"c_lights": {"fx": 0.054, "fy": 0.564, "w": 110.0, "h": 68.0},
 	"c_wipers": {"fx": 0.146, "fy": 0.564, "w": 110.0, "h": 68.0},
+	"c_more": {"fx": 0.238, "fy": 0.669, "w": 110.0, "h": 68.0},
+	# the rest of the race screen (centres / sizes as the game lays them out at 1280x720)
+	"reset": {"fx": 0.936, "fy": 0.051, "w": 136.0, "h": 46.0},
+	"emote": {"fx": 0.936, "fy": 0.129, "w": 136.0, "h": 46.0},
+	"punch": {"fx": 0.936, "fy": 0.207, "w": 136.0, "h": 46.0},
+	"stickers": {"fx": 0.936, "fy": 0.285, "w": 136.0, "h": 46.0},
+	"photo": {"fx": 0.936, "fy": 0.440, "w": 136.0, "h": 46.0},
+	"hudcfg": {"fx": 0.064, "fy": 0.160, "w": 136.0, "h": 42.0},
+	"menu": {"fx": 0.064, "fy": 0.229, "w": 136.0, "h": 42.0},
+	"radio_prev": {"fx": 0.409, "fy": 0.949, "w": 50.0, "h": 46.0},
+	"radio_name": {"fx": 0.5, "fy": 0.949, "w": 172.0, "h": 46.0},
+	"radio_next": {"fx": 0.591, "fy": 0.949, "w": 50.0, "h": 46.0},
+	"msize": {"fx": 0.752, "fy": 0.724, "w": 80.0, "h": 46.0},
+	"mnear": {"fx": 0.819, "fy": 0.724, "w": 80.0, "h": 46.0},
+	"map": {"fx": 0.886, "fy": 0.724, "w": 80.0, "h": 46.0},
+	"beacon": {"fx": 0.953, "fy": 0.724, "w": 80.0, "h": 46.0},
+	"g_left": {"fx": 0.052, "fy": 0.91, "w": 92.0, "h": 70.0},
+	"g_fwd": {"fx": 0.13, "fy": 0.91, "w": 92.0, "h": 70.0},
+	"g_right": {"fx": 0.208, "fy": 0.91, "w": 92.0, "h": 70.0},
+	"g_stop": {"fx": 0.286, "fy": 0.91, "w": 92.0, "h": 70.0},
 }
+## other buttons of the race screen that the player may switch off (they keep their own place; no moving)
+const HIDEABLE := ["reset", "emote", "punch", "stickers", "photo", "menu", "hudcfg", "radio_prev", "radio_name", "radio_next", "msize", "mnear", "map", "beacon", "g_left", "g_fwd", "g_right", "g_stop"]
+static var opacity := 1.0               # transparency of every driving button (0.2 .. 1)
 ## the six-plus extras live in the "More" page by default; the player can ADD them to the screen as free buttons
 ## (default spot below, then he drags them wherever he wants).
 ## gas and brake cannot be removed (touch driving needs them)
-const LOCKED := ["gas", "brake"]
+const LOCKED := ["gas", "brake", "reset", "emote", "stickers", "menu"]
 const EXTRA := ["c_drink", "c_mirl", "c_mirr", "p2_haz", "p2_flash", "p2_hb", "p2_win", "p2_ac", "p2_dome", "p2_greet", "c_kind"]
-const ESSENTIAL := ["gas", "brake", "c_horn", "c_sigl", "c_sigr", "c_lights", "c_wipers"]
-const ORDER := ["gas", "brake", "c_horn", "c_sigl", "c_sigr", "c_lights", "c_wipers",
+const ESSENTIAL := ["gas", "brake", "c_horn", "c_sigl", "c_sigr", "c_lights", "c_wipers", "c_more"]
+const ORDER := ["gas", "brake", "c_horn", "c_sigl", "c_sigr", "c_lights", "c_wipers", "c_more",
+	"reset", "emote", "punch", "stickers", "photo", "menu", "hudcfg", "radio_prev", "radio_name", "radio_next", "msize", "mnear", "map", "beacon", "g_left", "g_fwd", "g_right", "g_stop",
 	"c_drink", "c_mirl", "c_mirr", "p2_haz", "p2_flash", "p2_hb", "p2_win", "p2_ac", "p2_dome", "p2_greet", "c_kind"]
 const SC_MIN := 0.6
 const SC_MAX := 1.8
@@ -39,7 +63,11 @@ static var intro_seen := false
 static func names() -> Dictionary:
 	return {"gas": UI.tx("GAS", "بنزين"), "brake": UI.tx("BRAKE", "فرامل"), "c_horn": UI.tx("HORN", "بوق"),
 		"c_sigl": UI.tx("< SIGNAL", "< إشارة"), "c_sigr": UI.tx("SIGNAL >", "إشارة >"),
-		"c_lights": UI.tx("LIGHTS", "إضاءة"), "c_wipers": UI.tx("WIPER", "مساحات"),
+		"c_lights": UI.tx("LIGHTS", "إضاءة"), "c_wipers": UI.tx("WIPER", "مساحات"), "c_more": UI.tx("MORE >>", "المزيد >>"),
+		"reset": UI.tx("Reset car", "إعادة السيارة"), "emote": UI.tx("Emote", "حركة"), "punch": UI.tx("Punch", "لكمة"),
+		"stickers": UI.tx("Stickers", "ملصقات"), "photo": UI.tx("Photo", "صورة"), "menu": UI.tx("Menu", "القائمة"), "hudcfg": UI.tx("Buttons", "الأزرار"), "radio_prev": UI.tx("Radio <", "راديو <"), "radio_name": UI.tx("Radio name", "اسم الراديو"), "radio_next": UI.tx("Radio >", "راديو >"),
+		"msize": UI.tx("Map size", "حجم الخريطة"), "mnear": UI.tx("Map zoom", "تقريب الخريطة"), "map": UI.tx("Map", "الخريطة"), "beacon": UI.tx("Signal", "إشارة الخريطة"),
+		"g_left": UI.tx("Say: left", "قل: يسار"), "g_fwd": UI.tx("Say: forward", "قل: قدام"), "g_right": UI.tx("Say: right", "قل: يمين"), "g_stop": UI.tx("Say: stop", "قل: قف"),
 		"c_drink": UI.tx("DRINK", "اشرب"), "c_mirl": UI.tx("MIRROR L", "مرآة يسار"), "c_mirr": UI.tx("MIRROR R", "مرآة يمين"),
 		"p2_haz": UI.tx("HAZARD", "طوارئ"), "p2_flash": UI.tx("HIGH BEAM", "ضوء بعيد"), "p2_hb": UI.tx("HANDBRAKE", "فرامل يد"),
 		"p2_win": UI.tx("WINDOWS", "نوافذ"), "p2_ac": UI.tx("A/C FAN", "مروحة"), "p2_dome": UI.tx("CABIN LIGHT", "إضاءة داخلية"),
@@ -65,6 +93,7 @@ static func _load() -> void:
 			_slots[i] = {"filled": bool(cf.get_value(sec, "filled", false)), "data": cf.get_value(sec, "data", {}), "hidden": cf.get_value(sec, "hidden", {})}
 	active = clampi(active, 0, _slots.size() - 1)
 	intro_seen = bool(cf.get_value("meta", "intro_seen", false))
+	opacity = clampf(float(cf.get_value("meta", "opacity", 1.0)), 0.2, 1.0)
 	_hidden = cf.get_value("working", "hidden", {})
 	for id in ORDER:
 		if cf.has_section(id):
@@ -75,6 +104,7 @@ static func _load() -> void:
 static func save() -> void:
 	var cf := ConfigFile.new()
 	cf.set_value("meta", "intro_seen", intro_seen)
+	cf.set_value("meta", "opacity", opacity)
 	cf.set_value("slots", "n", _slots.size())
 	cf.set_value("slots", "active", active)
 	for i in _slots.size():
@@ -87,6 +117,17 @@ static func save() -> void:
 		for k in e:
 			cf.set_value(id, k, e[k])
 	cf.save(SAVE)
+
+
+static func set_opacity(v: float) -> void:
+	_load()
+	opacity = clampf(v, 0.2, 1.0)
+	save()
+
+
+static func get_opacity() -> float:
+	_load()
+	return opacity
 
 
 static func mark_intro() -> void:
@@ -125,7 +166,7 @@ static func _def(id: String) -> Dictionary:
 static func set_entry(id: String, e: Dictionary) -> void:
 	_load()
 	e["fx"] = clampf(float(e["fx"]), 0.03, 0.97)
-	e["fy"] = clampf(float(e["fy"]), 0.2, 0.86)
+	e["fy"] = clampf(float(e["fy"]), 0.04, 0.96)
 	e["sc"] = clampf(float(e["sc"]), SC_MIN, SC_MAX)
 	e["rot"] = wrapf(float(e["rot"]), -180.0, 180.0)
 	_data[id] = e
@@ -219,14 +260,14 @@ static func is_added(id: String) -> bool:
 ## is the button part of the player's screen right now (what the editor shows)
 static func is_on_screen(id: String) -> bool:
 	_load()
-	if ESSENTIAL.has(id):
+	if ESSENTIAL.has(id) or HIDEABLE.has(id):
 		return not _hidden.has(id)
 	return _data.has(id)
 
 
 static func add_button(id: String) -> void:
 	_load()
-	if ESSENTIAL.has(id):
+	if ESSENTIAL.has(id) or HIDEABLE.has(id):
 		_hidden.erase(id)
 		save()
 	elif not _data.has(id):
@@ -236,7 +277,9 @@ static func add_button(id: String) -> void:
 
 static func remove_button(id: String) -> void:
 	_load()
-	if ESSENTIAL.has(id):
+	if LOCKED.has(id):
+		return
+	if ESSENTIAL.has(id) or HIDEABLE.has(id):
 		_hidden[id] = true
 	else:
 		_data.erase(id)

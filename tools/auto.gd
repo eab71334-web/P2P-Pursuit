@@ -318,6 +318,24 @@ func _process(d: float) -> void:
 						print("REPORT_START"); print(n._report()); print("REPORT_END"); shot("selftest")
 			elif step == 2:
 				get_tree().quit()
+		"hud":
+			if step == 0 and t > 2.0:
+				step = 1; TranslationServer.set_locale("ar"); Profile.steer_mode = "buttons"; sc._on_solo()
+			elif step == 1 and t > 9.0:
+				step = 2
+				var w := get_tree().current_scene
+				if w.sticker_picker == null or not w.sticker_picker.visible:
+					w._toggle_stickers()
+			elif step == 2 and t > 11.5:
+				step = 3; shot("hud_a")
+			elif step == 3 and t > 12.5:
+				step = 4
+				get_tree().current_scene._toggle_stickers()
+				get_tree().current_scene._open_pause_menu()
+			elif step == 4 and t > 14.0:
+				step = 5; shot("hud_c")
+			elif step == 5 and t > 14.5:
+				get_tree().quit()
 		"rpaint":
 			if step == 0 and t > 2.5:
 				step = 1; Profile.level = 20; Profile.coins = 99999; Profile.gems = 500; Profile.car = "coupe"; Profile.cars["coupe"] = true
