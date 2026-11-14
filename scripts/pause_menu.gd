@@ -14,8 +14,12 @@ var _tab := last_tab
 var _content: VBoxContainer
 var _tabs := {}
 var _dim: ColorRect
+var _blur: ShaderMaterial
 var _card: Control
 var _closing := false
+var _seg_n := 0
+var _pop_seg := -1
+var _pop_at := 0
 
 
 func _ready() -> void:
@@ -23,7 +27,12 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	z_index = 300
 	_dim = ColorRect.new()
-	_dim.color = Color(0, 0, 0, 0.72)
+	_dim.color = Color(0, 0, 0, 1)
+	var bsh := Shader.new()
+	bsh.code = BLUR_SHADER
+	_blur = ShaderMaterial.new()
+	_blur.shader = bsh
+	_dim.material = _blur
 	_dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(_dim)
 	var vs := get_viewport_rect().size
@@ -107,9 +116,20 @@ func _ready() -> void:
 	var ex := UI.btn(row, UI.tx("Leave the race", "الخروج من اللعبة"), Color(0.62, 0.14, 0.14), _ask_exit, 22, Vector2(0, 54))
 	ex.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_fill()
+	_juice(self)
 	_open_anim()
 
 
+const BLUR_SHADER := """
+shader_type canvas_item;
+uniform sampler2D scr : hint_screen_texture, filter_linear_mipmap;
+uniform float lod = 2.6;
+uniform float dark = 0.5;
+void fragment() {
+	vec3 c = textureLod(scr, SCREEN_UV, lod).rgb;
+	COLOR = vec4(c * (1.0 - dark), 1.0);
+}
+"""
 const BG_SHADER := """
 shader_type canvas_item;
 uniform vec2 rect_size = vec2(800.0, 500.0);
@@ -157,6 +177,29 @@ func _close() -> void:
 	tw.chain().tween_callback(queue_free)
 
 
+## small bounce for a control (used when a choice lands)
+func _pop(c: Control) -> void:
+	c.resized.connect(func(): c.pivot_offset = c.size * 0.5)
+	c.pivot_offset = c.size * 0.5
+	c.scale = Vector2(0.86, 0.86)
+	c.create_tween().tween_property(c, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+## every button squeezes a little while pressed
+func _juice(root: Node) -> void:
+	for n in root.find_children("*", "Button", true, false):
+		var b := n as Button
+		if b.has_meta("juiced"):
+			continue
+		b.set_meta("juiced", true)
+		b.resized.connect(func(): b.pivot_offset = b.size * 0.5)
+		b.pivot_offset = b.size * 0.5
+		b.button_down.connect(func():
+			b.create_tween().tween_property(b, "scale", Vector2(0.95, 0.95), 0.06))
+		b.button_up.connect(func():
+			b.create_tween().tween_property(b, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT))
+
+
 func _fill(anim := false) -> void:
 	for k in _tabs:
 		var on: bool = k == _tab
@@ -173,17 +216,27 @@ func _fill(anim := false) -> void:
 	for c in _content.get_children():
 		_content.remove_child(c)
 		c.queue_free()
+	_seg_n = 0
 	match _tab:
 		"controls": _tab_controls()
 		"graphics": _tab_graphics()
 		"sound": _tab_sound()
 		_: _tab_game()
-	if anim:                                        # tab switch: the new page fades in
-		_content.modulate.a = 0.0
-		create_tween().tween_property(_content, "modulate:a", 1.0, 0.2)
+	if anim:                                        # tab switch: the rows slide in one after another
+		var i := 0
+		for c in _content.get_children():
+			if c is Control:
+				var cc := c as Control
+				cc.modulate.a = 0.0
+				var tw := cc.create_tween().set_parallel(true)
+				tw.tween_property(cc, "modulate:a", 1.0, 0.18).set_delay(0.045 * i)
+				i += 1
+	_juice(_content)
 
 
 func _seg(opts: Array, cur, cb: Callable) -> Control:
+	var my_idx := _seg_n
+	_seg_n += 1
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 4)
 	for o in opts:
@@ -199,8 +252,12 @@ func _seg(opts: Array, cur, cb: Callable) -> Control:
 		b.add_theme_color_override("font_color", Color(0.08, 0.06, 0.04) if on else UI.TXT2)
 		b.add_theme_color_override("font_hover_color", Color(0.08, 0.06, 0.04) if on else UI.TXT)
 		var val = o[0]
+		if on and _pop_seg == my_idx and Time.get_ticks_msec() - _pop_at < 600:      # the value just picked pops into place
+			_pop(b)
 		b.pressed.connect(func():
 			Sfx.play("click", -8.0)
+			_pop_seg = my_idx
+			_pop_at = Time.get_ticks_msec()
 			cb.call(val)
 			_fill())
 		h.add_child(b)
