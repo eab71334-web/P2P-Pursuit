@@ -9,6 +9,8 @@ signal closed
 var _mock := {}
 var _os: HSlider
 var _pill: Control
+var _pill_at := 0
+var _hide_cb := Callable()
 var _more_btn: Button
 var _syncing := false
 var _selset := {}               # selected button ids
@@ -65,22 +67,32 @@ func _ready() -> void:
 	tg.anchor_right = 0.0
 	tg.offset_left = 12
 	tg.offset_right = 160
-	tg.offset_top = 76
-	tg.offset_bottom = 104
+	tg.offset_top = 122
+	tg.offset_bottom = 150
 	tg.add_theme_stylebox_override("normal", UI.sb(Color(0.055, 0.065, 0.095, 0.95), 8, UI.ACCENT, 1))
 	tg.add_theme_stylebox_override("hover", UI.sb(Color(0.1, 0.11, 0.15, 0.95), 8, UI.ACCENT, 1))
 	tg.add_theme_stylebox_override("pressed", UI.sb(Color(0.1, 0.11, 0.15, 0.95), 8, UI.ACCENT, 1))
-	tg.pressed.connect(func():
+	tg.offset_top = 4
+	tg.offset_bottom = 32
+	tg.visible = false
+	tg.text = UI.tx("Show bar", "إظهار الشريط")
+	var tgl := func():
 		top.visible = not top.visible
 		if _pill != null:
 			_pill.visible = top.visible
-		tg.text = UI.tx("Hide bar", "إخفاء الشريط") if top.visible else UI.tx("Show bar", "إظهار الشريط")
-		tg.offset_top = 76 if top.visible else 4
-		tg.offset_bottom = 104 if top.visible else 32)
+		tg.visible = not top.visible
+	tg.pressed.connect(tgl)
+	_hide_cb = tgl
 	add_child(tg)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
-	top.add_child(row)
+	var tv := VBoxContainer.new()
+	tv.add_theme_constant_override("separation", 6)
+	top.add_child(tv)
+	tv.add_child(row)
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 10)
+	tv.add_child(row2)
 	_tbtn(row, UI.tx("Exit", "خروج"), Color(0.42, 0.16, 0.16), _exit, 18, 92)
 	_tbtn(row, UI.tx("+ / -  Buttons", "إضافة / حذف أزرار"), Color(0.16, 0.34, 0.56), _open_picker, 18, 170)
 	_more_btn = _tbtn(row, "", Color(0.3, 0.3, 0.45), func():
@@ -91,7 +103,7 @@ func _ready() -> void:
 		_build_mocks()
 		_more_label(), 17, 150)
 	_more_label()
-	var oc := UI.lbl(row, UI.tx("Opacity (selected)", "شفافية المحدد"), 15, UI.TXT2, false)
+	var oc := UI.lbl(row2, UI.tx("Opacity (selected)", "شفافية المحدد"), 15, UI.TXT2, false)
 	oc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_os = HSlider.new()
 	_os.min_value = 0.15
@@ -101,7 +113,7 @@ func _ready() -> void:
 	_os.editable = false
 	_os.custom_minimum_size = Vector2(130, 30)
 	_os.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(_os)
+	row2.add_child(_os)
 	_os.value_changed.connect(func(v: float):
 		if _syncing:
 			return
@@ -112,17 +124,19 @@ func _ready() -> void:
 		_style_all())
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(sp)
-	var cap := UI.lbl(row, UI.tx("Layouts", "التخصيصات"), 16, UI.TXT2, false)
+	row2.add_child(sp)
+	var cap := UI.lbl(row2, UI.tx("Layouts", "التخصيصات"), 16, UI.TXT2, false)
 	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_slot_scroll = ScrollContainer.new()
 	_slot_scroll.custom_minimum_size = Vector2(320, 48)
 	_slot_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_slot_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	row.add_child(_slot_scroll)
+	row2.add_child(_slot_scroll)
 	_slot_bar = HBoxContainer.new()
 	_slot_bar.add_theme_constant_override("separation", 6)
 	_slot_scroll.add_child(_slot_bar)
+	_tbtn(row2, UI.tx("Hide bars", "إخفاء الشريط"), Color(0.3, 0.3, 0.45), func(): _hide_cb.call(), 17, 150)
+	_tbtn(row, UI.tx("Reset ALL", "إعادة الكل للأصل"), Color(0.5, 0.25, 0.12), _reset_all_ask, 17, 170)
 	var sp2 := Control.new()
 	sp2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(sp2)
@@ -135,8 +149,8 @@ func _ready() -> void:
 	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var hc := CenterContainer.new()
 	hc.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	hc.offset_top = 76
-	hc.offset_bottom = 112
+	hc.offset_top = 124
+	hc.offset_bottom = 160
 	hc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(hc)
 	hc.add_child(hint)
@@ -174,7 +188,10 @@ func _ready() -> void:
 	_multi_btn = _tbtn(pr, UI.tx("Multi", "متعدد"), UI.CARD2, _toggle_multi, 17, 84)
 	_tbtn(pr, UI.tx("All", "الكل"), UI.CARD2, _select_all, 17, 64)
 	_tbtn(pr, UI.tx("Reset", "إعادة"), UI.CARD2, _reset_one, 17, 80)
-	_tbtn(pr, UI.tx("Reset all", "إعادة الكل"), UI.CARD2, _reset_all, 17, 100)
+	_tbtn(pr, UI.tx("Move bar", "انقل الشريط"), Color(0.16, 0.34, 0.56), func():
+		_pill_at = (_pill_at + 1) % 3
+		_place_pill(), 17, 120)
+	_place_pill()
 	_build_slots()
 	_sel_text()
 
@@ -573,6 +590,50 @@ func _reset_one() -> void:
 	for t in _targets():
 		HudLayout.reset(t)
 		HudLayout.place(_mock[t], t)
+
+
+## the tools bar sits where nothing is: middle of the screen, bottom-left, or under the top strip (button cycles)
+func _place_pill() -> void:
+	if _pill == null:
+		return
+	var p := _pill as Control
+	p.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	p.grow_vertical = Control.GROW_DIRECTION_BOTH
+	match _pill_at:
+		0:
+			p.anchor_left = 0.5
+			p.anchor_right = 0.5
+			p.anchor_top = 0.36
+			p.anchor_bottom = 0.36
+		1:
+			p.anchor_left = 0.5
+			p.anchor_right = 0.5
+			p.anchor_top = 0.97
+			p.anchor_bottom = 0.97
+		_:
+			p.anchor_left = 0.5
+			p.anchor_right = 0.5
+			p.anchor_top = 0.0
+			p.anchor_bottom = 0.0
+	p.offset_left = 0
+	p.offset_right = 0
+	p.offset_top = 200 if _pill_at == 2 else -30
+	p.offset_bottom = 260 if _pill_at == 2 else 30
+	if _pill_at == 1:
+		p.offset_top = -62
+		p.offset_bottom = -2
+
+
+func _reset_all_ask() -> void:
+	var c := ConfirmationDialog.new()
+	c.dialog_text = UI.tx("Put every button back to the game's own layout?", "ترجيع كل الأزرار لمكانها الأصلي؟")
+	c.ok_button_text = UI.tx("Yes", "نعم")
+	c.cancel_button_text = UI.tx("Cancel", "إلغاء")
+	c.confirmed.connect(_reset_all)
+	c.canceled.connect(c.queue_free)
+	c.confirmed.connect(c.queue_free)
+	add_child(c)
+	c.popup_centered()
 
 
 func _reset_all() -> void:
