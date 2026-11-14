@@ -217,6 +217,7 @@ func _ready() -> void:
 			_picker = null
 			_apply_steer_mode()
 			_flip_hud()
+			HudLayout.apply_world(zones)
 			_after_steer())
 	else:
 		_after_steer()

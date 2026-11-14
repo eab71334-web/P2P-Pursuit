@@ -8,6 +8,8 @@ signal closed
 
 var _mock := {}
 var _os: HSlider
+var _pill: Control
+var _more_btn: Button
 var _syncing := false
 var _selset := {}               # selected button ids
 var _multi := false
@@ -59,10 +61,10 @@ func _ready() -> void:
 	tg.text = UI.tx("Hide bar", "إخفاء الشريط")
 	tg.focus_mode = Control.FOCUS_NONE
 	tg.add_theme_font_size_override("font_size", 15)
-	tg.anchor_left = 0.5
-	tg.anchor_right = 0.5
-	tg.offset_left = -70
-	tg.offset_right = 70
+	tg.anchor_left = 0.0
+	tg.anchor_right = 0.0
+	tg.offset_left = 12
+	tg.offset_right = 160
 	tg.offset_top = 76
 	tg.offset_bottom = 104
 	tg.add_theme_stylebox_override("normal", UI.sb(Color(0.055, 0.065, 0.095, 0.95), 8, UI.ACCENT, 1))
@@ -70,6 +72,8 @@ func _ready() -> void:
 	tg.add_theme_stylebox_override("pressed", UI.sb(Color(0.1, 0.11, 0.15, 0.95), 8, UI.ACCENT, 1))
 	tg.pressed.connect(func():
 		top.visible = not top.visible
+		if _pill != null:
+			_pill.visible = top.visible
 		tg.text = UI.tx("Hide bar", "إخفاء الشريط") if top.visible else UI.tx("Show bar", "إظهار الشريط")
 		tg.offset_top = 76 if top.visible else 4
 		tg.offset_bottom = 104 if top.visible else 32)
@@ -79,6 +83,14 @@ func _ready() -> void:
 	top.add_child(row)
 	_tbtn(row, UI.tx("Exit", "خروج"), Color(0.42, 0.16, 0.16), _exit, 18, 92)
 	_tbtn(row, UI.tx("+ / -  Buttons", "إضافة / حذف أزرار"), Color(0.16, 0.34, 0.56), _open_picker, 18, 170)
+	_more_btn = _tbtn(row, "", Color(0.3, 0.3, 0.45), func():
+		if HudLayout.is_on_screen("c_more"):
+			HudLayout.remove_button("c_more")
+		else:
+			HudLayout.add_button("c_more")
+		_build_mocks()
+		_more_label(), 17, 150)
+	_more_label()
 	var oc := UI.lbl(row, UI.tx("Opacity (selected)", "شفافية المحدد"), 15, UI.TXT2, false)
 	oc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_os = HSlider.new()
@@ -133,6 +145,7 @@ func _ready() -> void:
 	_info.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# ---- tools pill, bottom left (never over GAS / BRAKE)
 	var pill := PanelContainer.new()
+	_pill = pill
 	var psb := StyleBoxFlat.new()
 	psb.bg_color = Color(0.055, 0.065, 0.095, 0.96)
 	psb.set_corner_radius_all(18)
@@ -386,6 +399,11 @@ func _refresh() -> void:
 
 func _say(t: String) -> void:
 	_info.text = t
+
+
+func _more_label() -> void:
+	if _more_btn != null:
+		_more_btn.text = UI.tx("MORE button: ", "زر المزيد: ") + (UI.tx("ON", "مفعّل") if HudLayout.is_on_screen("c_more") else UI.tx("OFF", "مطفي"))
 
 
 func _sync_alpha() -> void:

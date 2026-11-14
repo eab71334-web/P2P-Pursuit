@@ -16,6 +16,8 @@ const DEFAULTS := {
 	"c_lights": {"fx": 0.054, "fy": 0.564, "w": 110.0, "h": 68.0},
 	"c_wipers": {"fx": 0.146, "fy": 0.564, "w": 110.0, "h": 68.0},
 	"c_more": {"fx": 0.238, "fy": 0.669, "w": 110.0, "h": 68.0},
+	"left": {"fx": 0.07, "fy": 0.854, "w": 140.0, "h": 130.0},
+	"right": {"fx": 0.195, "fy": 0.854, "w": 140.0, "h": 130.0},
 	"c_drink": {"fx": 0.238, "fy": 0.564, "w": 110.0, "h": 68.0},
 	"c_mirl": {"fx": 0.054, "fy": 0.669, "w": 110.0, "h": 68.0},
 	"c_mirr": {"fx": 0.146, "fy": 0.669, "w": 110.0, "h": 68.0},
@@ -44,10 +46,10 @@ const HIDEABLE := ["reset", "emote", "punch", "stickers", "photo", "menu", "hudc
 ## the six-plus extras live in the "More" page by default; the player can ADD them to the screen as free buttons
 ## (default spot below, then he drags them wherever he wants).
 ## gas and brake cannot be removed (touch driving needs them)
-const LOCKED := ["gas", "brake", "reset", "emote", "stickers", "menu"]
+const LOCKED := ["gas", "brake", "left", "right", "reset", "emote", "stickers", "menu"]
 const EXTRA := ["p2_haz", "p2_flash", "p2_hb", "p2_win", "p2_ac", "p2_dome", "p2_greet", "c_kind"]
-const ESSENTIAL := ["gas", "brake", "c_horn", "c_sigl", "c_sigr", "c_lights", "c_wipers", "c_more", "c_drink", "c_mirl", "c_mirr"]
-const ORDER := ["gas", "brake", "c_horn", "c_sigl", "c_sigr", "c_lights", "c_wipers", "c_more",
+const ESSENTIAL := ["gas", "brake", "left", "right", "c_horn", "c_sigl", "c_sigr", "c_lights", "c_wipers", "c_more", "c_drink", "c_mirl", "c_mirr"]
+const ORDER := ["gas", "brake", "left", "right", "c_horn", "c_sigl", "c_sigr", "c_lights", "c_wipers", "c_more",
 	"reset", "emote", "punch", "stickers", "photo", "menu", "hudcfg", "radio_prev", "radio_name", "radio_next", "msize", "mnear", "map", "beacon", "g_left", "g_fwd", "g_right", "g_stop",
 	"c_drink", "c_mirl", "c_mirr", "p2_haz", "p2_flash", "p2_hb", "p2_win", "p2_ac", "p2_dome", "p2_greet", "c_kind"]
 const SC_MIN := 0.6
@@ -67,7 +69,7 @@ static func names() -> Dictionary:
 		"c_sigl": UI.tx("< SIGNAL", "< إشارة"), "c_sigr": UI.tx("SIGNAL >", "إشارة >"),
 		"c_lights": UI.tx("LIGHTS", "إضاءة"), "c_wipers": UI.tx("WIPER", "مساحات"), "c_more": UI.tx("MORE >>", "المزيد >>"),
 		"reset": UI.tx("Reset car", "إعادة السيارة"), "emote": UI.tx("Emote", "حركة"), "punch": UI.tx("Punch", "لكمة"),
-		"stickers": UI.tx("Stickers", "ملصقات"), "photo": UI.tx("Photo", "صورة"), "menu": UI.tx("Menu", "القائمة"), "hudcfg": UI.tx("Buttons", "الأزرار"), "radio_prev": UI.tx("Radio <", "راديو <"), "radio_name": UI.tx("Radio", "راديو"), "radio_next": UI.tx("Radio >", "راديو >"),
+		"left": UI.tx("Steer <", "توجيه <"), "right": UI.tx("Steer >", "توجيه >"), "stickers": UI.tx("Stickers", "ملصقات"), "photo": UI.tx("Photo", "صورة"), "menu": UI.tx("Menu", "القائمة"), "hudcfg": UI.tx("Buttons", "الأزرار"), "radio_prev": UI.tx("Radio <", "راديو <"), "radio_name": UI.tx("Radio", "راديو"), "radio_next": UI.tx("Radio >", "راديو >"),
 		"msize": UI.tx("SIZE", "الحجم"), "mnear": UI.tx("NEAR", "قرّب"), "map": UI.tx("MAP", "الخريطة"), "beacon": UI.tx("Signal", "إشارة"),
 		"g_left": UI.tx("Say: left", "قل: يسار"), "g_fwd": UI.tx("Say: forward", "قل: قدام"), "g_right": UI.tx("Say: right", "قل: يمين"), "g_stop": UI.tx("Say: stop", "قل: قف"),
 		"c_drink": UI.tx("DRINK", "اشرب"), "c_mirl": UI.tx("MIRROR L", "مرآة يسار"), "c_mirr": UI.tx("MIRROR R", "مرآة يمين"),
