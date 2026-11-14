@@ -69,6 +69,7 @@ func _ready() -> void:
 			_guides.draw_line(Vector2(0, _gy * vsz.y), Vector2(vsz.x, _gy * vsz.y), Color(0.3, 0.9, 1.0, 0.8), 2.0))
 	add_child(_guides)
 	_build_mocks()
+	_intro_mocks()
 	# ---- top strip: exit | title | layouts | save | delete | done
 	var top := PanelContainer.new()
 	_top = top
@@ -454,10 +455,55 @@ func _grid_lines() -> void:
 			add_child(r)
 
 
+## opening: the screen fades in and the buttons pop in one after another
+func _intro_mocks() -> void:
+	modulate.a = 0.0
+	create_tween().tween_property(self, "modulate:a", 1.0, 0.22)
+	var i := 0
+	for id in _mock:
+		var m := _mock[id] as Control
+		var sc: Vector2 = m.scale
+		m.scale = sc * 0.8
+		m.self_modulate.a = 0.0
+		var tw := m.create_tween().set_parallel(true)
+		tw.tween_property(m, "scale", sc, 0.28).set_delay(0.03 * i).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(m, "self_modulate:a", 1.0, 0.2).set_delay(0.03 * i)
+		i += 1
+
+
+## closing: the real HUD shows at once, the editor fades away
+func _leave() -> void:
+	closed.emit()
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	set_process_input(false)
+	for c in get_children():
+		if c is Control:
+			(c as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var tw := create_tween()
+	tw.tween_property(self, "modulate:a", 0.0, 0.18)
+	tw.tween_callback(queue_free)
+
+
+## a quick flash on a button (picked / snapped)
+func _flash(id: String) -> void:
+	if not _mock.has(id):
+		return
+	var m := _mock[id] as Control
+	m.self_modulate = Color(1.7, 1.7, 1.7, 1.0)
+	m.create_tween().tween_property(m, "self_modulate", Color(1, 1, 1, 1), 0.22)
+
+
 func _sel_text() -> void:
 	if _sel_lbl != null:
 		var n := _selset.size()
-		_sel_lbl.text = UI.tx("Select a button", "اختر زراً") if n == 0 else (HudLayout.names()[_selset.keys()[0]] if n == 1 else UI.tx("%d buttons" % n, "%d أزرار" % n))
+		var nt: String = UI.tx("Select a button", "اختر زراً") if n == 0 else (HudLayout.names()[_selset.keys()[0]] if n == 1 else UI.tx("%d buttons" % n, "%d أزرار" % n))
+		if nt != _sel_lbl.text:
+			_sel_lbl.text = nt
+			var chip := _sel_lbl.get_parent() as Control
+			if chip != null:
+				chip.pivot_offset = chip.size * 0.5
+				chip.scale = Vector2(1.14, 1.14)
+				chip.create_tween().tween_property(chip, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 func _save_slot() -> void:
@@ -475,8 +521,7 @@ func _del_slot() -> void:
 
 func _exit() -> void:
 	HudLayout.restore(_snap)
-	closed.emit()
-	queue_free()
+	_leave()
 
 
 func _build_slots() -> void:
@@ -607,6 +652,7 @@ func _select(id: String) -> void:
 		_selset[id] = true
 	_sel_text()
 	_style_all()
+	_flash(id)
 
 
 # ---- touch: every finger drags its own button (so several can be moved at once); two fingers on one button
@@ -738,6 +784,8 @@ func _fade_bars(on: bool) -> void:
 
 
 func _snap_guides(id: String, e: Dictionary) -> void:
+	var old_gx := _gx
+	var old_gy := _gy
 	var tx := 0.007
 	var ty := 0.012
 	_gx = -1.0
@@ -762,6 +810,8 @@ func _snap_guides(id: String, e: Dictionary) -> void:
 			by = absf(float(e["fy"]) - float(y))
 			e["fy"] = float(y)
 			_gy = float(y)
+	if (_gx >= 0.0 and not is_equal_approx(_gx, old_gx)) or (_gy >= 0.0 and not is_equal_approx(_gy, old_gy)):
+		_flash(id)
 	_guides.queue_redraw()
 
 
@@ -950,8 +1000,7 @@ func _select_all() -> void:
 
 func _done() -> void:
 	HudLayout.mark_intro()
-	closed.emit()
-	queue_free()
+	_leave()
 
 
 ## first-time card: tells the player the buttons can be customised (and offers to do it now)
