@@ -188,8 +188,16 @@ func _ready() -> void:
 	var pb := HBoxContainer.new()
 	pb.add_theme_constant_override("separation", 8)
 	pv.add_child(pb)
-	_sel_lbl = UI.lbl(pr, "", 17, UI.ACCENT, false)
-	_sel_lbl.custom_minimum_size = Vector2(110, 0)
+	pv.move_child(pr, 0)
+	var hd := PanelContainer.new()
+	hd.add_theme_stylebox_override("panel", UI.sb(Color(1.0, 0.6, 0.05, 0.22), 12, UI.ACCENT, 2))
+	hd.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pv.add_child(hd)
+	pv.move_child(hd, 0)
+	_sel_lbl = UI.lbl(hd, "", 24, Color(1.0, 0.85, 0.4), false)
+	_sel_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_sel_lbl.custom_minimum_size = Vector2(0, 40)
+	_sel_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_sel_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_tbtn(pr, UI.tx("< Prev", "السابق >"), Color(0.16, 0.34, 0.56), _cycle.bind(-1), 17, 90)
 	_tbtn(pr, UI.tx("Next >", "< التالي"), Color(0.16, 0.34, 0.56), _cycle.bind(1), 17, 90)
