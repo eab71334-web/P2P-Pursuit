@@ -11,7 +11,7 @@ var _os: HSlider
 var _pill: Control
 var _pill_at := 0
 var _pill_open := false
-var _pill_k := 0.82
+var _pill_k := 1.0
 var _pp := {}
 var _pp_base := {}
 var _chip: Button
@@ -188,15 +188,13 @@ func _ready() -> void:
 	var pb := HBoxContainer.new()
 	pb.add_theme_constant_override("separation", 8)
 	pv.add_child(pb)
-	pv.move_child(pr, 0)
 	var hd := PanelContainer.new()
-	hd.add_theme_stylebox_override("panel", UI.sb(Color(1.0, 0.6, 0.05, 0.22), 12, UI.ACCENT, 2))
+	hd.add_theme_stylebox_override("panel", UI.sb(Color(1.0, 0.6, 0.05, 0.22), 10, UI.ACCENT, 2))
 	hd.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	pv.add_child(hd)
-	pv.move_child(hd, 0)
-	_sel_lbl = UI.lbl(hd, "", 24, Color(1.0, 0.85, 0.4), false)
+	hd.custom_minimum_size = Vector2(120, 0)
+	pr.add_child(hd)
+	_sel_lbl = UI.lbl(hd, "", 18, Color(1.0, 0.85, 0.4), false)
 	_sel_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_sel_lbl.custom_minimum_size = Vector2(0, 40)
 	_sel_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_sel_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_tbtn(pr, UI.tx("< Prev", "السابق >"), Color(0.16, 0.34, 0.56), _cycle.bind(-1), 17, 90)
@@ -213,8 +211,8 @@ func _ready() -> void:
 	_tbtn(pb, UI.tx("Turn >", "لفّ >"), UI.CARD2, _rot.bind(15.0), 17, 78)
 	for nd in [["◀", -1.0, 0.0], ["▶", 1.0, 0.0], ["▲", 0.0, -1.0], ["▼", 0.0, 1.0]]:
 		_tbtn(pb, nd[0], Color(0.3, 0.3, 0.45), _nudge.bind(nd[1], nd[2]), 20, 56)
-	_tbtn(pr, UI.tx("Bar -", "الشريط -"), UI.CARD2, _pill_zoom.bind(-0.15), 17, 100)
-	_tbtn(pr, UI.tx("Bar +", "الشريط +"), UI.CARD2, _pill_zoom.bind(0.15), 17, 100)
+	_tbtn(pb, UI.tx("Bar -", "الشريط -"), UI.CARD2, _pill_zoom.bind(-0.15), 16, 90)
+	_tbtn(pb, UI.tx("Bar +", "الشريط +"), UI.CARD2, _pill_zoom.bind(0.15), 16, 90)
 	_tbtn(pr, "✕", Color(0.42, 0.16, 0.16), func(): _pill_set(false), 18, 48)
 	_place_pill()
 	pill.gui_input.connect(func(ev: InputEvent):
@@ -677,8 +675,8 @@ func _reset_one() -> void:
 
 
 ## the tools bar sits where nothing is: middle of the screen, bottom-left, or under the top strip (button cycles)
-const PILL_MIN := 0.4
-const PILL_MAX := 1.4
+const PILL_MIN := 0.6
+const PILL_MAX := 1.6
 
 
 func _pill_zoom(d: float) -> void:
