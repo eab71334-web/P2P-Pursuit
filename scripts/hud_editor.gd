@@ -1118,6 +1118,23 @@ class Ico extends Control:
 			"redo", "rot_r":
 				draw_arc(m, 6.5, deg_to_rad(-30), deg_to_rad(240), 20, c, w, true)
 				draw_colored_polygon(PackedVector2Array([Vector2(19, 5), Vector2(19, 12), Vector2(12, 9)]), c)
+			"pad":
+				draw_rect(Rect2(2, 6, 18, 11), c, false, 2.2)
+				draw_line(Vector2(7, 8), Vector2(7, 15), c, 2.0)
+				draw_line(Vector2(4, 11.5), Vector2(10, 11.5), c, 2.0)
+				draw_circle(Vector2(14.5, 10), 1.6, c)
+				draw_circle(Vector2(17, 13), 1.6, c)
+			"screen":
+				draw_rect(Rect2(2, 4, 18, 11), c, false, 2.2)
+				draw_line(Vector2(8, 19), Vector2(14, 19), c, 2.4)
+				draw_line(Vector2(11, 15), Vector2(11, 19), c, 2.0)
+			"sound":
+				draw_colored_polygon(PackedVector2Array([Vector2(3, 8), Vector2(7, 8), Vector2(12, 4), Vector2(12, 18), Vector2(7, 14), Vector2(3, 14)]), c)
+				draw_arc(Vector2(12, 11), 5.0, deg_to_rad(-45), deg_to_rad(45), 8, c, 2.0, true)
+				draw_arc(Vector2(12, 11), 8.0, deg_to_rad(-45), deg_to_rad(45), 8, c, 2.0, true)
+			"flag":
+				draw_line(Vector2(5, 3), Vector2(5, 19), c, 2.4)
+				draw_colored_polygon(PackedVector2Array([Vector2(6, 4), Vector2(18, 7), Vector2(6, 12)]), c)
 			"left":
 				draw_colored_polygon(PackedVector2Array([Vector2(15, 4), Vector2(15, 18), Vector2(5, 11)]), c)
 			"right":

@@ -9,19 +9,23 @@ var steer_cb := Callable()
 var reset_cb := Callable()
 var photo_cb := Callable()
 var _confirm: Control
-var _tab := "controls"
+static var last_tab := "controls"
+var _tab := last_tab
 var _content: VBoxContainer
 var _tabs := {}
+var _dim: ColorRect
+var _card: Control
+var _closing := false
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	z_index = 300
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.72)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(dim)
+	_dim = ColorRect.new()
+	_dim.color = Color(0, 0, 0, 0.72)
+	_dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(_dim)
 	var vs := get_viewport_rect().size
 	var cc := CenterContainer.new()
 	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -30,11 +34,30 @@ func _ready() -> void:
 	var cw := minf(880.0, vs.x - 24.0)
 	var ch := minf(520.0, vs.y - 20.0)
 	card.custom_minimum_size = Vector2(cw, ch)
-	card.add_theme_stylebox_override("panel", UI.sb(Color(0.07, 0.075, 0.1, 0.98), 20, Color(1, 1, 1, 0.14), 2))
+	var csb := UI.sb(Color(0, 0, 0, 0), 20, Color(1, 1, 1, 0.16), 2)
+	csb.content_margin_left = 0
+	csb.content_margin_right = 0
+	csb.content_margin_top = 0
+	csb.content_margin_bottom = 0
+	card.add_theme_stylebox_override("panel", csb)
+	_card = card
+	var bg := ColorRect.new()
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sh := Shader.new()
+	sh.code = BG_SHADER
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	bg.material = mat
+	bg.resized.connect(func(): mat.set_shader_parameter("rect_size", bg.size))
+	card.add_child(bg)
 	card.layout_direction = Control.LAYOUT_DIRECTION_LOCALE      # Arabic: tabs on the right, like the language reads
+	var pad := MarginContainer.new()
+	for mk in ["left", "right", "top", "bottom"]:
+		pad.add_theme_constant_override("margin_" + mk, 16)
+	card.add_child(pad)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
-	card.add_child(v)
+	pad.add_child(v)
 	var t := UI.lbl(v, UI.tx("MENU", "القائمة"), 26, Color.WHITE, false)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var mid := HBoxContainer.new()
@@ -46,11 +69,25 @@ func _ready() -> void:
 	side.add_theme_constant_override("separation", 6)
 	side.custom_minimum_size = Vector2(150, 0)
 	mid.add_child(side)
-	for tb in [["controls", UI.tx("Controls", "التحكم")], ["graphics", UI.tx("Graphics", "الرسوميات")], ["sound", UI.tx("Sound", "الصوت")], ["game", UI.tx("Game", "اللعبة")]]:
+	for tb in [["controls", UI.tx("Controls", "التحكم"), "pad"], ["graphics", UI.tx("Graphics", "الرسوميات"), "screen"], ["sound", UI.tx("Sound", "الصوت"), "sound"], ["game", UI.tx("Game", "اللعبة"), "flag"]]:
 		var key: String = tb[0]
 		var b := UI.btn(side, tb[1], UI.CARD2, func():
-			_tab = key
-			_fill(), 19, Vector2(0, 52))
+			if _tab != key:
+				_tab = key
+				last_tab = key
+				_fill(true), 19, Vector2(0, 52))
+		var ic := HudEditor.Ico.new(str(tb[2]))
+		ic.layout_direction = Control.LAYOUT_DIRECTION_LTR
+		ic.anchor_top = 0.5
+		ic.anchor_bottom = 0.5
+		ic.offset_top = -11
+		ic.offset_bottom = 11
+		var rtl := TranslationServer.get_locale().begins_with("ar")
+		ic.anchor_left = 1.0 if rtl else 0.0
+		ic.anchor_right = ic.anchor_left
+		ic.offset_left = -32 if rtl else 10
+		ic.offset_right = -10 if rtl else 32
+		b.add_child(ic)
 		_tabs[key] = b
 	var sc := TScroll.new()
 	sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -65,19 +102,72 @@ func _ready() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	v.add_child(row)
-	var go := UI.btn(row, UI.tx("Continue", "متابعة"), UI.ACCENT, func(): queue_free(), 22, Vector2(0, 54))
+	var go := UI.btn(row, UI.tx("Continue", "متابعة"), UI.ACCENT, func(): _close(), 22, Vector2(0, 54))
 	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var ex := UI.btn(row, UI.tx("Leave the race", "الخروج من اللعبة"), Color(0.62, 0.14, 0.14), _ask_exit, 22, Vector2(0, 54))
 	ex.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_fill()
+	_open_anim()
 
 
-func _fill() -> void:
+const BG_SHADER := """
+shader_type canvas_item;
+uniform vec2 rect_size = vec2(800.0, 500.0);
+uniform float radius = 20.0;
+void fragment() {
+	vec2 p = UV * rect_size - rect_size * 0.5;
+	vec2 q = abs(p) - (rect_size * 0.5 - vec2(radius));
+	float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+	float a = 1.0 - smoothstep(-1.0, 1.0, d);
+	vec3 top = vec3(0.13, 0.15, 0.24);
+	vec3 bot = vec3(0.05, 0.055, 0.085);
+	vec3 col = mix(top, bot, smoothstep(0.0, 1.0, UV.y));
+	float glow = smoothstep(0.7, 0.0, distance(UV, vec2(0.85, 0.0)));
+	col += vec3(0.30, 0.17, 0.04) * glow * 0.45;
+	COLOR = vec4(col, 0.985 * a);
+}
+"""
+
+
+## opening: dim fades in, the card pops up a little
+func _open_anim() -> void:
+	_dim.modulate.a = 0.0
+	_card.modulate.a = 0.0
+	await get_tree().process_frame
+	if not is_instance_valid(_card):
+		return
+	_card.pivot_offset = _card.size * 0.5
+	_card.scale = Vector2(0.92, 0.92)
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(_dim, "modulate:a", 1.0, 0.2)
+	tw.tween_property(_card, "modulate:a", 1.0, 0.18)
+	tw.tween_property(_card, "scale", Vector2.ONE, 0.26).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+## closing: the card shrinks and fades, then the menu is gone
+func _close() -> void:
+	if _closing:
+		return
+	_closing = true
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(_dim, "modulate:a", 0.0, 0.15)
+	tw.tween_property(_card, "modulate:a", 0.0, 0.13)
+	tw.tween_property(_card, "scale", Vector2(0.94, 0.94), 0.15)
+	tw.chain().tween_callback(queue_free)
+
+
+func _fill(anim := false) -> void:
 	for k in _tabs:
 		var on: bool = k == _tab
 		var b := _tabs[k] as Button
 		for st in ["normal", "hover", "pressed", "focus"]:
-			b.add_theme_stylebox_override(st, UI.sb(UI.ACCENT if on else UI.CARD2, 12))
+			var tsb := UI.sb(UI.ACCENT if on else UI.CARD2, 12)
+			if TranslationServer.get_locale().begins_with("ar"):
+				tsb.content_margin_right = 40
+			else:
+				tsb.content_margin_left = 40
+			b.add_theme_stylebox_override(st, tsb)
 		b.add_theme_color_override("font_color", Color(0.08, 0.06, 0.04) if on else UI.TXT)
 		b.add_theme_color_override("font_hover_color", Color(0.08, 0.06, 0.04) if on else UI.TXT)
 	for c in _content.get_children():
@@ -88,6 +178,9 @@ func _fill() -> void:
 		"graphics": _tab_graphics()
 		"sound": _tab_sound()
 		_: _tab_game()
+	if anim:                                        # tab switch: the new page fades in
+		_content.modulate.a = 0.0
+		create_tween().tween_property(_content, "modulate:a", 1.0, 0.2)
 
 
 func _seg(opts: Array, cur, cb: Callable) -> Control:
@@ -151,7 +244,7 @@ func _onoff() -> Array:
 func _tab_controls() -> void:
 	if hud_editor_cb.is_valid():
 		_big(UI.tx("Customise buttons", "تخصيص الأزرار"), Color(0.16, 0.34, 0.56), func():
-			queue_free()
+			_close()
 			hud_editor_cb.call())
 	var sm := [["buttons", UI.tx("Buttons", "أزرار")], ["wheel", UI.tx("Wheel", "مقود")], ["wheel360", UI.tx("Wheel 360", "مقود 360")]]
 	var cur: String = Profile.steer_mode if Profile.steer_mode != "" else "buttons"
@@ -199,11 +292,11 @@ func _tab_sound() -> void:
 func _tab_game() -> void:
 	if reset_cb.is_valid():
 		_big(UI.tx("Reset car to the road", "إعادة السيارة للطريق"), Color(0.16, 0.34, 0.56), func():
-			queue_free()
+			_close()
 			reset_cb.call())
 	if photo_cb.is_valid():
 		_big(UI.tx("Take a photo", "التقاط صورة"), Color(0.3, 0.3, 0.45), func():
-			queue_free()
+			_close()
 			photo_cb.call())
 	_row(UI.tx("Show FPS counter", "عرض عدّاد الفريمات"), _seg(_onoff(), Gfx.show_fps, func(x):
 		Gfx.show_fps = x
