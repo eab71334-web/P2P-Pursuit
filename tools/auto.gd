@@ -7,6 +7,7 @@ var shots: Array = []
 var mode := ""
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	mode = OS.get_environment("AUTO")
 	if mode == "":
 		set_process(false)
@@ -349,7 +350,36 @@ func _process(d: float) -> void:
 				step = 8; shot("hud_d")
 			elif step == 8 and t > 22.0:
 				step = 9; shot("hud_e")
-			elif step == 9 and t > 23.0:
+				var tgb = null
+				for e in get_tree().current_scene.find_children("*", "Control", true, false):
+					if e is HudEditor:
+						tgb = e
+				print("TG_BEFORE top_visible=", tgb._top.visible, " tg_visible=", tgb._tg.visible, " rect=", tgb._tg.get_global_rect())
+				for c in tgb.find_children("*", "Control", true, false):
+					if c.is_visible_in_tree() and c.mouse_filter == Control.MOUSE_FILTER_STOP and c.get_global_rect().has_point(tgb._tg.get_global_rect().get_center()):
+						print("COVER ", c, " ", c.get_global_rect())
+				var mm := InputEventMouseMotion.new()
+				mm.position = tgb._tg.get_global_rect().get_center()
+				mm.global_position = mm.position
+				Input.parse_input_event(mm)
+				print("HOV ", get_viewport().gui_get_hovered_control())
+				print("ROOTF ", tgb.mouse_filter, " ", tgb.get_global_rect())
+				for pr in [true, false]:
+					var ev := InputEventMouseButton.new()
+					ev.button_index = MOUSE_BUTTON_LEFT
+					ev.pressed = pr
+					ev.position = tgb._tg.get_global_rect().get_center() * (get_window().size.x / get_viewport().get_visible_rect().size.x)
+					ev.global_position = ev.position
+					Input.parse_input_event(ev)
+			elif step == 9 and t > 22.6:
+				step = 10
+				for e in get_tree().current_scene.find_children("*", "Control", true, false):
+					if e is HudEditor:
+						print("TG_AFTER top_visible=", e._top.visible, " paused=", get_tree().paused)
+						e._reset_all_ask()
+			elif step == 10 and t > 23.3:
+				step = 11; shot("hud_f")
+			elif step == 11 and t > 24.0:
 				get_tree().quit()
 		"rpaint":
 			if step == 0 and t > 2.5:

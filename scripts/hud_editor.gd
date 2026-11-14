@@ -18,6 +18,7 @@ const OKC := Color(0.18, 0.48, 0.28)
 var _undo: Array = []
 var _last_push := 0
 var _top: Control
+var _confirm: Control
 var _tg: Button
 var _idle := 0.0
 var _guides: Control
@@ -50,6 +51,8 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	z_index = 200
 	_snap = HudLayout.snapshot()
+	TScroll.modal = self
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	var dim := ColorRect.new()
 	dim.color = Color(0.02, 0.03, 0.07, 0.92)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -100,8 +103,14 @@ func _ready() -> void:
 	tg.add_theme_stylebox_override("normal", UI.sb(Color(0.055, 0.065, 0.095, 0.95), 8, UI.ACCENT, 1))
 	tg.add_theme_stylebox_override("hover", UI.sb(Color(0.1, 0.11, 0.15, 0.95), 8, UI.ACCENT, 1))
 	tg.add_theme_stylebox_override("pressed", UI.sb(Color(0.1, 0.11, 0.15, 0.95), 8, UI.ACCENT, 1))
-	tg.offset_top = 4
-	tg.offset_bottom = 32
+	tg.anchor_left = 0.5
+	tg.anchor_right = 0.5
+	tg.offset_left = -80
+	tg.offset_right = 80
+	tg.offset_top = 14
+	tg.offset_bottom = 54
+	tg.add_theme_font_size_override("font_size", 18)
+	tg.z_index = 50
 	tg.visible = false
 	tg.text = UI.tx("Show bar", "إظهار الشريط")
 	var tgl := func():
@@ -158,7 +167,7 @@ func _ready() -> void:
 	row2.add_child(sp)
 	var cap := UI.lbl(row2, UI.tx("Layouts", "التخصيصات"), 16, UI.TXT2, false)
 	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_slot_scroll = ScrollContainer.new()
+	_slot_scroll = TScroll.new()
 	_slot_scroll.custom_minimum_size = Vector2(320, 48)
 	_slot_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_slot_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
@@ -340,7 +349,7 @@ func _open_picker() -> void:
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_picker_box = VBoxContainer.new()
 	_picker_box.add_theme_constant_override("separation", 8)
-	var sc := ScrollContainer.new()
+	var sc := TScroll.new()
 	sc.custom_minimum_size = Vector2(720, 300)
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	sc.add_child(_picker_box)
@@ -482,6 +491,8 @@ func _intro_mocks() -> void:
 
 ## closing: the real HUD shows at once, the editor fades away
 func _leave() -> void:
+	if TScroll.modal == self:
+		TScroll.modal = null
 	closed.emit()
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_process_input(false)
@@ -704,6 +715,8 @@ func _input(event: InputEvent) -> void:
 
 
 func _ptr_down(idx: int, pos: Vector2) -> void:
+	if _tg != null and _tg.visible and _tg.get_global_rect().grow(8).has_point(pos):
+		return
 	var id := _hit(pos)
 	if id == "":
 		return
@@ -987,15 +1000,51 @@ func _place_pill() -> void:
 
 
 func _reset_all_ask() -> void:
-	var c := ConfirmationDialog.new()
-	c.dialog_text = UI.tx("Put every button back to the game's own layout?", "ترجيع كل الأزرار لمكانها الأصلي؟")
-	c.ok_button_text = UI.tx("Yes", "نعم")
-	c.cancel_button_text = UI.tx("Cancel", "إلغاء")
-	c.confirmed.connect(_reset_all)
-	c.canceled.connect(c.queue_free)
-	c.confirmed.connect(c.queue_free)
-	add_child(c)
-	c.popup_centered()
+	if _confirm != null and is_instance_valid(_confirm):
+		return
+	_confirm = Control.new()
+	_confirm.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_confirm.z_index = 50
+	add_child(_confirm)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.6)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_confirm.add_child(dim)
+	var cc := CenterContainer.new()
+	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_confirm.add_child(cc)
+	var card := UI.panel(cc, UI.PANEL, 18)
+	card.add_theme_stylebox_override("panel", UI.sb(Color(0.08, 0.09, 0.13, 0.99), 20, Color(0.75, 0.25, 0.25, 0.9), 2))
+	card.custom_minimum_size = Vector2(500, 0)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 14)
+	card.add_child(v)
+	var h := UI.lbl(v, UI.tx("Reset all buttons?", "إعادة كل الأزرار للأصل؟"), 26, Color(1.0, 0.8, 0.3), false)
+	h.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var m := UI.lbl(v, UI.tx("Every button goes back to the game's own place, size and look. You can still Undo.", "كل الأزرار ترجع لمكانها وحجمها الأصلي. تقدر تتراجع بعدها بزر «تراجع»."), 17, UI.TXT2, true)
+	m.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	v.add_child(row)
+	var close_it := func():
+		var tw := _confirm.create_tween().set_parallel(true)
+		tw.tween_property(card, "modulate:a", 0.0, 0.12)
+		tw.tween_property(dim, "modulate:a", 0.0, 0.12)
+		tw.chain().tween_callback(_confirm.queue_free)
+	var no := UI.btn(row, UI.tx("Cancel", "إلغاء"), NEUTRAL, close_it, 22, Vector2(0, 54))
+	no.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var yes := UI.btn(row, UI.tx("Reset all", "إعادة الكل"), DANGER, func():
+		_reset_all()
+		close_it.call(), 22, Vector2(0, 54))
+	yes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	await get_tree().process_frame
+	if is_instance_valid(card):
+		card.pivot_offset = card.size * 0.5
+		card.scale = Vector2(0.92, 0.92)
+		card.modulate.a = 0.0
+		var tw2 := card.create_tween().set_parallel(true)
+		tw2.tween_property(card, "scale", Vector2.ONE, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw2.tween_property(card, "modulate:a", 1.0, 0.15)
 
 
 func _reset_all() -> void:

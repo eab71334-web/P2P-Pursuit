@@ -26,6 +26,11 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	z_index = 300
+	process_mode = Node.PROCESS_MODE_ALWAYS          # keeps working while a solo race is paused
+	TScroll.modal = self
+	tree_exiting.connect(func():
+		if TScroll.modal == self:
+			TScroll.modal = null)
 	_dim = ColorRect.new()
 	_dim.color = Color(0, 0, 0, 1)
 	var bsh := Shader.new()
@@ -314,7 +319,7 @@ func _tab_controls() -> void:
 		_seg([["auto", UI.tx("Auto", "تلقائي")], ["show", UI.tx("Show", "إظهار")], ["hide", UI.tx("Hide", "إخفاء")]], Controls.touch_mode, func(x): Controls.set_touch_mode(x)),
 		UI.tx("Touch buttons: Auto hides them while a gamepad is connected.", "أزرار اللمس: تلقائي يخفيها عند توصيل يد تحكم."))
 	_big(UI.tx("Gamepad buttons", "أزرار اليد"), Color(0.3, 0.3, 0.45), func():
-		get_tree().root.add_child(PadEditor.new()))
+		get_tree().root.add_child(_pad()))
 
 
 func _tab_graphics() -> void:
@@ -362,6 +367,12 @@ func _tab_game() -> void:
 	_row(UI.tx("Vibration", "الاهتزاز"), _seg(_onoff(), Gfx.haptics, func(x):
 		Gfx.haptics = x
 		Gfx.save()))
+
+
+func _pad() -> Node:
+	var pe := PadEditor.new()
+	pe.process_mode = Node.PROCESS_MODE_ALWAYS
+	return pe
 
 
 func _ask_exit() -> void:

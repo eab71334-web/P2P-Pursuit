@@ -6,6 +6,8 @@ extends ScrollContainer
 
 const DEADZONE := 14.0
 
+## while a full-screen overlay (the button editor, the menu) is open, scroll lists behind it must not react
+static var modal: Control = null
 var _down := false
 var _drag := false
 var _start := Vector2.ZERO
@@ -25,6 +27,8 @@ func _ready() -> void:
 
 
 func _inside(p: Vector2) -> bool:
+	if modal != null and is_instance_valid(modal) and not modal.is_ancestor_of(self):
+		return false
 	return is_visible_in_tree() and get_global_rect().has_point(p)
 
 

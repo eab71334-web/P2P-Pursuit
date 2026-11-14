@@ -1473,7 +1473,14 @@ func _open_pause_menu() -> void:
 		return
 	var pm := PauseMenu.new()
 	pm.hud_editor_cb = _open_hud_editor if my_role == "driver" else Callable()
-	pm.exit_cb = func(): Net.return_to_menu()
+	pm.exit_cb = func():
+		get_tree().paused = false
+		Net.return_to_menu()
+	if _can_pause():                                 # alone: the race waits while the menu is open (online / LAN keeps running)
+		get_tree().paused = true
+		pm.tree_exited.connect(func():
+			if _hud_editor == null or not is_instance_valid(_hud_editor):
+				get_tree().paused = false)
 	pm.reset_cb = _request_reset
 	pm.photo_cb = _take_photo
 	pm.steer_cb = func():
@@ -1523,8 +1530,12 @@ func _open_hud_editor() -> void:
 		return
 	var ed := HudEditor.new()
 	_hud_editor = ed
+	if _can_pause():
+		get_tree().paused = true
 	ed.closed.connect(func():
 		_hud_editor = null
+		if _pause == null or not is_instance_valid(_pause):
+			get_tree().paused = false
 		HudLayout.apply_world(zones)
 		_flip_hud()
 		_cab_page(1))
@@ -2994,7 +3005,13 @@ func _update_result_buttons() -> void:
 		rematch_btn.text = UI.tx("Waiting for the others...", "ننتظر باقي اللاعبين...")
 
 
+func _can_pause() -> bool:
+	return Net.players.size() == 1 and not Net.ffa and not Net.dedicated and Net.required_players <= 1
+
+
 func _exit_tree() -> void:
+	if get_tree() != null:
+		get_tree().paused = false
 	Gfx.racing = false
 	Radio.stop_race()
 	if Radio.changed.is_connected(_update_radio_hud):
