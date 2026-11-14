@@ -10,6 +10,8 @@ var _mock := {}
 var _os: HSlider
 var _pill: Control
 var _pill_at := 0
+var _pill_open := false
+var _chip: Button
 var _hide_cb := Callable()
 var _more_btn: Button
 var _syncing := false
@@ -78,8 +80,7 @@ func _ready() -> void:
 	tg.text = UI.tx("Show bar", "إظهار الشريط")
 	var tgl := func():
 		top.visible = not top.visible
-		if _pill != null:
-			_pill.visible = top.visible
+		_pill_refresh(top.visible)
 		tg.visible = not top.visible
 	tg.pressed.connect(tgl)
 	_hide_cb = tgl
@@ -201,7 +202,33 @@ func _ready() -> void:
 	_tbtn(pb, UI.tx("Turn >", "لفّ >"), UI.CARD2, _rot.bind(15.0), 17, 78)
 	for nd in [["◀", -1.0, 0.0], ["▶", 1.0, 0.0], ["▲", 0.0, -1.0], ["▼", 0.0, 1.0]]:
 		_tbtn(pb, nd[0], Color(0.3, 0.3, 0.45), _nudge.bind(nd[1], nd[2]), 20, 56)
+	_tbtn(pr, "✕", Color(0.42, 0.16, 0.16), func(): _pill_set(false), 18, 48)
 	_place_pill()
+	pill.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseMotion and (ev.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+			var q := _pill as Control
+			q.offset_left += ev.relative.x
+			q.offset_right += ev.relative.x
+			q.offset_top += ev.relative.y
+			q.offset_bottom += ev.relative.y)
+	# small chip that opens the tools: the middle of the screen stays free for the player's buttons
+	_chip = Button.new()
+	_chip.text = UI.tx("Tools ▴", "أدوات ▴")
+	_chip.focus_mode = Control.FOCUS_NONE
+	_chip.add_theme_font_size_override("font_size", 17)
+	_chip.anchor_left = 0.33
+	_chip.anchor_right = 0.33
+	_chip.anchor_top = 1.0
+	_chip.anchor_bottom = 1.0
+	_chip.offset_left = -50
+	_chip.offset_right = 50
+	_chip.offset_top = -52
+	_chip.offset_bottom = -8
+	for st in ["normal", "hover", "pressed", "focus"]:
+		_chip.add_theme_stylebox_override(st, UI.sb(Color(0.055, 0.065, 0.095, 0.96), 14, UI.ACCENT, 2))
+	_chip.pressed.connect(func(): _pill_set(true))
+	add_child(_chip)
+	_pill_set(false)
 	_build_slots()
 	_sel_text()
 
@@ -633,6 +660,20 @@ func _reset_one() -> void:
 
 
 ## the tools bar sits where nothing is: middle of the screen, bottom-left, or under the top strip (button cycles)
+func _pill_set(on: bool) -> void:
+	_pill_open = on
+	if on:
+		_place_pill()
+	_pill_refresh(true)
+
+
+func _pill_refresh(bars_on: bool) -> void:
+	if _pill != null:
+		_pill.visible = _pill_open and bars_on
+	if _chip != null:
+		_chip.visible = (not _pill_open) and bars_on
+
+
 func _place_pill() -> void:
 	if _pill == null:
 		return
