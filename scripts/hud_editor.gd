@@ -175,22 +175,32 @@ func _ready() -> void:
 	pill.offset_bottom = -12
 	pill.offset_top = -72
 	add_child(pill)
+	var pv := VBoxContainer.new()
+	pv.add_theme_constant_override("separation", 6)
+	pill.add_child(pv)
 	var pr := HBoxContainer.new()
 	pr.add_theme_constant_override("separation", 8)
-	pill.add_child(pr)
+	pv.add_child(pr)
+	var pb := HBoxContainer.new()
+	pb.add_theme_constant_override("separation", 8)
+	pv.add_child(pb)
 	_sel_lbl = UI.lbl(pr, "", 17, UI.ACCENT, false)
-	_sel_lbl.custom_minimum_size = Vector2(88, 0)
+	_sel_lbl.custom_minimum_size = Vector2(110, 0)
 	_sel_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_tbtn(pr, UI.tx("Size -", "حجم -"), UI.CARD2, _scale.bind(-0.1), 17, 78)
-	_tbtn(pr, UI.tx("Size +", "حجم +"), UI.CARD2, _scale.bind(0.1), 17, 78)
-	_tbtn(pr, UI.tx("Turn <", "لفّ <"), UI.CARD2, _rot.bind(-15.0), 17, 78)
-	_tbtn(pr, UI.tx("Turn >", "لفّ >"), UI.CARD2, _rot.bind(15.0), 17, 78)
+	_tbtn(pr, UI.tx("< Prev", "السابق >"), Color(0.16, 0.34, 0.56), _cycle.bind(-1), 17, 90)
+	_tbtn(pr, UI.tx("Next >", "< التالي"), Color(0.16, 0.34, 0.56), _cycle.bind(1), 17, 90)
 	_multi_btn = _tbtn(pr, UI.tx("Multi", "متعدد"), UI.CARD2, _toggle_multi, 17, 84)
 	_tbtn(pr, UI.tx("All", "الكل"), UI.CARD2, _select_all, 17, 64)
 	_tbtn(pr, UI.tx("Reset", "إعادة"), UI.CARD2, _reset_one, 17, 80)
 	_tbtn(pr, UI.tx("Move bar", "انقل الشريط"), Color(0.16, 0.34, 0.56), func():
 		_pill_at = (_pill_at + 1) % 3
 		_place_pill(), 17, 120)
+	_tbtn(pb, UI.tx("Size -", "حجم -"), UI.CARD2, _scale.bind(-0.1), 17, 78)
+	_tbtn(pb, UI.tx("Size +", "حجم +"), UI.CARD2, _scale.bind(0.1), 17, 78)
+	_tbtn(pb, UI.tx("Turn <", "لفّ <"), UI.CARD2, _rot.bind(-15.0), 17, 78)
+	_tbtn(pb, UI.tx("Turn >", "لفّ >"), UI.CARD2, _rot.bind(15.0), 17, 78)
+	for nd in [["◀", -1.0, 0.0], ["▶", 1.0, 0.0], ["▲", 0.0, -1.0], ["▼", 0.0, 1.0]]:
+		_tbtn(pb, nd[0], Color(0.3, 0.3, 0.45), _nudge.bind(nd[1], nd[2]), 20, 56)
 	_place_pill()
 	_build_slots()
 	_sel_text()
@@ -582,6 +592,36 @@ func _rot(d: float) -> void:
 	for t in _targets():
 		var e := HudLayout.entry(t)
 		e["rot"] = float(e["rot"]) + d
+		HudLayout.set_entry(t, e)
+		HudLayout.place(_mock[t], t)
+
+
+## pick the next / previous button (reaches the ones that are covered or too close to grab)
+func _cycle(d: int) -> void:
+	var ids: Array = []
+	for id in HudLayout.ORDER:
+		if _mock.has(id):
+			ids.append(id)
+	if ids.is_empty():
+		return
+	var cur := -1
+	for k in _selset:
+		cur = ids.find(k)
+		break
+	var n := ids.size()
+	var nx: int = (cur + d + n) % n if cur >= 0 else (0 if d > 0 else n - 1)
+	_selset.clear()
+	_selset[ids[nx]] = true
+	_style_all()
+	_sel_text()
+
+
+## small steps with arrows: fine placement of a selected button
+func _nudge(dx: float, dy: float) -> void:
+	for t in _targets():
+		var e := HudLayout.entry(t)
+		e["fx"] = float(e["fx"]) + dx * 0.006
+		e["fy"] = float(e["fy"]) + dy * 0.01
 		HudLayout.set_entry(t, e)
 		HudLayout.place(_mock[t], t)
 
