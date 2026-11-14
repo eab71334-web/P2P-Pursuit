@@ -71,7 +71,16 @@ func _ready() -> void:
 		if _gx >= 0.0:
 			_guides.draw_line(Vector2(_gx * vsz.x, 0), Vector2(_gx * vsz.x, vsz.y), Color(0.3, 0.9, 1.0, 0.8), 2.0)
 		if _gy >= 0.0:
-			_guides.draw_line(Vector2(0, _gy * vsz.y), Vector2(vsz.x, _gy * vsz.y), Color(0.3, 0.9, 1.0, 0.8), 2.0))
+			_guides.draw_line(Vector2(0, _gy * vsz.y), Vector2(vsz.x, _gy * vsz.y), Color(0.3, 0.9, 1.0, 0.8), 2.0)
+		var sid := _sel_id()
+		if sid != "":
+			var c: Control = _mock[sid]
+			var top := c.get_global_transform() * Vector2(c.size.x * 0.5, 0.0)
+			var hp := _handle_pos(sid)
+			_guides.draw_line(top, hp, Color(1, 0.7, 0.2, 0.9), 2.0)
+			_guides.draw_circle(hp, 15.0, Color(0.06, 0.07, 0.1, 0.95))
+			_guides.draw_arc(hp, 15.0, 0.0, TAU, 28, Color(1, 0.7, 0.2, 1.0), 2.5)
+			_guides.draw_arc(hp, 7.0, -2.4, 1.0, 14, Color(1, 0.7, 0.2, 1.0), 2.5))
 	add_child(_guides)
 	_build_mocks()
 	_intro_mocks()
@@ -651,6 +660,19 @@ func _hit(pos: Vector2) -> String:
 	return ""
 
 
+func _sel_id() -> String:
+	var ids: Array = _selset.keys()
+	if ids.is_empty() or not _mock.has(ids[ids.size() - 1]):
+		return ""
+	return ids[ids.size() - 1]
+
+
+## where the turn handle sits: just above the top edge of the button, following its rotation and size
+func _handle_pos(id: String) -> Vector2:
+	var c: Control = _mock[id]
+	return c.get_global_transform() * Vector2(c.size.x * 0.5, -34.0 / maxf(0.3, c.get_global_transform().get_scale().y))
+
+
 func _centre(id: String) -> Vector2:
 	var c: Control = _mock[id]
 	return c.get_global_transform() * (c.size * 0.5)
@@ -678,6 +700,7 @@ func _select(id: String) -> void:
 # ---- touch: every finger drags its own button (so several can be moved at once); two fingers on one button
 # pinch (size) and twist (rotation); with "Multi" on, selected buttons move / resize / turn together.
 func _process(delta: float) -> void:
+	_guides.queue_redraw()
 	if _top == null or not _top.visible:
 		return
 	_idle += delta
@@ -717,21 +740,28 @@ func _input(event: InputEvent) -> void:
 func _ptr_down(idx: int, pos: Vector2) -> void:
 	if _tg != null and _tg.visible and _tg.get_global_rect().grow(8).has_point(pos):
 		return
-	var id := _hit(pos)
-	if id == "":
-		return
-	# a second finger on the same button = pinch / twist
+	# a second finger anywhere while one finger holds a button = pinch (size) + twist (rotation) of that button
 	for k in _ptrs:
-		if k != idx and _ptrs[k]["id"] == id and not _pinch.has("a"):
+		if k != idx and not _pinch.has("a") and not _ptrs[k].get("rot", false):
+			var id2: String = _ptrs[k]["id"]
 			var o: Vector2 = _ptrs[k]["pos"]
 			var d := pos - o
 			_pinch = {"a": k, "b": idx, "d0": maxf(d.length(), 20.0), "ang0": d.angle(), "mid": (pos + o) * 0.5, "base": {}}
-			if not _selset.has(id):
-				_select(id)
+			if not _selset.has(id2):
+				_select(id2)
 			for t in _targets():
 				_pinch["base"][t] = HudLayout.entry(t)
-			_ptrs[idx] = {"id": id, "pos": pos, "grab": Vector2.ZERO}
+			_ptrs[idx] = {"id": id2, "pos": pos, "grab": Vector2.ZERO}
 			return
+	# the round handle above the selected button: drag it to turn the button
+	if _selset.size() >= 1 and _sel_id() != "" and _handle_pos(_sel_id()).distance_to(pos) < 34.0:
+		_push_undo()
+		_fade_bars(true)
+		_ptrs[idx] = {"id": _sel_id(), "pos": pos, "grab": Vector2.ZERO, "rot": true}
+		return
+	var id := _hit(pos)
+	if id == "":
+		return
 	_select(id)
 	_push_undo()
 	_fade_bars(true)
@@ -758,6 +788,21 @@ func _ptr_move(idx: int, pos: Vector2) -> void:
 		return
 	_ptrs[idx]["pos"] = pos
 	var vs := get_viewport_rect().size
+	if _ptrs[idx].get("rot", false):
+		var rid: String = _ptrs[idx]["id"]
+		var a := rad_to_deg((pos - _centre(rid)).angle() + PI * 0.5)
+		a = wrapf(a, -180.0, 180.0)
+		for q in [-180.0, -135.0, -90.0, -45.0, 0.0, 45.0, 90.0, 135.0, 180.0]:
+			if absf(a - q) < 4.0:
+				a = q
+		var cur := float(HudLayout.entry(rid)["rot"])
+		var dd := wrapf(a - cur, -180.0, 180.0)
+		for t in (_targets() if _selset.has(rid) else [rid]):
+			var e := HudLayout.entry(t)
+			e["rot"] = float(e["rot"]) + dd
+			HudLayout.set_entry(t, e)
+			HudLayout.place(_mock[t], t)
+		return
 	if _pinch.has("a"):
 		if not (_ptrs.has(_pinch["a"]) and _ptrs.has(_pinch["b"])):
 			return
