@@ -12,6 +12,15 @@ var _pill: Control
 var _pill_at := 0
 var _pill_open := false
 var _pill_k := 1.0
+const NEUTRAL := Color(0.2, 0.23, 0.32)
+const DANGER := Color(0.6, 0.17, 0.17)
+const OKC := Color(0.18, 0.48, 0.28)
+var _undo: Array = []
+var _last_push := 0
+var _top: Control
+var _guides: Control
+var _gx := -1.0
+var _gy := -1.0
 var _pp := {}
 var _pp_base := {}
 var _chip: Button
@@ -49,9 +58,20 @@ func _ready() -> void:
 	_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_layer)
+	_guides = Control.new()
+	_guides.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_guides.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_guides.draw.connect(func():
+		var vsz := _guides.size
+		if _gx >= 0.0:
+			_guides.draw_line(Vector2(_gx * vsz.x, 0), Vector2(_gx * vsz.x, vsz.y), Color(0.3, 0.9, 1.0, 0.8), 2.0)
+		if _gy >= 0.0:
+			_guides.draw_line(Vector2(0, _gy * vsz.y), Vector2(vsz.x, _gy * vsz.y), Color(0.3, 0.9, 1.0, 0.8), 2.0))
+	add_child(_guides)
 	_build_mocks()
 	# ---- top strip: exit | title | layouts | save | delete | done
 	var top := PanelContainer.new()
+	_top = top
 	var tsb := StyleBoxFlat.new()
 	tsb.bg_color = Color(0.055, 0.065, 0.095, 0.98)
 	tsb.border_color = UI.ACCENT
@@ -97,9 +117,10 @@ func _ready() -> void:
 	var row2 := HBoxContainer.new()
 	row2.add_theme_constant_override("separation", 10)
 	tv.add_child(row2)
-	_tbtn(row, UI.tx("Exit", "خروج"), Color(0.42, 0.16, 0.16), _exit, 18, 92)
-	_tbtn(row, UI.tx("+ / -  Buttons", "إضافة / حذف أزرار"), Color(0.16, 0.34, 0.56), _open_picker, 18, 170)
-	_more_btn = _tbtn(row, "", Color(0.3, 0.3, 0.45), func():
+	_tbtn(row, UI.tx("✕ Exit", "✕ خروج"), DANGER, _exit, 18, 92)
+	_tbtn(row, UI.tx("＋ Add / remove", "＋ إضافة / حذف أزرار"), NEUTRAL, _open_picker, 18, 170)
+	_more_btn = _tbtn(row, "", NEUTRAL, func():
+		_push_undo()
 		if HudLayout.is_on_screen("c_more"):
 			HudLayout.remove_button("c_more")
 		else:
@@ -139,14 +160,15 @@ func _ready() -> void:
 	_slot_bar = HBoxContainer.new()
 	_slot_bar.add_theme_constant_override("separation", 6)
 	_slot_scroll.add_child(_slot_bar)
-	_tbtn(row2, UI.tx("Hide bars", "إخفاء الشريط"), Color(0.3, 0.3, 0.45), func(): _hide_cb.call(), 17, 150)
-	_tbtn(row, UI.tx("Reset ALL", "إعادة الكل للأصل"), Color(0.5, 0.25, 0.12), _reset_all_ask, 17, 170)
+	_tbtn(row2, UI.tx("▤ Hide bars", "▤ إخفاء الشريط"), NEUTRAL, func(): _hide_cb.call(), 17, 150)
+	_tbtn(row, UI.tx("↶ Undo", "↶ تراجع"), NEUTRAL, _do_undo, 17, 110)
+	_tbtn(row, UI.tx("↺ Reset ALL", "↺ إعادة الكل للأصل"), DANGER, _reset_all_ask, 17, 170)
 	var sp2 := Control.new()
 	sp2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(sp2)
-	_tbtn(row, UI.tx("Save", "حفظ"), Color(0.18, 0.48, 0.28), _save_slot, 18, 90)
-	_tbtn(row, UI.tx("Delete", "مسح"), Color(0.45, 0.2, 0.2), _del_slot, 18, 90)
-	_tbtn(row, UI.tx("Done", "تم"), UI.ACCENT, _done, 20, 90)
+	_tbtn(row, UI.tx("▣ Save", "▣ حفظ"), OKC, _save_slot, 18, 90)
+	_tbtn(row, UI.tx("✕ Delete", "✕ مسح"), DANGER, _del_slot, 18, 90)
+	_tbtn(row, UI.tx("✓ Done", "✓ تم"), UI.ACCENT, _done, 20, 90)
 	# ---- hint under the strip
 	var hint := PanelContainer.new()
 	hint.add_theme_stylebox_override("panel", UI.sb(Color(0, 0, 0, 0.45), 12))
@@ -197,23 +219,23 @@ func _ready() -> void:
 	_sel_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_sel_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_sel_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_tbtn(pr, UI.tx("< Prev", "السابق >"), Color(0.16, 0.34, 0.56), _cycle.bind(-1), 17, 90)
-	_tbtn(pr, UI.tx("Next >", "< التالي"), Color(0.16, 0.34, 0.56), _cycle.bind(1), 17, 90)
+	_tbtn(pr, UI.tx("< Prev", "السابق >"), NEUTRAL, _cycle.bind(-1), 17, 90)
+	_tbtn(pr, UI.tx("Next >", "< التالي"), NEUTRAL, _cycle.bind(1), 17, 90)
 	_multi_btn = _tbtn(pr, UI.tx("Multi", "متعدد"), UI.CARD2, _toggle_multi, 17, 84)
 	_tbtn(pr, UI.tx("All", "الكل"), UI.CARD2, _select_all, 17, 64)
 	_tbtn(pr, UI.tx("Reset", "إعادة"), UI.CARD2, _reset_one, 17, 80)
-	_tbtn(pr, UI.tx("Move bar", "انقل الشريط"), Color(0.16, 0.34, 0.56), func():
+	_tbtn(pr, UI.tx("⇄ Move bar", "⇄ انقل الشريط"), NEUTRAL, func():
 		_pill_at = (_pill_at + 1) % 3
 		_place_pill(), 17, 120)
-	_tbtn(pb, UI.tx("Size -", "حجم -"), UI.CARD2, _scale.bind(-0.1), 17, 78)
-	_tbtn(pb, UI.tx("Size +", "حجم +"), UI.CARD2, _scale.bind(0.1), 17, 78)
-	_tbtn(pb, UI.tx("Turn <", "لفّ <"), UI.CARD2, _rot.bind(-15.0), 17, 78)
-	_tbtn(pb, UI.tx("Turn >", "لفّ >"), UI.CARD2, _rot.bind(15.0), 17, 78)
+	_tbtn(pb, UI.tx("－ Size", "－ حجم"), UI.CARD2, _scale.bind(-0.1), 17, 78)
+	_tbtn(pb, UI.tx("＋ Size", "＋ حجم"), UI.CARD2, _scale.bind(0.1), 17, 78)
+	_tbtn(pb, UI.tx("↺ Turn", "↺ لفّ"), UI.CARD2, _rot.bind(-15.0), 17, 78)
+	_tbtn(pb, UI.tx("↻ Turn", "↻ لفّ"), UI.CARD2, _rot.bind(15.0), 17, 78)
 	for nd in [["◀", -1.0, 0.0], ["▶", 1.0, 0.0], ["▲", 0.0, -1.0], ["▼", 0.0, 1.0]]:
-		_tbtn(pb, nd[0], Color(0.3, 0.3, 0.45), _nudge.bind(nd[1], nd[2]), 20, 56)
+		_tbtn(pb, nd[0], NEUTRAL, _nudge.bind(nd[1], nd[2]), 20, 56)
 	_tbtn(pb, UI.tx("Bar -", "الشريط -"), UI.CARD2, _pill_zoom.bind(-0.15), 16, 90)
 	_tbtn(pb, UI.tx("Bar +", "الشريط +"), UI.CARD2, _pill_zoom.bind(0.15), 16, 90)
-	_tbtn(pr, "✕", Color(0.42, 0.16, 0.16), func(): _pill_set(false), 18, 48)
+	_tbtn(pr, "✕", DANGER, func(): _pill_set(false), 18, 48)
 	_place_pill()
 	pill.gui_input.connect(func(ev: InputEvent):
 		if ev is InputEventMouseMotion and (ev.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
@@ -353,6 +375,7 @@ func _picker_fill() -> void:
 			b.disabled = locked
 			var bid: String = id
 			b.pressed.connect(func():
+				_push_undo()
 				if HudLayout.is_on_screen(bid):
 					HudLayout.remove_button(bid)
 					_say(UI.tx("%s removed" % HudLayout.names()[bid], "تم حذف %s" % HudLayout.names()[bid]))
@@ -574,6 +597,8 @@ func _ptr_down(idx: int, pos: Vector2) -> void:
 			_ptrs[idx] = {"id": id, "pos": pos, "grab": Vector2.ZERO}
 			return
 	_select(id)
+	_push_undo()
+	_fade_bars(true)
 	_ptrs[idx] = {"id": id, "pos": pos, "grab": pos - _centre(id)}
 
 
@@ -581,6 +606,11 @@ func _ptr_up(idx: int) -> void:
 	if not _ptrs.has(idx):
 		return
 	_ptrs.erase(idx)
+	if _ptrs.is_empty():
+		_fade_bars(false)
+		_gx = -1.0
+		_gy = -1.0
+		_guides.queue_redraw()
 	if _pinch.has("a") and (int(_pinch["a"]) == idx or int(_pinch["b"]) == idx):
 		_pinch = {}
 		for k in _ptrs:                         # the finger that stays keeps dragging
@@ -618,11 +648,69 @@ func _ptr_move(idx: int, pos: Vector2) -> void:
 		var e := HudLayout.entry(t)
 		e["fx"] = float(e["fx"]) + delta.x / vs.x
 		e["fy"] = float(e["fy"]) + delta.y / vs.y
+		if group.size() == 1:
+			_snap_guides(t, e)
 		HudLayout.set_entry(t, e)
 		HudLayout.place(_mock[t], t)
 
 
+func _push_undo(throttle := false) -> void:
+	var now := Time.get_ticks_msec()
+	if throttle and now - _last_push < 700:
+		return
+	_last_push = now
+	_undo.append(HudLayout.snapshot())
+	if _undo.size() > 40:
+		_undo.pop_front()
+
+
+func _do_undo() -> void:
+	if _undo.is_empty():
+		_say(UI.tx("Nothing to undo", "ما في شي للتراجع عنه"))
+		return
+	HudLayout.restore(_undo.pop_back())
+	_build_mocks()
+	_more_label()
+
+
+func _fade_bars(on: bool) -> void:
+	var a := 0.22 if on else 1.0
+	if _top != null:
+		_top.modulate.a = a
+	if _pill != null:
+		_pill.modulate.a = a
+
+
+func _snap_guides(id: String, e: Dictionary) -> void:
+	var tx := 0.007
+	var ty := 0.012
+	_gx = -1.0
+	_gy = -1.0
+	var xs: Array = [0.5]
+	var ys: Array = [0.5]
+	for k in _mock:
+		if k == id:
+			continue
+		var o := HudLayout.entry(k)
+		xs.append(float(o["fx"]))
+		ys.append(float(o["fy"]))
+	var bx := tx
+	for x in xs:
+		if absf(float(e["fx"]) - float(x)) < bx:
+			bx = absf(float(e["fx"]) - float(x))
+			e["fx"] = float(x)
+			_gx = float(x)
+	var by := ty
+	for y in ys:
+		if absf(float(e["fy"]) - float(y)) < by:
+			by = absf(float(e["fy"]) - float(y))
+			e["fy"] = float(y)
+			_gy = float(y)
+	_guides.queue_redraw()
+
+
 func _scale(d: float) -> void:
+	_push_undo(true)
 	for t in _targets():
 		var e := HudLayout.entry(t)
 		e["sc"] = float(e["sc"]) + d
@@ -631,6 +719,7 @@ func _scale(d: float) -> void:
 
 
 func _rot(d: float) -> void:
+	_push_undo(true)
 	for t in _targets():
 		var e := HudLayout.entry(t)
 		e["rot"] = float(e["rot"]) + d
@@ -660,6 +749,7 @@ func _cycle(d: int) -> void:
 
 ## small steps with arrows: fine placement of a selected button
 func _nudge(dx: float, dy: float) -> void:
+	_push_undo(true)
 	for t in _targets():
 		var e := HudLayout.entry(t)
 		e["fx"] = float(e["fx"]) + dx * 0.006
@@ -669,6 +759,7 @@ func _nudge(dx: float, dy: float) -> void:
 
 
 func _reset_one() -> void:
+	_push_undo()
 	for t in _targets():
 		HudLayout.reset(t)
 		HudLayout.place(_mock[t], t)
@@ -781,6 +872,7 @@ func _reset_all_ask() -> void:
 
 
 func _reset_all() -> void:
+	_push_undo()
 	HudLayout.reset()
 	_build_mocks()
 
