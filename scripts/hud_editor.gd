@@ -71,16 +71,7 @@ func _ready() -> void:
 		if _gx >= 0.0:
 			_guides.draw_line(Vector2(_gx * vsz.x, 0), Vector2(_gx * vsz.x, vsz.y), Color(0.3, 0.9, 1.0, 0.8), 2.0)
 		if _gy >= 0.0:
-			_guides.draw_line(Vector2(0, _gy * vsz.y), Vector2(vsz.x, _gy * vsz.y), Color(0.3, 0.9, 1.0, 0.8), 2.0)
-		var sid := _sel_id()
-		if sid != "":
-			var c: Control = _mock[sid]
-			var top := c.get_global_transform() * Vector2(c.size.x * 0.5, 0.0)
-			var hp := _handle_pos(sid)
-			_guides.draw_line(top, hp, Color(1, 0.7, 0.2, 0.9), 2.0)
-			_guides.draw_circle(hp, 15.0, Color(0.06, 0.07, 0.1, 0.95))
-			_guides.draw_arc(hp, 15.0, 0.0, TAU, 28, Color(1, 0.7, 0.2, 1.0), 2.5)
-			_guides.draw_arc(hp, 7.0, -2.4, 1.0, 14, Color(1, 0.7, 0.2, 1.0), 2.5))
+			_guides.draw_line(Vector2(0, _gy * vsz.y), Vector2(vsz.x, _gy * vsz.y), Color(0.3, 0.9, 1.0, 0.8), 2.0))
 	add_child(_guides)
 	_build_mocks()
 	_intro_mocks()
@@ -700,7 +691,6 @@ func _select(id: String) -> void:
 # ---- touch: every finger drags its own button (so several can be moved at once); two fingers on one button
 # pinch (size) and twist (rotation); with "Multi" on, selected buttons move / resize / turn together.
 func _process(delta: float) -> void:
-	_guides.queue_redraw()
 	if _top == null or not _top.visible:
 		return
 	_idle += delta
@@ -753,12 +743,6 @@ func _ptr_down(idx: int, pos: Vector2) -> void:
 				_pinch["base"][t] = HudLayout.entry(t)
 			_ptrs[idx] = {"id": id2, "pos": pos, "grab": Vector2.ZERO}
 			return
-	# the round handle above the selected button: drag it to turn the button
-	if _selset.size() >= 1 and _sel_id() != "" and _handle_pos(_sel_id()).distance_to(pos) < 34.0:
-		_push_undo()
-		_fade_bars(true)
-		_ptrs[idx] = {"id": _sel_id(), "pos": pos, "grab": Vector2.ZERO, "rot": true}
-		return
 	var id := _hit(pos)
 	if id == "":
 		return
