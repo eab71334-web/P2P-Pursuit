@@ -6,6 +6,8 @@ extends Control
 var hud_editor_cb := Callable()
 var exit_cb := Callable()
 var steer_cb := Callable()
+var reset_cb := Callable()
+var photo_cb := Callable()
 var _confirm: Control
 var _tab := "controls"
 var _content: VBoxContainer
@@ -28,13 +30,13 @@ func _ready() -> void:
 	var cw := minf(880.0, vs.x - 24.0)
 	var ch := minf(520.0, vs.y - 20.0)
 	card.custom_minimum_size = Vector2(cw, ch)
+	card.add_theme_stylebox_override("panel", UI.sb(Color(0.07, 0.075, 0.1, 0.98), 20, Color(1, 1, 1, 0.14), 2))
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	card.add_child(v)
 	var t := UI.lbl(v, UI.tx("MENU", "القائمة"), 26, Color.WHITE, false)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var mid := HBoxContainer.new()
-	mid.layout_direction = Control.LAYOUT_DIRECTION_LTR
 	mid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	mid.add_theme_constant_override("separation", 10)
 	v.add_child(mid)
@@ -112,10 +114,25 @@ func _seg(opts: Array, cur, cb: Callable) -> Control:
 
 
 func _row(title: String, ctl: Control, hint := "") -> void:
-	UI.lbl(_content, title, 17, UI.TXT, false)
+	var pc := PanelContainer.new()
+	pc.add_theme_stylebox_override("panel", UI.sb(Color(1, 1, 1, 0.045), 14))
+	var m := MarginContainer.new()
+	for k in ["left", "right", "top", "bottom"]:
+		m.add_theme_constant_override("margin_" + k, 10)
+	pc.add_child(m)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 6)
+	m.add_child(vb)
+	UI.lbl(vb, title, 18, UI.TXT, false)
 	if hint != "":
-		UI.lbl(_content, hint, 13, UI.TXT2, true)
-	_content.add_child(ctl)
+		UI.lbl(vb, hint, 13, UI.TXT2, true)
+	vb.add_child(ctl)
+	_content.add_child(pc)
+
+
+func _big(text: String, col: Color, cb: Callable) -> void:
+	var b := UI.btn(_content, text, col, cb, 20, Vector2(0, 56))
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 
 func _near(v: float, opts: Array) -> float:
@@ -132,10 +149,9 @@ func _onoff() -> Array:
 
 func _tab_controls() -> void:
 	if hud_editor_cb.is_valid():
-		var e := UI.btn(_content, UI.tx("Customise buttons", "تخصيص الأزرار"), Color(0.16, 0.34, 0.56), func():
+		_big(UI.tx("Customise buttons", "تخصيص الأزرار"), Color(0.16, 0.34, 0.56), func():
 			queue_free()
-			hud_editor_cb.call(), 20, Vector2(0, 52))
-		e.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			hud_editor_cb.call())
 	var sm := [["buttons", UI.tx("Buttons", "أزرار")], ["wheel", UI.tx("Wheel", "مقود")], ["wheel360", UI.tx("Wheel 360", "مقود 360")]]
 	var cur: String = Profile.steer_mode if Profile.steer_mode != "" else "buttons"
 	_row(UI.tx("Steering (touch)", "طريقة التوجيه (اللمس)"), _seg(sm, cur, func(x):
@@ -146,12 +162,8 @@ func _tab_controls() -> void:
 	_row(UI.tx("Gamepad (PS4 / PS5 / Xbox)", "يد التحكم (PS4 / PS5 / Xbox)"),
 		_seg([["auto", UI.tx("Auto", "تلقائي")], ["show", UI.tx("Show", "إظهار")], ["hide", UI.tx("Hide", "إخفاء")]], Controls.touch_mode, func(x): Controls.set_touch_mode(x)),
 		UI.tx("Touch buttons: Auto hides them while a gamepad is connected.", "أزرار اللمس: تلقائي يخفيها عند توصيل يد تحكم."))
-	var pb := UI.btn(_content, UI.tx("Gamepad buttons", "أزرار اليد"), Color(0.3, 0.3, 0.45), func():
-		get_tree().root.add_child(PadEditor.new()), 20, Vector2(0, 52))
-	pb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_row(UI.tx("Vibration", "الاهتزاز"), _seg(_onoff(), Gfx.haptics, func(x):
-		Gfx.haptics = x
-		Gfx.save()))
+	_big(UI.tx("Gamepad buttons", "أزرار اليد"), Color(0.3, 0.3, 0.45), func():
+		get_tree().root.add_child(PadEditor.new()))
 
 
 func _tab_graphics() -> void:
@@ -169,10 +181,6 @@ func _tab_graphics() -> void:
 	_row(UI.tx("Mirrors", "المرايا"), _seg([[0, UI.tx("Off", "إيقاف")], [1, UI.tx("Rear-view", "الأمامية")], [2, UI.tx("All", "الكل")]], Gfx.mirrors, func(x): Gfx.set_value("mirrors", x)))
 	_row(UI.tx("Anti-aliasing", "تنعيم الحواف"), _seg([[0, UI.tx("Off", "إيقاف")], [2, "2x"], [4, "4x"]], Gfx.msaa, func(x): Gfx.set_value("msaa", x)))
 	_row(UI.tx("Adaptive resolution", "دقة تلقائية"), _seg(_onoff(), Gfx.auto, func(x): Gfx.set_value("auto", x)))
-	_row(UI.tx("Show FPS counter", "عرض عدّاد الفريمات"), _seg(_onoff(), Gfx.show_fps, func(x):
-		Gfx.show_fps = x
-		Gfx.apply()
-		Gfx.save()))
 
 
 func _tab_sound() -> void:
@@ -188,7 +196,21 @@ func _tab_sound() -> void:
 
 
 func _tab_game() -> void:
-	UI.lbl(_content, UI.tx("To leave the race use the red button below. It always asks first.", "للخروج من السباق استخدم الزر الأحمر بالأسفل. يسأل دائماً قبل الخروج."), 14, UI.TXT2, true)
+	if reset_cb.is_valid():
+		_big(UI.tx("Reset car to the road", "إعادة السيارة للطريق"), Color(0.16, 0.34, 0.56), func():
+			queue_free()
+			reset_cb.call())
+	if photo_cb.is_valid():
+		_big(UI.tx("Take a photo", "التقاط صورة"), Color(0.3, 0.3, 0.45), func():
+			queue_free()
+			photo_cb.call())
+	_row(UI.tx("Show FPS counter", "عرض عدّاد الفريمات"), _seg(_onoff(), Gfx.show_fps, func(x):
+		Gfx.show_fps = x
+		Gfx.apply()
+		Gfx.save()))
+	_row(UI.tx("Vibration", "الاهتزاز"), _seg(_onoff(), Gfx.haptics, func(x):
+		Gfx.haptics = x
+		Gfx.save()))
 
 
 func _ask_exit() -> void:

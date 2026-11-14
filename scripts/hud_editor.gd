@@ -7,6 +7,8 @@ extends Control
 signal closed
 
 var _mock := {}
+var _os: HSlider
+var _syncing := false
 var _selset := {}               # selected button ids
 var _multi := false
 var _multi_btn: Button
@@ -52,23 +54,49 @@ func _ready() -> void:
 	top.add_theme_stylebox_override("panel", tsb)
 	top.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	add_child(top)
+	# small tab that hides the top strip, so buttons under it (Reset, Emote...) can be grabbed too
+	var tg := Button.new()
+	tg.text = UI.tx("Hide bar", "إخفاء الشريط")
+	tg.focus_mode = Control.FOCUS_NONE
+	tg.add_theme_font_size_override("font_size", 15)
+	tg.anchor_left = 0.5
+	tg.anchor_right = 0.5
+	tg.offset_left = -70
+	tg.offset_right = 70
+	tg.offset_top = 76
+	tg.offset_bottom = 104
+	tg.add_theme_stylebox_override("normal", UI.sb(Color(0.055, 0.065, 0.095, 0.95), 8, UI.ACCENT, 1))
+	tg.add_theme_stylebox_override("hover", UI.sb(Color(0.1, 0.11, 0.15, 0.95), 8, UI.ACCENT, 1))
+	tg.add_theme_stylebox_override("pressed", UI.sb(Color(0.1, 0.11, 0.15, 0.95), 8, UI.ACCENT, 1))
+	tg.pressed.connect(func():
+		top.visible = not top.visible
+		tg.text = UI.tx("Hide bar", "إخفاء الشريط") if top.visible else UI.tx("Show bar", "إظهار الشريط")
+		tg.offset_top = 76 if top.visible else 4
+		tg.offset_bottom = 104 if top.visible else 32)
+	add_child(tg)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	top.add_child(row)
 	_tbtn(row, UI.tx("Exit", "خروج"), Color(0.42, 0.16, 0.16), _exit, 18, 92)
 	_tbtn(row, UI.tx("+ / -  Buttons", "إضافة / حذف أزرار"), Color(0.16, 0.34, 0.56), _open_picker, 18, 170)
-	var oc := UI.lbl(row, UI.tx("Opacity", "الشفافية"), 15, UI.TXT2, false)
+	var oc := UI.lbl(row, UI.tx("Opacity (selected)", "شفافية المحدد"), 15, UI.TXT2, false)
 	oc.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var os := HSlider.new()
-	os.min_value = 0.2
-	os.max_value = 1.0
-	os.step = 0.05
-	os.value = HudLayout.get_opacity()
-	os.custom_minimum_size = Vector2(130, 30)
-	os.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(os)
-	os.value_changed.connect(func(v: float):
-		HudLayout.set_opacity(v)
+	_os = HSlider.new()
+	_os.min_value = 0.15
+	_os.max_value = 1.0
+	_os.step = 0.05
+	_os.value = 1.0
+	_os.editable = false
+	_os.custom_minimum_size = Vector2(130, 30)
+	_os.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(_os)
+	_os.value_changed.connect(func(v: float):
+		if _syncing:
+			return
+		for t in _targets():
+			var e := HudLayout.entry(t)
+			e["al"] = v
+			HudLayout.set_entry(t, e)
 		_style_all())
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -231,6 +259,8 @@ func _picker_fill() -> void:
 		g.add_theme_constant_override("v_separation", 8)
 		_picker_box.add_child(g)
 		for id in sec[1]:
+			if not HudLayout.exists(id):
+				continue
 			var on := HudLayout.is_on_screen(id)
 			var locked: bool = HudLayout.LOCKED.has(id)
 			var b := Button.new()
@@ -358,6 +388,17 @@ func _say(t: String) -> void:
 	_info.text = t
 
 
+func _sync_alpha() -> void:
+	if _os == null:
+		return
+	var ts := _targets()
+	_os.editable = ts.size() > 0
+	if ts.size() > 0:
+		_syncing = true
+		_os.value = float(HudLayout.entry(ts[0]).get("al", 1.0))
+		_syncing = false
+
+
 func _style_all() -> void:
 	for id in _mock:
 		var sb := StyleBoxFlat.new()
@@ -367,7 +408,8 @@ func _style_all() -> void:
 		sb.border_color = Color(1.0, 0.8, 0.2) if on else Color(1, 1, 1, 0.55)
 		sb.set_border_width_all(4 if on else 3)
 		(_mock[id] as Panel).add_theme_stylebox_override("panel", sb)
-		(_mock[id] as Panel).modulate.a = HudLayout.get_opacity()
+		(_mock[id] as Panel).modulate.a = float(HudLayout.entry(id).get("al", 1.0))
+	_sync_alpha()
 
 
 func _hit(pos: Vector2) -> String:

@@ -16,6 +16,9 @@ const DEFAULTS := {
 	"c_lights": {"fx": 0.054, "fy": 0.564, "w": 110.0, "h": 68.0},
 	"c_wipers": {"fx": 0.146, "fy": 0.564, "w": 110.0, "h": 68.0},
 	"c_more": {"fx": 0.238, "fy": 0.669, "w": 110.0, "h": 68.0},
+	"c_drink": {"fx": 0.238, "fy": 0.564, "w": 110.0, "h": 68.0},
+	"c_mirl": {"fx": 0.054, "fy": 0.669, "w": 110.0, "h": 68.0},
+	"c_mirr": {"fx": 0.146, "fy": 0.669, "w": 110.0, "h": 68.0},
 	# the rest of the race screen (centres / sizes as the game lays them out at 1280x720)
 	"reset": {"fx": 0.936, "fy": 0.051, "w": 136.0, "h": 46.0},
 	"emote": {"fx": 0.936, "fy": 0.129, "w": 136.0, "h": 46.0},
@@ -38,13 +41,12 @@ const DEFAULTS := {
 }
 ## other buttons of the race screen that the player may switch off (they keep their own place; no moving)
 const HIDEABLE := ["reset", "emote", "punch", "stickers", "photo", "menu", "hudcfg", "radio_prev", "radio_name", "radio_next", "msize", "mnear", "map", "beacon", "g_left", "g_fwd", "g_right", "g_stop"]
-static var opacity := 1.0               # transparency of every driving button (0.2 .. 1)
 ## the six-plus extras live in the "More" page by default; the player can ADD them to the screen as free buttons
 ## (default spot below, then he drags them wherever he wants).
 ## gas and brake cannot be removed (touch driving needs them)
 const LOCKED := ["gas", "brake", "reset", "emote", "stickers", "menu"]
-const EXTRA := ["c_drink", "c_mirl", "c_mirr", "p2_haz", "p2_flash", "p2_hb", "p2_win", "p2_ac", "p2_dome", "p2_greet", "c_kind"]
-const ESSENTIAL := ["gas", "brake", "c_horn", "c_sigl", "c_sigr", "c_lights", "c_wipers", "c_more"]
+const EXTRA := ["p2_haz", "p2_flash", "p2_hb", "p2_win", "p2_ac", "p2_dome", "p2_greet", "c_kind"]
+const ESSENTIAL := ["gas", "brake", "c_horn", "c_sigl", "c_sigr", "c_lights", "c_wipers", "c_more", "c_drink", "c_mirl", "c_mirr"]
 const ORDER := ["gas", "brake", "c_horn", "c_sigl", "c_sigr", "c_lights", "c_wipers", "c_more",
 	"reset", "emote", "punch", "stickers", "photo", "menu", "hudcfg", "radio_prev", "radio_name", "radio_next", "msize", "mnear", "map", "beacon", "g_left", "g_fwd", "g_right", "g_stop",
 	"c_drink", "c_mirl", "c_mirr", "p2_haz", "p2_flash", "p2_hb", "p2_win", "p2_ac", "p2_dome", "p2_greet", "c_kind"]
@@ -65,8 +67,8 @@ static func names() -> Dictionary:
 		"c_sigl": UI.tx("< SIGNAL", "< إشارة"), "c_sigr": UI.tx("SIGNAL >", "إشارة >"),
 		"c_lights": UI.tx("LIGHTS", "إضاءة"), "c_wipers": UI.tx("WIPER", "مساحات"), "c_more": UI.tx("MORE >>", "المزيد >>"),
 		"reset": UI.tx("Reset car", "إعادة السيارة"), "emote": UI.tx("Emote", "حركة"), "punch": UI.tx("Punch", "لكمة"),
-		"stickers": UI.tx("Stickers", "ملصقات"), "photo": UI.tx("Photo", "صورة"), "menu": UI.tx("Menu", "القائمة"), "hudcfg": UI.tx("Buttons", "الأزرار"), "radio_prev": UI.tx("Radio <", "راديو <"), "radio_name": UI.tx("Radio name", "اسم الراديو"), "radio_next": UI.tx("Radio >", "راديو >"),
-		"msize": UI.tx("Map size", "حجم الخريطة"), "mnear": UI.tx("Map zoom", "تقريب الخريطة"), "map": UI.tx("Map", "الخريطة"), "beacon": UI.tx("Signal", "إشارة الخريطة"),
+		"stickers": UI.tx("Stickers", "ملصقات"), "photo": UI.tx("Photo", "صورة"), "menu": UI.tx("Menu", "القائمة"), "hudcfg": UI.tx("Buttons", "الأزرار"), "radio_prev": UI.tx("Radio <", "راديو <"), "radio_name": UI.tx("Radio", "راديو"), "radio_next": UI.tx("Radio >", "راديو >"),
+		"msize": UI.tx("SIZE", "الحجم"), "mnear": UI.tx("NEAR", "قرّب"), "map": UI.tx("MAP", "الخريطة"), "beacon": UI.tx("Signal", "إشارة"),
 		"g_left": UI.tx("Say: left", "قل: يسار"), "g_fwd": UI.tx("Say: forward", "قل: قدام"), "g_right": UI.tx("Say: right", "قل: يمين"), "g_stop": UI.tx("Say: stop", "قل: قف"),
 		"c_drink": UI.tx("DRINK", "اشرب"), "c_mirl": UI.tx("MIRROR L", "مرآة يسار"), "c_mirr": UI.tx("MIRROR R", "مرآة يمين"),
 		"p2_haz": UI.tx("HAZARD", "طوارئ"), "p2_flash": UI.tx("HIGH BEAM", "ضوء بعيد"), "p2_hb": UI.tx("HANDBRAKE", "فرامل يد"),
@@ -93,18 +95,16 @@ static func _load() -> void:
 			_slots[i] = {"filled": bool(cf.get_value(sec, "filled", false)), "data": cf.get_value(sec, "data", {}), "hidden": cf.get_value(sec, "hidden", {})}
 	active = clampi(active, 0, _slots.size() - 1)
 	intro_seen = bool(cf.get_value("meta", "intro_seen", false))
-	opacity = clampf(float(cf.get_value("meta", "opacity", 1.0)), 0.2, 1.0)
 	_hidden = cf.get_value("working", "hidden", {})
 	for id in ORDER:
 		if cf.has_section(id):
 			_data[id] = {"fx": float(cf.get_value(id, "fx", 0.5)), "fy": float(cf.get_value(id, "fy", 0.5)),
-				"sc": float(cf.get_value(id, "sc", 1.0)), "rot": float(cf.get_value(id, "rot", 0.0))}
+				"sc": float(cf.get_value(id, "sc", 1.0)), "rot": float(cf.get_value(id, "rot", 0.0)), "al": float(cf.get_value(id, "al", 1.0))}
 
 
 static func save() -> void:
 	var cf := ConfigFile.new()
 	cf.set_value("meta", "intro_seen", intro_seen)
-	cf.set_value("meta", "opacity", opacity)
 	cf.set_value("slots", "n", _slots.size())
 	cf.set_value("slots", "active", active)
 	for i in _slots.size():
@@ -119,15 +119,10 @@ static func save() -> void:
 	cf.save(SAVE)
 
 
-static func set_opacity(v: float) -> void:
+## transparency of ONE button (the editor sets it on the selected buttons)
+static func get_alpha(id: String) -> float:
 	_load()
-	opacity = clampf(v, 0.2, 1.0)
-	save()
-
-
-static func get_opacity() -> float:
-	_load()
-	return opacity
+	return clampf(float((_data[id] as Dictionary).get("al", 1.0)), 0.15, 1.0) if _data.has(id) else 1.0
 
 
 static func mark_intro() -> void:
@@ -151,10 +146,20 @@ static func entry(id: String) -> Dictionary:
 	if _data.has(id):
 		return (_data[id] as Dictionary).duplicate()
 	var d := _def(id)
-	return {"fx": d["fx"], "fy": d["fy"], "sc": 1.0, "rot": 0.0}
+	return {"fx": d["fx"], "fy": d["fy"], "sc": 1.0, "rot": 0.0, "al": 1.0}
+
+
+static var _real := {}                 # where the game really put each button on THIS screen (centre fractions + size)
+
+
+## does this button exist in the race the player is in (solo has no punch, drivers no gesture row ...)
+static func exists(id: String) -> bool:
+	return _real.is_empty() or _real.has(id) or EXTRA.has(id)
 
 
 static func _def(id: String) -> Dictionary:
+	if _real.has(id) and not EXTRA.has(id):
+		return _real[id]
 	if DEFAULTS.has(id):
 		return DEFAULTS[id]
 	var i := EXTRA.find(id)
@@ -169,6 +174,7 @@ static func set_entry(id: String, e: Dictionary) -> void:
 	e["fy"] = clampf(float(e["fy"]), 0.04, 0.96)
 	e["sc"] = clampf(float(e["sc"]), SC_MIN, SC_MAX)
 	e["rot"] = wrapf(float(e["rot"]), -180.0, 180.0)
+	e["al"] = clampf(float(e.get("al", 1.0)), 0.15, 1.0)
 	_data[id] = e
 	save()
 
@@ -179,7 +185,7 @@ static func reset(id := "") -> void:
 		_data.clear()
 		_hidden.clear()
 	elif EXTRA.has(id) and _data.has(id):
-		_data[id] = {"fx": _def(id)["fx"], "fy": _def(id)["fy"], "sc": 1.0, "rot": 0.0}      # stays on screen, back to its default spot
+		_data[id] = {"fx": _def(id)["fx"], "fy": _def(id)["fy"], "sc": 1.0, "rot": 0.0, "al": 1.0}      # stays on screen, back to its default spot
 	else:
 		_data.erase(id)
 	save()
@@ -220,6 +226,10 @@ static func apply_world(zones: Dictionary) -> void:
 			_orig[key] = {"al": z.anchor_left, "ar": z.anchor_right, "at": z.anchor_top, "ab": z.anchor_bottom,
 				"ol": z.offset_left, "or": z.offset_right, "ot": z.offset_top, "ob": z.offset_bottom,
 				"pv": z.pivot_offset, "sc": z.scale, "rot": z.rotation}
+			var P := z.get_viewport_rect().size
+			if P.x > 10.0 and P.y > 10.0:
+				_real[id] = {"fx": z.anchor_left + (z.offset_left + z.offset_right) * 0.5 / P.x, "fy": z.anchor_top + (z.offset_top + z.offset_bottom) * 0.5 / P.y,
+					"w": z.offset_right - z.offset_left, "h": z.offset_bottom - z.offset_top}
 		if is_removed(id):
 			z.visible = false
 			_hid[key] = true
@@ -260,6 +270,8 @@ static func is_added(id: String) -> bool:
 ## is the button part of the player's screen right now (what the editor shows)
 static func is_on_screen(id: String) -> bool:
 	_load()
+	if not exists(id):
+		return false
 	if ESSENTIAL.has(id) or HIDEABLE.has(id):
 		return not _hidden.has(id)
 	return _data.has(id)

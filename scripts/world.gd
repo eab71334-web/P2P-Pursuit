@@ -1455,23 +1455,16 @@ func _flip_hud() -> void:
 		ctl.set_meta("fl_a", ctl.anchor_left)
 
 
-var _alpha_applied := -1.0
-
-
 ## every frame: switched-off buttons stay off, and the player's transparency is applied to all driving buttons
 func _hud_tick() -> void:
 	for id in HudLayout.HIDEABLE:
 		if zones.has(id) and HudLayout.is_removed(id):
 			(zones[id] as Control).visible = false
-	var a := HudLayout.get_opacity()
-	if not is_equal_approx(a, _alpha_applied):
-		_alpha_applied = a
-		for k in zones:
-			(zones[k] as Control).modulate.a = a
-		if wheel_ui:
-			wheel_ui.modulate.a = a
-	elif wheel_ui and not is_equal_approx(wheel_ui.modulate.a, a):
-		wheel_ui.modulate.a = a
+	for k in zones:
+		var za := HudLayout.get_alpha(str(k))
+		var zc := zones[k] as Control
+		if not is_equal_approx(zc.modulate.a, za):
+			zc.modulate.a = za
 
 
 func _open_pause_menu() -> void:
@@ -1480,6 +1473,8 @@ func _open_pause_menu() -> void:
 	var pm := PauseMenu.new()
 	pm.hud_editor_cb = _open_hud_editor if my_role == "driver" else Callable()
 	pm.exit_cb = func(): Net.return_to_menu()
+	pm.reset_cb = _request_reset
+	pm.photo_cb = _take_photo
 	pm.steer_cb = func():
 		_apply_steer_mode()
 		_flip_hud()

@@ -41,14 +41,6 @@ func _build() -> void:
 		_seg(sm, Profile.steer_mode if Profile.steer_mode != "" else "buttons", func(v): Profile.steer_mode = v; Profile.save(); _rebuild()))
 	_row(UI.tx("Flip button sides", "عكس جهة الأزرار"), UI.tx("Swap left and right: steering and pedals change sides.", "يبدّل اليمين واليسار: التوجيه والدواسات يغيّرون مكانهم."),
 		_seg([["on", UI.tx("Flipped", "معكوس")], ["off", UI.tx("Normal", "عادي")]], "on" if Profile.hud_flip else "off", func(v): Profile.hud_flip = (v == "on"); Profile.save(); _rebuild()))
-	var ob := HSlider.new()
-	ob.min_value = 0.2
-	ob.max_value = 1.0
-	ob.step = 0.05
-	ob.value = HudLayout.get_opacity()
-	ob.custom_minimum_size = Vector2(260, 34)
-	ob.value_changed.connect(func(x: float): HudLayout.set_opacity(x))
-	_row(UI.tx("Button transparency", "شفافية الأزرار كلها"), UI.tx("Makes every driving button more or less see-through.", "يخلي كل أزرار السواقة أكثر أو أقل شفافية."), ob)
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 8)
 	UI.btn(hb, UI.tx("Customize", "تخصيص"), UI.ACCENT, func():

@@ -335,6 +335,12 @@ func _process(d: float) -> void:
 			elif step == 4 and t > 14.0:
 				step = 5; shot("hud_c")
 			elif step == 5 and t > 14.5:
+				step = 6
+				get_tree().current_scene._pause.queue_free()
+				get_tree().current_scene._open_hud_editor()
+			elif step == 6 and t > 16.5:
+				step = 7; shot("hud_d")
+			elif step == 7 and t > 17.5:
 				get_tree().quit()
 		"rpaint":
 			if step == 0 and t > 2.5:
