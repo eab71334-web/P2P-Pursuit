@@ -31,6 +31,7 @@ func _ready() -> void:
 	var ch := minf(520.0, vs.y - 20.0)
 	card.custom_minimum_size = Vector2(cw, ch)
 	card.add_theme_stylebox_override("panel", UI.sb(Color(0.07, 0.075, 0.1, 0.98), 20, Color(1, 1, 1, 0.14), 2))
+	card.layout_direction = Control.LAYOUT_DIRECTION_LOCALE      # Arabic: tabs on the right, like the language reads
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	card.add_child(v)

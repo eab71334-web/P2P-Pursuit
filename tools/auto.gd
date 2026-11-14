@@ -347,7 +347,9 @@ func _process(d: float) -> void:
 						e._cycle(1)
 			elif step == 7 and t > 17.2:
 				step = 8; shot("hud_d")
-			elif step == 8 and t > 18.5:
+			elif step == 8 and t > 22.0:
+				step = 9; shot("hud_e")
+			elif step == 9 and t > 23.0:
 				get_tree().quit()
 		"rpaint":
 			if step == 0 and t > 2.5:

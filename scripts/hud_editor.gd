@@ -18,6 +18,8 @@ const OKC := Color(0.18, 0.48, 0.28)
 var _undo: Array = []
 var _last_push := 0
 var _top: Control
+var _tg: Button
+var _idle := 0.0
 var _guides: Control
 var _gx := -1.0
 var _gy := -1.0
@@ -104,10 +106,12 @@ func _ready() -> void:
 	tg.text = UI.tx("Show bar", "إظهار الشريط")
 	var tgl := func():
 		top.visible = not top.visible
+		_idle = 0.0
 		_pill_refresh(top.visible)
 		tg.visible = not top.visible
 	tg.pressed.connect(tgl)
 	_hide_cb = tgl
+	_tg = tg
 	add_child(tg)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
@@ -410,6 +414,11 @@ func _tbtn(parent: Node, text: String, col: Color, cb: Callable, fs: int, w: flo
 		sbx.set_corner_radius_all(12)
 		sbx.content_margin_left = 34 if (ico != "" and text != "") else 8
 		sbx.content_margin_right = 8
+		sbx.border_width_bottom = 3
+		sbx.border_color = col.darkened(0.4)
+		sbx.shadow_size = 3
+		sbx.shadow_color = Color(0, 0, 0, 0.35)
+		sbx.shadow_offset = Vector2(0, 2)
 	if ico != "":
 		var ic := Ico.new(ico)
 		ic.layout_direction = Control.LAYOUT_DIRECTION_LTR
@@ -657,7 +666,19 @@ func _select(id: String) -> void:
 
 # ---- touch: every finger drags its own button (so several can be moved at once); two fingers on one button
 # pinch (size) and twist (rotation); with "Multi" on, selected buttons move / resize / turn together.
+func _process(delta: float) -> void:
+	if _top == null or not _top.visible:
+		return
+	_idle += delta
+	if _idle > 5.0 and _ptrs.is_empty() and not (_picker != null and is_instance_valid(_picker)):
+		_top.visible = false                       # the top strip tucks away by itself so the buttons under it can be reached
+		_tg.visible = true
+
+
 func _input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch or event is InputEventMouseButton:
+		if _top != null and _top.visible and _top.get_global_rect().has_point(event.position):
+			_idle = 0.0
 	if _pill_touch(event):
 		return
 	if _in_pill(get_viewport().get_mouse_position()) and event is InputEventMouseButton:
@@ -1056,7 +1077,12 @@ class Ico extends Control:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	func _draw() -> void:
-		var c := Color(1, 1, 1, 0.95)
+		draw_set_transform(Vector2(1, 1.5), 0.0, Vector2.ONE)
+		_shape(Color(0, 0, 0, 0.45))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		_shape(Color(1, 1, 1, 0.97))
+
+	func _shape(c: Color) -> void:
 		var w := 2.6
 		var m := Vector2(11, 11)
 		match kind:

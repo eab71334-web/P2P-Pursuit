@@ -2410,9 +2410,9 @@ func _build_hud() -> void:
 		cab_toast.modulate.a = 0.0
 		hud_root.add_child(cab_toast)
 	# radio (bottom centre): < station >   (tap the name to switch it off / on)
-	_make_zone("radio_prev", "<", 0.5, 1.0, -142, -60, -92, -14, 22, _radio_step.bind(-1))
-	_make_zone("radio_name", Radio.label(), 0.5, 1.0, -86, -60, 86, -14, 16, Radio.toggle)
-	_make_zone("radio_next", ">", 0.5, 1.0, 92, -60, 142, -14, 22, _radio_step.bind(1))
+	_make_zone("radio_prev", "<", 0.5, 1.0, -160, -70, -98, -12, 26, _radio_step.bind(-1))
+	_make_zone("radio_name", Radio.label(), 0.5, 1.0, -90, -70, 90, -12, 17, Radio.toggle)
+	_make_zone("radio_next", ">", 0.5, 1.0, 98, -70, 160, -12, 26, _radio_step.bind(1))
 	Radio.changed.connect(_update_radio_hud)
 	if show_touch:
 		_apply_steer_mode()
@@ -2427,12 +2427,12 @@ func _build_hud() -> void:
 			_make_zone("g_right", L.t("z_right"), 0.0, 1.0, 220, gy, 312, gy + 70, 18, _set_gesture.bind(3))
 			_make_zone("g_stop", L.t("z_stop"), 0.0, 1.0, 320, gy, 412, gy + 70, 18, _set_gesture.bind(4))
 		# map / signal cluster: bottom-right (above GAS/BRAKE when touch driving)
-		var cy := -222.0 if show_touch else -100.0
-		var bw := 80.0 if show_touch else 110.0
+		var cy := -234.0 if show_touch else -100.0
+		var bw := 98.0 if show_touch else 110.0
 		var n_btn := 3 if Net.ffa else 4
-		var gap := 6.0
+		var gap := 10.0
 		var x := -20.0 - (bw * n_btn + gap * (n_btn - 1))
-		var ch := 46.0 if show_touch else 70.0
+		var ch := 60.0 if show_touch else 70.0
 		_make_zone("msize", UI.tx("SIZE", "الحجم"), 1.0, 1.0, x, cy, x + bw, cy + ch, 16, _map_size)
 		x += bw + gap
 		_make_zone("mnear", UI.tx("NEAR", "قرّب"), 1.0, 1.0, x, cy, x + bw, cy + ch, 16, _map_near)
