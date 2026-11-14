@@ -11,6 +11,9 @@ var _os: HSlider
 var _pill: Control
 var _pill_at := 0
 var _pill_open := false
+var _pill_k := 1.0
+var _pp := {}
+var _pp_base := {}
 var _chip: Button
 var _hide_cb := Callable()
 var _more_btn: Button
@@ -202,6 +205,8 @@ func _ready() -> void:
 	_tbtn(pb, UI.tx("Turn >", "لفّ >"), UI.CARD2, _rot.bind(15.0), 17, 78)
 	for nd in [["◀", -1.0, 0.0], ["▶", 1.0, 0.0], ["▲", 0.0, -1.0], ["▼", 0.0, 1.0]]:
 		_tbtn(pb, nd[0], Color(0.3, 0.3, 0.45), _nudge.bind(nd[1], nd[2]), 20, 56)
+	_tbtn(pr, UI.tx("Bar -", "الشريط -"), UI.CARD2, _pill_zoom.bind(-0.15), 17, 100)
+	_tbtn(pr, UI.tx("Bar +", "الشريط +"), UI.CARD2, _pill_zoom.bind(0.15), 17, 100)
 	_tbtn(pr, "✕", Color(0.42, 0.16, 0.16), func(): _pill_set(false), 18, 48)
 	_place_pill()
 	pill.gui_input.connect(func(ev: InputEvent):
@@ -522,6 +527,10 @@ func _select(id: String) -> void:
 # ---- touch: every finger drags its own button (so several can be moved at once); two fingers on one button
 # pinch (size) and twist (rotation); with "Multi" on, selected buttons move / resize / turn together.
 func _input(event: InputEvent) -> void:
+	if _pill_touch(event):
+		return
+	if _in_pill(get_viewport().get_mouse_position()) and event is InputEventMouseButton:
+		return
 	if event is InputEventScreenTouch:
 		_touch_seen = true
 		_ptrs.erase(-1)           # the mouse press Godot emulates from the first touch arrives before it: drop it
@@ -660,6 +669,53 @@ func _reset_one() -> void:
 
 
 ## the tools bar sits where nothing is: middle of the screen, bottom-left, or under the top strip (button cycles)
+const PILL_MIN := 0.6
+const PILL_MAX := 1.6
+
+
+func _pill_zoom(d: float) -> void:
+	_pill_scale(_pill_k + d)
+
+
+func _pill_scale(k: float) -> void:
+	_pill_k = clampf(k, PILL_MIN, PILL_MAX)
+	if _pill != null:
+		(_pill as Control).pivot_offset = (_pill as Control).size * 0.5
+		(_pill as Control).scale = Vector2(_pill_k, _pill_k)
+
+
+func _in_pill(pos: Vector2) -> bool:
+	if _pill == null or not _pill.visible:
+		return false
+	var c := _pill as Control
+	return Rect2(Vector2.ZERO, c.size).has_point(c.get_global_transform().affine_inverse() * pos)
+
+
+## two fingers on the tools bar = pinch to resize it
+func _pill_touch(event: InputEvent) -> bool:
+	if event is InputEventScreenTouch:
+		var t := event as InputEventScreenTouch
+		if t.pressed and _in_pill(t.position):
+			_pp[t.index] = t.position
+			if _pp.size() == 2:
+				var ks := _pp.keys()
+				_pp_base = {"d": maxf((_pp[ks[0]] - _pp[ks[1]]).length(), 20.0), "k": _pill_k}
+			return true
+		if not t.pressed and _pp.has(t.index):
+			_pp.erase(t.index)
+			_pp_base = {}
+			return true
+	elif event is InputEventScreenDrag:
+		var d := event as InputEventScreenDrag
+		if _pp.has(d.index):
+			_pp[d.index] = d.position
+			if _pp.size() == 2 and not _pp_base.is_empty():
+				var ks := _pp.keys()
+				_pill_scale(float(_pp_base["k"]) * (_pp[ks[0]] - _pp[ks[1]]).length() / float(_pp_base["d"]))
+			return true
+	return false
+
+
 func _pill_set(on: bool) -> void:
 	_pill_open = on
 	if on:
