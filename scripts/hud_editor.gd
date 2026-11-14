@@ -11,7 +11,7 @@ var _os: HSlider
 var _pill: Control
 var _pill_at := 0
 var _pill_open := false
-var _pill_k := 1.0
+var _pill_k := 0.82
 var _pp := {}
 var _pp_base := {}
 var _chip: Button
@@ -677,8 +677,8 @@ func _reset_one() -> void:
 
 
 ## the tools bar sits where nothing is: middle of the screen, bottom-left, or under the top strip (button cycles)
-const PILL_MIN := 0.6
-const PILL_MAX := 1.6
+const PILL_MIN := 0.4
+const PILL_MAX := 1.4
 
 
 func _pill_zoom(d: float) -> void:
@@ -728,6 +728,7 @@ func _pill_set(on: bool) -> void:
 	_pill_open = on
 	if on:
 		_place_pill()
+		_pill_scale.call_deferred(_pill_k)
 	_pill_refresh(true)
 
 

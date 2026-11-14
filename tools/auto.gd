@@ -343,7 +343,7 @@ func _process(d: float) -> void:
 				for e in get_tree().current_scene.find_children("*", "Control", true, false):
 					if e is HudEditor:
 						e._pill_set(true)
-						e._pill_zoom(0.4)
+						pass
 						e._cycle(1)
 			elif step == 7 and t > 17.2:
 				step = 8; shot("hud_d")
