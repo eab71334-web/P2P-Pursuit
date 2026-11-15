@@ -98,6 +98,15 @@ var ipad_vp: SubViewport
 var map_mode := false
 var map_screen: MapScreen
 var _pillars: Array[Transform3D] = []
+var _edge_lines: Array[Transform3D] = []      # solid white lines along both road edges
+var _patches: Array[Transform3D] = []         # darker repaired-tarmac patches
+var _kerb_a: Array[Transform3D] = []          # red / white kerb stripes on top of the barriers
+var _kerb_b: Array[Transform3D] = []
+var _lamp_poles: Array[Transform3D] = []
+var _lamp_heads: Array[Transform3D] = []
+var _sun_node: Sprite3D
+var _sun_ref: DirectionalLight3D
+var _cloud_root: Node3D
 var _road_body: StaticBody3D
 var teams: Array[TeamState] = []
 var avatars := {}                  # peer id -> Avatar
@@ -976,6 +985,7 @@ func _process(delta: float) -> void:
 	_hud_tick()
 	_health(delta)
 	_weather_process(delta)
+	_sun_update(delta)
 	if director and not teams.is_empty():
 		var cars: Array = []
 		for ts in teams:
@@ -1638,7 +1648,16 @@ func _build_environment() -> void:
 		env.fog_light_color = th["hor"]
 		env.fog_density = th["fog"] * Gfx.fog_mul()
 		sun.light_energy = 1.0
+		sun.light_color = Color(1.0, 0.95, 0.86)                 # warm sun
+		env.fog_sun_scatter = 0.22                               # haze glows towards the sun
 		_apply_weather(env, sm, sun)
+		if Gfx.fx >= 0.8 and weather != "night":                 # real shadows on medium and high quality
+			sun.shadow_enabled = true
+			sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+			sun.directional_shadow_max_distance = 80.0
+			sun.shadow_blur = 1.5
+		if weather == "clear" or weather == "":
+			_make_sun_glare(sun)
 	_wx_env = env
 	var we := WorldEnvironment.new()
 	we.environment = env
@@ -1726,6 +1745,42 @@ func _build_weather_fx() -> void:
 		_bolt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		hud_root.add_child(_bolt)
 		hud_root.move_child(_bolt, 0)
+
+
+func _make_sun_glare(sun: DirectionalLight3D) -> void:
+	_sun_ref = sun
+	_sun_node = Sprite3D.new()
+	_sun_node.texture = Scenery.glare_texture()
+	_sun_node.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_sun_node.shaded = false
+	_sun_node.no_depth_test = true
+	_sun_node.double_sided = true
+	_sun_node.transparent = true
+	_sun_node.pixel_size = 6.0
+	_sun_node.modulate = Color(1, 1, 1, 0.9)
+	_sun_node.top_level = true
+	_sun_node.render_priority = 5
+	_sun_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mat_blend := Sprite3D.new()                                # (placeholder to keep the type checker quiet)
+	mat_blend.queue_free()
+	add_child(_sun_node)
+
+
+## keep the sun glow far away in its direction, centred around the camera
+func _sun_update(delta: float) -> void:
+	if _sun_node == null or _sun_ref == null:
+		return
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	var toward: Vector3 = _sun_ref.global_transform.basis.z
+	var dist := minf(cam.far * 0.8, 1500.0)
+	_sun_node.global_position = cam.global_position + toward * dist
+	_sun_node.pixel_size = dist * 0.00042
+	var facing := (-cam.global_transform.basis.z).dot(toward)         # glare grows when you look at the sun
+	_sun_node.modulate.a = clampf(0.25 + facing * 0.9, 0.0, 0.95)
+	if _cloud_root != null:
+		_cloud_root.rotation.y += delta * 0.003
 
 
 func _weather_process(delta: float) -> void:
@@ -1825,6 +1880,11 @@ func _add_road(pts: PackedVector3Array, avoid: PackedVector3Array, road: Array[T
 		road.append(Transform3D(basis * Basis.from_scale(Vector3(W, 0.2, seg * 1.12)), mid + Vector3(0, -0.07, 0)))
 		if i % 2 == 0:
 			dashes.append(Transform3D(basis * Basis.from_scale(Vector3(0.3, 0.02, 2.2)), mid + basis.y * 0.04))
+		for sd in [-1.0, 1.0]:                                  # solid edge lines
+			_edge_lines.append(Transform3D(basis * Basis.from_scale(Vector3(0.24, 0.02, seg * 1.06)), mid + left * sd * (W * 0.5 - 0.45) + basis.y * 0.041))
+		if main and (i * 7919) % 11 == 0:                       # a repaired patch of tarmac
+			var lat := float((i * 37) % 7 - 3) * 0.7
+			_patches.append(Transform3D(basis * Basis.from_scale(Vector3(1.6 + float(i % 3) * 0.7, 0.02, 2.0 + float(i % 4))), mid + left * lat + basis.y * 0.038))
 		if mountain:
 			var rc := CollisionShape3D.new()
 			var rs := BoxShape3D.new()
@@ -1849,6 +1909,16 @@ func _add_road(pts: PackedVector3Array, avoid: PackedVector3Array, road: Array[T
 			if skip:
 				continue
 			bank_vis.append(Transform3D(flat * Basis.from_scale(Vector3(3.0, 1.4, Track.STEP * 1.2)), pos))
+			var kb := Transform3D(flat * Basis.from_scale(Vector3(1.0, 0.05, Track.STEP * 1.2)), pos - left * side * 0.9 + Vector3(0, 0.72, 0))
+			if i % 2 == 0:
+				_kerb_a.append(kb)
+			else:
+				_kerb_b.append(kb)
+			if main and i % 8 == 0 and (int(side) > 0) == ((i / 8) % 2 == 0):      # street lamps, alternating sides
+				var lp: Vector3 = mid + left * side * (W * 0.5 + 3.7)
+				_lamp_poles.append(Transform3D(flat * Basis.from_scale(Vector3(0.16, 5.4, 0.16)), lp + Vector3(0, 2.7, 0)))
+				_lamp_poles.append(Transform3D(flat * Basis.from_scale(Vector3(1.7, 0.1, 0.1)), lp - left * side * 0.8 + Vector3(0, 5.35, 0)))
+				_lamp_heads.append(Transform3D(flat * Basis.from_scale(Vector3(0.55, 0.12, 0.3)), lp - left * side * 1.55 + Vector3(0, 5.28, 0)))
 			var cs := CollisionShape3D.new()
 			var bs := BoxShape3D.new()
 			bs.size = Vector3(3.0, 1.4, Track.STEP * 1.2)
@@ -1894,8 +1964,15 @@ func _build_track() -> void:
 			avoid_branch.append(track.points[j])
 		_add_road(b["points"], avoid_branch, road, dashes, bank_vis, banks)
 		_build_dead_end(b)
-	_multimesh(_unit_box(), _mat(th["road"]), road)
+	_multimesh(_unit_box(), Scenery.road_material(th["road"]), road)
 	_multimesh(_unit_box(), _mat(Color(0.95, 0.95, 0.95)), dashes)
+	_multimesh(_unit_box(), _mat(Color(0.93, 0.93, 0.9)), _edge_lines)
+	_multimesh(_unit_box(), _mat((th["road"] as Color).darkened(0.3)), _patches)
+	_multimesh(_unit_box(), _mat(Color(0.85, 0.12, 0.1)), _kerb_a)
+	_multimesh(_unit_box(), _mat(Color(0.95, 0.95, 0.95)), _kerb_b)
+	_multimesh(_unit_box(), _mat(Color(0.3, 0.31, 0.34)), _lamp_poles)
+	_multimesh(_unit_box(), Scenery.emissive(Color(1.0, 0.9, 0.65), 2.5), _lamp_heads)
+	_build_corner_props()
 	_multimesh(_unit_box(), _mat(th["bank"]), bank_vis)
 	_multimesh(_unit_box(), _mat(th.get("pillar", Color(0.4, 0.4, 0.4))), _pillars)
 	var ice_x: Array[Transform3D] = []
@@ -2140,19 +2217,97 @@ func _build_trees() -> void:
 	_multimesh(_unit_box(), _mat(th["l2"]), leaves2)
 
 
+## warning signs and tyre stacks before every real corner
+func _build_corner_props() -> void:
+	var n := track.points.size()
+	var W := Track.ROAD_WIDTH
+	var posts: Array[Transform3D] = []
+	var boards: Array[Transform3D] = []
+	var tyres: Array[Transform3D] = []
+	var last := -99
+	for i in range(8, n - 10, 3):
+		if i - last < 14 or track.in_tunnel(i) or track.is_open(i):
+			continue
+		var dh := wrapf(track.headings[i + 6] - track.headings[i], -PI, PI)
+		if absf(dh) < 0.32:
+			continue
+		last = i
+		var h := track.headings[i]
+		var left := Track.left_of(h)
+		var flat := Basis(Vector3.UP, h)
+		for side in [-1.0, 1.0]:
+			var sp: Vector3 = track.points[i - 3] + left * side * (W * 0.5 + 4.4)
+			posts.append(Transform3D(flat * Basis.from_scale(Vector3(0.1, 2.2, 0.1)), sp + Vector3(0, 1.1, 0)))
+			boards.append(Transform3D(flat * Basis(Vector3.BACK, deg_to_rad(45.0)) * Basis.from_scale(Vector3(1.0, 1.0, 0.06)), sp + Vector3(0, 2.5, 0)))
+		for k in range(0, 5):                                 # tyre stacks along the outside of the bend
+			var ti := mini(i + k * 2, n - 2)
+			var tleft := Track.left_of(track.headings[ti])
+			for side2 in [-1.0, 1.0]:
+				var tp: Vector3 = track.points[ti] + tleft * side2 * (W * 0.5 + 3.75)
+				for lv in 3:
+					tyres.append(Transform3D(Basis(Vector3.UP, float(k * 31 + lv * 17)), tp + Vector3(0, 0.18 + float(lv) * 0.33, 0)))
+	_multimesh(_unit_box(), _mat(Color(0.5, 0.5, 0.52)), posts)
+	_multimesh(_unit_box(), _mat(Color(1.0, 0.78, 0.1)), boards)
+	_multimesh(Scenery.tire_mesh(), _mat(Color(0.06, 0.06, 0.07)), tyres)
+
+
+## the horizon: two rings of low-poly peaks (the far one hazy), snow caps, slow clouds. All scaled to what the camera can see.
 func _build_mountains() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = Net.track_seed + 1
-	var xs: Array[Transform3D] = []
 	var mid := track.points[track.points.size() / 2]
-	for i in 26:
-		var a := TAU * i / 26.0 + rng.randf_range(-0.1, 0.1)
-		var dist := rng.randf_range(1500.0, 1900.0)
-		var h := rng.randf_range(120.0, 320.0)
-		var w := rng.randf_range(160.0, 320.0)
-		var b := Basis(Vector3.UP, rng.randf() * TAU)
-		xs.append(Transform3D(b * Basis.from_scale(Vector3(w, h, w)), Vector3(mid.x + cos(a) * dist, track.floor_y + h * 0.4, mid.z + sin(a) * dist)))
-	_multimesh(_unit_box(), _mat(th["mount"]), xs)
+	var R := minf(Gfx.far_clip() * 0.82, 1900.0)
+	var k := R / 1700.0
+	var near_x: Array[Transform3D] = []
+	var far_x: Array[Transform3D] = []
+	var caps: Array[Transform3D] = []
+	for i in 34:
+		var a := TAU * float(i) / 34.0 + rng.randf_range(-0.07, 0.07)
+		var far_ring := i % 2 == 0
+		var dist := R * (rng.randf_range(0.95, 1.0) if far_ring else rng.randf_range(0.78, 0.86))
+		var h := rng.randf_range(160.0, 330.0) * k * (1.25 if far_ring else 1.0)
+		var w := rng.randf_range(300.0, 520.0) * k
+		var pos := Vector3(mid.x + cos(a) * dist, track.floor_y, mid.z + sin(a) * dist)
+		var bs := Basis(Vector3.UP, rng.randf() * TAU)
+		var t := Transform3D(bs * Basis.from_scale(Vector3(w, h, w)), pos + Vector3(0, h * 0.5 - 6.0, 0))
+		if far_ring:
+			far_x.append(t)
+		else:
+			near_x.append(t)
+		if h > 240.0 * k and track.theme != "autumn":
+			caps.append(Transform3D(bs * Basis.from_scale(Vector3(w * 0.3, h * 0.3, w * 0.3)), pos + Vector3(0, h * 0.85 - 6.0, 0)))
+	var mc: Color = th["mount"]
+	var hz: Color = th["hor"]
+	_multimesh(Scenery.peak_mesh(), Scenery.plain(mc.lerp(hz, 0.6), 1.0, false), far_x)
+	_multimesh(Scenery.peak_mesh(), Scenery.plain(mc.lerp(hz, 0.3), 1.0, false), near_x)
+	_multimesh(Scenery.peak_mesh(), Scenery.plain(Color(0.96, 0.97, 1.0).lerp(hz, 0.25), 1.0, false), caps)
+	# clouds: flat clumps that drift slowly around us
+	if weather in ["night"]:
+		return
+	_cloud_root = Node3D.new()
+	_cloud_root.position = Vector3(mid.x, track.floor_y, mid.z)
+	add_child(_cloud_root)
+	var cl: Array[Transform3D] = []
+	var rain := weather in ["rain", "storm", "fog"]
+	for i in (26 if rain else 16):
+		var a2 := TAU * float(i) / 16.0 + rng.randf_range(-0.2, 0.2)
+		var d2 := R * rng.randf_range(0.35, 0.9)
+		var y2 := rng.randf_range(260.0, 430.0) * k
+		for j in 3:
+			var off := Vector3(rng.randf_range(-70, 70), rng.randf_range(-8, 8), rng.randf_range(-50, 50)) * k
+			cl.append(Transform3D(Basis.from_scale(Vector3(rng.randf_range(90, 170), rng.randf_range(20, 34), rng.randf_range(60, 100)) * k), Vector3(cos(a2) * d2, y2, sin(a2) * d2) + off))
+	var cmat := Scenery.plain(Color(1, 1, 1).lerp(hz, 0.15) if not rain else Color(0.62, 0.65, 0.7), 1.0, false)
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = Scenery.cloud_mesh()
+	mm.instance_count = cl.size()
+	for ci in cl.size():
+		mm.set_instance_transform(ci, cl[ci])
+	var mi := MultiMeshInstance3D.new()
+	mi.multimesh = mm
+	mi.material_override = cmat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_cloud_root.add_child(mi)
 
 
 func _spawn_beacon(idx: int) -> void:
