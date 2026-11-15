@@ -10,17 +10,14 @@ const SAVE := "user://hud_layout.cfg"
 const DEFAULTS := {
 	"gas": {"fx": 0.926, "fy": 0.854, "w": 150.0, "h": 130.0},
 	"brake": {"fx": 0.793, "fy": 0.854, "w": 150.0, "h": 130.0},
-	"c_sigl": {"fx": 0.054, "fy": 0.458, "w": 110.0, "h": 68.0},
-	"c_horn": {"fx": 0.146, "fy": 0.458, "w": 110.0, "h": 68.0},
-	"c_sigr": {"fx": 0.238, "fy": 0.458, "w": 110.0, "h": 68.0},
-	"c_lights": {"fx": 0.054, "fy": 0.564, "w": 110.0, "h": 68.0},
-	"c_wipers": {"fx": 0.146, "fy": 0.564, "w": 110.0, "h": 68.0},
-	"c_more": {"fx": 0.238, "fy": 0.669, "w": 110.0, "h": 68.0},
+	"c_sigl": {"fx": 0.059, "fy": 0.547, "w": 124.0, "h": 76.0},
+	"c_horn": {"fx": 0.1625, "fy": 0.547, "w": 124.0, "h": 76.0},
+	"c_sigr": {"fx": 0.2656, "fy": 0.547, "w": 124.0, "h": 76.0},
+	"c_lights": {"fx": 0.059, "fy": 0.664, "w": 124.0, "h": 76.0},
+	"c_wipers": {"fx": 0.1625, "fy": 0.664, "w": 124.0, "h": 76.0},
+	"c_more": {"fx": 0.2656, "fy": 0.664, "w": 124.0, "h": 76.0},
 	"left": {"fx": 0.07, "fy": 0.854, "w": 140.0, "h": 130.0},
 	"right": {"fx": 0.195, "fy": 0.854, "w": 140.0, "h": 130.0},
-	"c_drink": {"fx": 0.238, "fy": 0.564, "w": 110.0, "h": 68.0},
-	"c_mirl": {"fx": 0.054, "fy": 0.669, "w": 110.0, "h": 68.0},
-	"c_mirr": {"fx": 0.146, "fy": 0.669, "w": 110.0, "h": 68.0},
 	# the rest of the race screen (centres / sizes as the game lays them out at 1280x720)
 	"reset": {"fx": 0.936, "fy": 0.051, "w": 136.0, "h": 46.0},
 	"emote": {"fx": 0.936, "fy": 0.129, "w": 136.0, "h": 46.0},
@@ -47,8 +44,10 @@ const HIDEABLE := ["reset", "emote", "punch", "stickers", "photo", "menu", "hudc
 ## (default spot below, then he drags them wherever he wants).
 ## gas and brake cannot be removed (touch driving needs them)
 const LOCKED := ["gas", "brake", "left", "right", "reset", "emote", "stickers", "menu"]
-const EXTRA := ["p2_haz", "p2_flash", "p2_hb", "p2_win", "p2_ac", "p2_dome", "p2_greet", "c_kind"]
-const ESSENTIAL := ["gas", "brake", "left", "right", "c_horn", "c_sigl", "c_sigr", "c_lights", "c_wipers", "c_more", "c_drink", "c_mirl", "c_mirr"]
+const EXTRA := ["c_drink", "c_mirl", "c_mirr", "p2_haz", "p2_flash", "p2_hb", "p2_win", "p2_ac", "p2_dome", "p2_greet", "c_kind"]
+const ESSENTIAL := ["gas", "brake", "left", "right", "c_horn", "c_sigl", "c_sigr", "c_lights", "c_wipers", "c_more"]
+## off by default (the Menu already has them); the player can switch them on
+const DEFAULT_OFF := ["hudcfg", "photo"]
 const ORDER := ["gas", "brake", "left", "right", "c_horn", "c_sigl", "c_sigr", "c_lights", "c_wipers", "c_more",
 	"reset", "emote", "punch", "stickers", "photo", "menu", "hudcfg", "radio_prev", "radio_name", "radio_next", "msize", "mnear", "map", "beacon", "g_left", "g_fwd", "g_right", "g_stop",
 	"c_drink", "c_mirl", "c_mirr", "p2_haz", "p2_flash", "p2_hb", "p2_win", "p2_ac", "p2_dome", "p2_greet", "c_kind"]
@@ -174,7 +173,7 @@ static func _def(id: String) -> Dictionary:
 	var i := EXTRA.find(id)
 	if i < 0:
 		i = 0
-	return {"fx": 0.31 + 0.1 * float(i % 5), "fy": 0.33 + 0.105 * float(i / 5), "w": 110.0, "h": 68.0}
+	return {"fx": 0.31 + 0.1 * float(i % 5), "fy": 0.33 + 0.105 * float(i / 5), "w": 124.0, "h": 76.0}
 
 
 static func set_entry(id: String, e: Dictionary) -> void:
@@ -271,7 +270,9 @@ static func apply_world(zones: Dictionary) -> void:
 ## essential button taken off the screen
 static func is_removed(id: String) -> bool:
 	_load()
-	return _hidden.has(id)
+	if _hidden.has(id):
+		return bool(_hidden[id])
+	return DEFAULT_OFF.has(id)
 
 
 ## extra button the player put on the screen (free, always visible - no longer in the More page)
@@ -286,14 +287,17 @@ static func is_on_screen(id: String) -> bool:
 	if not exists(id):
 		return false
 	if ESSENTIAL.has(id) or HIDEABLE.has(id):
-		return not _hidden.has(id)
+		return not is_removed(id)
 	return _data.has(id)
 
 
 static func add_button(id: String) -> void:
 	_load()
 	if ESSENTIAL.has(id) or HIDEABLE.has(id):
-		_hidden.erase(id)
+		if DEFAULT_OFF.has(id):
+			_hidden[id] = false
+		else:
+			_hidden.erase(id)
 		save()
 	elif not _data.has(id):
 		var e := entry(id)

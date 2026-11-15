@@ -304,6 +304,8 @@ func _build_mocks() -> void:
 		l.add_theme_constant_override("outline_size", 8)
 		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		p.add_child(l)
+		var dsz := HudLayout._def(id)
+		ZoneStyle.decorate(p, id, l, float(dsz["w"]), float(dsz["h"]))
 		_layer.add_child(p)
 		_mock[id] = p
 		HudLayout.place(p, id)
@@ -606,12 +608,12 @@ func _sync_alpha() -> void:
 func _style_all() -> void:
 	for id in _mock:
 		var pn := _mock[id] as Panel
-		var sb := StyleBoxFlat.new()
 		var on: bool = _selset.has(id)
-		sb.bg_color = Color(1.0, 0.6, 0.05, 0.4) if on else Color(1, 1, 1, 0.18)        # same fill / border as in the race
-		sb.set_corner_radius_all(14)
-		sb.border_color = Color(1.0, 0.8, 0.2) if on else Color(1, 1, 1, 0.5)
-		sb.set_border_width_all(3)
+		var sb := ZoneStyle.box(id)                       # same body as in the race
+		if on:
+			sb.bg_color = Color(1.0, 0.6, 0.05, 0.45)
+			sb.border_color = Color(1.0, 0.8, 0.2)
+			sb.set_border_width_all(3)
 		pn.add_theme_stylebox_override("panel", sb)
 		pn.modulate.a = float(HudLayout.entry(id).get("al", 1.0))
 		var glow := pn.get_node_or_null("Glow") as Panel

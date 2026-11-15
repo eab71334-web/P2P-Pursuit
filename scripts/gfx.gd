@@ -178,7 +178,10 @@ func _update_fps_overlay() -> void:
 		_fps_label.add_theme_color_override("font_color", Color(0.4, 1.0, 0.5))
 		_fps_label.add_theme_color_override("font_outline_color", Color.BLACK)
 		_fps_label.add_theme_constant_override("outline_size", 5)
-		_fps_label.position = Vector2(8, 4)
+		_fps_label.layout_direction = Control.LAYOUT_DIRECTION_LTR
+		_fps_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_fps_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		_fps_label.position = Vector2(get_viewport().get_visible_rect().size.x * 0.6, 8)
 		_fps_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_fps_layer.add_child(_fps_label)
 	elif not show_fps and _fps_layer != null:

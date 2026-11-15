@@ -1466,6 +1466,10 @@ func _hud_tick() -> void:
 		var zc := zones[k] as Control
 		if not is_equal_approx(zc.modulate.a, za):
 			zc.modulate.a = za
+	for k in ["gas", "brake", "left", "right"]:                  # pressed: the body lights up
+		if zones.has(k) and (zones[k] as Control).visible:
+			var pr := _zone_pressed(k)
+			(zones[k] as Control).self_modulate = Color(1.7, 1.7, 1.7) if pr else Color.WHITE
 
 
 func _open_pause_menu() -> void:
@@ -2288,12 +2292,7 @@ func _make_zone(zone_name: String, text: String, ax: float, ay: float, o_l: floa
 	p.offset_right = o_r
 	p.offset_bottom = o_b
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(1, 1, 1, 0.18)
-	sb.set_corner_radius_all(14)
-	sb.border_color = Color(1, 1, 1, 0.5)
-	sb.set_border_width_all(3)
-	p.add_theme_stylebox_override("panel", sb)
+	p.add_theme_stylebox_override("panel", ZoneStyle.box(zone_name))
 	var l := Label.new()
 	l.text = text.split("\n")[0] if fs <= 16 else text
 	l.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -2301,6 +2300,7 @@ func _make_zone(zone_name: String, text: String, ax: float, ay: float, o_l: floa
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_style_label(l, fs)
 	p.add_child(l)
+	ZoneStyle.decorate(p, zone_name, l, o_r - o_l, o_b - o_t)
 	hud_root.add_child(p)
 	zones[zone_name] = p
 	if tap.is_valid():
@@ -2389,34 +2389,43 @@ func _build_hud() -> void:
 	_make_zone("menu", UI.tx("MENU", "القائمة"), 0.0, 0.0, 14, 144 if my_role == "driver" else 94, 150, 186 if my_role == "driver" else 136, 17, _open_pause_menu)
 	# driver cabin controls (his own hand does them): big buttons in a 3x3 block above the steering buttons, left side
 	if my_role == "driver":
+		# page 1 = the six everyday buttons, page 2 = everything else (4 columns). Big, spaced buttons so a thumb hits them at speed.
 		var items := [
 			["c_sigl", UI.tx("< SIGNAL", "< إشارة"), "signal_left"], ["c_horn", UI.tx("HORN", "بوق"), "horn"], ["c_sigr", UI.tx("SIGNAL >", "إشارة >"), "signal_right"],
-			["c_lights", UI.tx("LIGHTS", "إضاءة"), "lights"], ["c_wipers", UI.tx("WIPER", "مساحات"), "wipers"], ["c_drink", UI.tx("DRINK", "اشرب"), "drink"],
-			["c_mirl", UI.tx("MIRROR L", "مرآة يسار"), "mirror_left"], ["c_mirr", UI.tx("MIRROR R", "مرآة يمين"), "mirror_right"], ["c_more", UI.tx("MORE >>", "المزيد >>"), "@more"],
+			["c_lights", UI.tx("LIGHTS", "إضاءة"), "lights"], ["c_wipers", UI.tx("WIPER", "مساحات"), "wipers"], ["c_more", UI.tx("MORE >>", "المزيد >>"), "@more"],
+			["c_drink", UI.tx("DRINK", "اشرب"), "drink"], ["c_mirl", UI.tx("MIRROR L", "مرآة يسار"), "mirror_left"], ["c_mirr", UI.tx("MIRROR R", "مرآة يمين"), "mirror_right"], ["c_kind", UI.tx("JUICE", "عصير"), ""],
 			["p2_haz", UI.tx("HAZARD", "طوارئ"), "hazard"], ["p2_flash", UI.tx("HIGH BEAM", "ضوء بعيد"), "flash"], ["p2_hb", UI.tx("HANDBRAKE", "فرامل يد"), "hbrake"],
 			["p2_win", UI.tx("WINDOWS", "نوافذ"), "window"], ["p2_ac", UI.tx("A/C FAN", "مروحة"), "ac"], ["p2_dome", UI.tx("CABIN LIGHT", "إضاءة داخلية"), "dome"],
-			["p2_greet", UI.tx("GREET", "تحية"), "greet"], ["c_kind", UI.tx("JUICE", "عصير"), ""], ["p2_back", UI.tx("<< BACK", "<< رجوع"), "@back"]]
+			["p2_greet", UI.tx("GREET", "تحية"), "greet"], ["p2_back", UI.tx("<< BACK", "<< رجوع"), "@back"]]
 		for k in items.size():
-			var col := k % 3
-			var row := (k / 3) % 3
-			var x0 := 14.0 + col * 118.0
-			var y0 := -196.0 - (3 - row) * 76.0
+			var col: int
+			var row: int
+			var y0: float
+			if k < 6:
+				col = k % 3
+				row = k / 3
+				y0 = -196.0 - (2 - row) * 84.0
+			else:
+				col = (k - 6) % 4
+				row = (k - 6) / 4
+				y0 = -196.0 - (3 - row) * 84.0
+			var x0 := 14.0 + col * 132.0
 			var cb: Callable
 			match str(items[k][2]):
 				"": cb = _toggle_drink
 				"@more": cb = _cab_page.bind(2)
 				"@back": cb = _cab_page.bind(1)
 				_: cb = _cabin.bind(items[k][2])
-			_make_zone(items[k][0], items[k][1], 0.0, 1.0, x0, y0, x0 + 110.0, y0 + 68.0, 20 if k < 9 else 17, cb)
-			if k >= 9:
+			_make_zone(items[k][0], items[k][1], 0.0, 1.0, x0, y0, x0 + 124.0, y0 + 76.0, 20, cb)
+			if k >= 6:
 				zones[items[k][0]].visible = false
 		cab_toast = Label.new()
 		cab_toast.position = Vector2(14, 0)
 		cab_toast.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 		cab_toast.offset_left = 14
-		cab_toast.offset_top = -196.0 - 3 * 76.0 - 36.0
+		cab_toast.offset_top = -196.0 - 3 * 84.0 - 36.0
 		cab_toast.offset_right = 360
-		cab_toast.offset_bottom = -196.0 - 3 * 76.0
+		cab_toast.offset_bottom = -196.0 - 3 * 84.0
 		_style_label(cab_toast, 22)
 		cab_toast.modulate.a = 0.0
 		hud_root.add_child(cab_toast)
@@ -2488,9 +2497,9 @@ func _cab_page(n: int) -> void:
 		if HudLayout.is_added(z):                 # the player put this one on the screen: always there, in his spot
 			(zones[zn] as Control).visible = true
 			continue
-		if z.begins_with("p2_") or z == "c_kind":
+		if z.begins_with("p2_") or ["c_kind", "c_drink", "c_mirl", "c_mirr"].has(z):
 			(zones[zn] as Control).visible = n == 2
-		elif z.begins_with("c_") and z != "c_kind":
+		elif z.begins_with("c_"):
 			(zones[zn] as Control).visible = n == 1
 
 
@@ -2556,12 +2565,7 @@ func _sig_hud() -> void:
 		["p2_haz", a.hazard], ["p2_hb", a.hb_on], ["p2_win", a.win_target > 0.5], ["p2_ac", a.fan_level > 0], ["p2_dome", a.dome_on]]
 	for pair in st:
 		if zones.has(pair[0]):
-			var sb := StyleBoxFlat.new()
-			sb.bg_color = Color(1.0, 0.6, 0.05, 0.75) if pair[1] else Color(1, 1, 1, 0.18)
-			sb.set_corner_radius_all(14)
-			sb.border_color = Color(1, 1, 1, 0.5)
-			sb.set_border_width_all(3)
-			(zones[pair[0]] as Panel).add_theme_stylebox_override("panel", sb)
+			(zones[pair[0]] as Panel).add_theme_stylebox_override("panel", ZoneStyle.box(str(pair[0]), bool(pair[1])))
 
 
 func _toggle_drink() -> void:
