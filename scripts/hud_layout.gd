@@ -120,6 +120,26 @@ static func save() -> void:
 	cf.save(SAVE)
 
 
+## one-tap layouts: "race" (the game's own), "clean" (only what you need to drive), "show" (screenshots / video), "pad" (gamepad: no touch buttons)
+static func apply_preset(name: String) -> void:
+	_load()
+	_data.clear()
+	_hidden.clear()
+	var off: Array = []
+	match name:
+		"clean":
+			off = ["c_lights", "c_wipers", "punch", "photo", "hudcfg", "radio_prev", "radio_name", "radio_next", "msize", "mnear", "beacon", "g_left", "g_fwd", "g_right", "g_stop"]
+		"show":
+			off = ["c_sigl", "c_sigr", "c_lights", "c_wipers", "c_more", "reset", "punch", "hudcfg", "msize", "mnear", "map", "beacon"]
+			_hidden["photo"] = false
+		"pad":
+			off = ["c_horn", "c_sigl", "c_sigr", "c_lights", "c_wipers", "c_more", "punch", "photo", "hudcfg", "msize", "mnear", "map", "beacon", "radio_prev", "radio_name", "radio_next", "g_left", "g_fwd", "g_right", "g_stop"]
+	for id in off:
+		if not LOCKED.has(id):
+			_hidden[id] = true
+	save()
+
+
 ## transparency of ONE button (the editor sets it on the selected buttons)
 static func get_alpha(id: String) -> float:
 	_load()

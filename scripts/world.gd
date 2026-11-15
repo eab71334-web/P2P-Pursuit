@@ -154,7 +154,8 @@ var hud_root: Control
 var timer_label: Label
 var medal_label: Label
 var speed_label: Label
-var gauge: HudGauge
+var _drive_shake := 0.0          # light camera shake when braking hard / at very high speed
+var hint_layer: Control
 var role_label: Label
 var rank_label: Label
 var center_label: Label
@@ -1014,8 +1015,8 @@ func _process(delta: float) -> void:
 	flash = move_toward(flash, 0.0, delta * 1.2)
 	flash_rect.color.a = flash
 	if local_avatar and local_avatar.cam:
-		local_avatar.cam.h_offset = randf_range(-1.0, 1.0) * shake * 0.08
-		local_avatar.cam.v_offset = randf_range(-1.0, 1.0) * shake * 0.08
+		local_avatar.cam.h_offset = randf_range(-1.0, 1.0) * (shake * 0.08 + _drive_shake)
+		local_avatar.cam.v_offset = randf_range(-1.0, 1.0) * (shake * 0.08 + _drive_shake)
 	_update_hud()
 
 
@@ -1442,7 +1443,7 @@ func _flip_hud() -> void:
 		list.append(wheel_ui)
 	for c in list:
 		var ctl := c as Control
-		if ctl == null or not is_instance_valid(ctl) or ctl.anchor_top < 0.99:
+		if ctl == null or not is_instance_valid(ctl):
 			continue
 		if ctl.has_meta("fl_l") and is_equal_approx(ctl.offset_left, float(ctl.get_meta("fl_l"))) and is_equal_approx(ctl.anchor_left, float(ctl.get_meta("fl_a"))):
 			continue                    # already mirrored and not moved since
@@ -1454,6 +1455,7 @@ func _flip_hud() -> void:
 		ctl.anchor_right = 1.0 - al
 		ctl.offset_left = -orr
 		ctl.offset_right = -ol
+		ctl.rotation = -ctl.rotation
 		ctl.set_meta("fl_l", ctl.offset_left)
 		ctl.set_meta("fl_a", ctl.anchor_left)
 
@@ -1516,6 +1518,9 @@ func _wheel_rect() -> Rect2:
 
 func _touch_press(index: int, pos: Vector2) -> void:
 	touches[index] = pos
+	if hint_layer != null and is_instance_valid(hint_layer):
+		hint_layer.queue_free()
+		hint_layer = null
 	if wheel_ui and wheel_touch == -1 and _wheel_rect().has_point(pos):
 		wheel_touch = index
 		wheel_last = (pos - _wheel_rect().get_center()).angle()
@@ -2374,33 +2379,43 @@ func _build_hud() -> void:
 			role_label.text = (L.t("TEAMX") % char(65 + my_team % Net.squads)) + "  -  " + role_label.text
 	_style_label(role_label, 22)
 	role_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	role_label.size = Vector2(340, 30)
-	role_label.position.x = 24.0
+	role_label.layout_direction = Control.LAYOUT_DIRECTION_LTR
+	role_label.anchor_left = 0.0
+	role_label.anchor_right = 0.0
+	role_label.anchor_top = 0.0
+	role_label.anchor_bottom = 0.0
+	role_label.offset_left = 24.0
+	role_label.offset_right = 364.0
+	role_label.offset_top = 8.0
+	role_label.offset_bottom = 38.0
 	hud_root.add_child(role_label)
 	speed_label = Label.new()
 	speed_label.position = Vector2(14, 36)
 	_style_label(speed_label, 22)
 	speed_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	speed_label.size = Vector2(340, 30)
-	speed_label.position.x = 24.0
+	speed_label.layout_direction = Control.LAYOUT_DIRECTION_LTR
+	speed_label.anchor_left = 0.0
+	speed_label.anchor_right = 0.0
+	speed_label.anchor_top = 0.0
+	speed_label.anchor_bottom = 0.0
+	speed_label.offset_left = 24.0
+	speed_label.offset_right = 364.0
+	speed_label.offset_top = 36.0
+	speed_label.offset_bottom = 66.0
 	hud_root.add_child(speed_label)
-	gauge = HudGauge.new()                                  # round speed + rpm + gear gauge, bottom centre above the radio
-	gauge.anchor_left = 0.5
-	gauge.anchor_right = 0.5
-	gauge.anchor_top = 1.0
-	gauge.anchor_bottom = 1.0
-	gauge.offset_left = -80
-	gauge.offset_right = 80
-	gauge.offset_top = -240
-	gauge.offset_bottom = -80
-	hud_root.add_child(gauge)
-	speed_label.visible = false
 	rank_label = Label.new()
 	rank_label.position = Vector2(14, 66)
 	_style_label(rank_label, 20)
 	rank_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	rank_label.size = Vector2(340, 30)
-	rank_label.position.x = 24.0
+	rank_label.layout_direction = Control.LAYOUT_DIRECTION_LTR
+	rank_label.anchor_left = 0.0
+	rank_label.anchor_right = 0.0
+	rank_label.anchor_top = 0.0
+	rank_label.anchor_bottom = 0.0
+	rank_label.offset_left = 24.0
+	rank_label.offset_right = 364.0
+	rank_label.offset_top = 66.0
+	rank_label.offset_bottom = 96.0
 	hud_root.add_child(rank_label)
 
 	grace_label = _full_label(132, 40, 26)
@@ -2517,8 +2532,11 @@ func _build_hud() -> void:
 			clipboard.my_color = teams[my_team].color
 			clipboard.set_track(track)
 			hud_root.add_child(clipboard)
+	if my_role == "driver":
+		_smart_repack()
 	HudLayout.apply_world(zones)
 	_flip_hud()
+	get_tree().create_timer(1.0).timeout.connect(_show_hints)
 
 
 func _my_actions() -> CarActions:
@@ -2540,9 +2558,118 @@ const GLOW_SHADER := "shader_type canvas_item;\nuniform vec4 col : source_color 
 
 
 ## cabin button block has two pages: 1 = everyday, 2 = the extras (hazard, high beam, handbrake, windows, fan, cabin light, greet)
+## first race: small tips on the main buttons (tap anywhere to close)
+## fixed place on the HUD, independent of the layout direction (anchors at the top-left, plain offsets)
+func _place_abs(c: Control, r: Rect2) -> void:
+	c.layout_direction = Control.LAYOUT_DIRECTION_LTR
+	c.anchor_left = 0.0
+	c.anchor_right = 0.0
+	c.anchor_top = 0.0
+	c.anchor_bottom = 0.0
+	c.offset_left = r.position.x
+	c.offset_top = r.position.y
+	c.offset_right = r.position.x + r.size.x
+	c.offset_bottom = r.position.y + r.size.y
+
+
+func _show_hints() -> void:
+	if Gfx.hints_seen or not show_touch or my_role != "driver" or Net.dedicated or hud_root == null:
+		return
+	Gfx.hints_seen = true
+	Gfx.save()
+	var layer := Control.new()
+	layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.layout_direction = Control.LAYOUT_DIRECTION_LTR
+	layer.z_index = 30
+	hud_root.add_child(layer)
+	var tips := [["gas", UI.tx("Gas", "بنزين"), 1], ["brake", UI.tx("Brake", "فرامل"), 1], ["left", UI.tx("Steer", "توجيه"), -1], ["c_horn", UI.tx("Horn", "بوق"), -1],
+		["c_more", UI.tx("More buttons", "أزرار أكثر"), -1], ["menu", UI.tx("Menu + customise buttons", "القائمة + تخصيص الأزرار"), -1]]
+	for t in tips:
+		if not zones.has(t[0]) or not (zones[t[0]] as Control).visible:
+			continue
+		var z := zones[t[0]] as Control
+		var P := hud_root.size
+		var zc2 := Vector2(z.anchor_left * P.x + (z.offset_left + z.offset_right) * 0.5, z.anchor_top * P.y + (z.offset_top + z.offset_bottom) * 0.5)
+		var zs := Vector2(z.offset_right - z.offset_left, z.offset_bottom - z.offset_top) * z.scale
+		var r := Rect2(zc2 - zs * 0.5, zs)
+		var ring := Panel.new()
+		ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_place_abs(ring, Rect2(r.position - Vector2(5, 5), r.size + Vector2(10, 10)))
+		var rsb := StyleBoxFlat.new()
+		rsb.bg_color = Color(1.0, 0.75, 0.2, 0.12)
+		rsb.border_color = Color(1.0, 0.75, 0.2)
+		rsb.set_border_width_all(4)
+		rsb.set_corner_radius_all(20)
+		ring.add_theme_stylebox_override("panel", rsb)
+		layer.add_child(ring)
+		var tw := ring.create_tween().set_loops()
+		tw.tween_property(ring, "modulate:a", 0.25, 0.6)
+		tw.tween_property(ring, "modulate:a", 1.0, 0.6)
+	var card := PanelContainer.new()
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_theme_stylebox_override("panel", UI.sb(Color(0.04, 0.05, 0.08, 0.88), 16, Color(1.0, 0.75, 0.2), 2))
+	var tx := Label.new()
+	tx.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tx.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tx.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tx.custom_minimum_size = Vector2(560, 0)
+	tx.add_theme_font_size_override("font_size", 20)
+	tx.text = UI.tx("Gas and brake: right side · Steering: left side · MORE: extra buttons · MENU: customise the buttons\nTap anywhere to close", "البنزين والفرامل على اليمين · التوجيه على اليسار · «المزيد» لأزرار أكثر · «القائمة» لتخصيص الأزرار\nالمس أي مكان للإغلاق")
+	card.add_child(tx)
+	layer.add_child(card)
+	card.layout_direction = Control.LAYOUT_DIRECTION_LTR
+	card.anchor_left = 0.5
+	card.anchor_right = 0.5
+	card.anchor_top = 0.0
+	card.anchor_bottom = 0.0
+	card.offset_left = -300.0
+	card.offset_right = 300.0
+	card.offset_top = 120.0
+	card.offset_bottom = 120.0
+	var cl := get_tree().create_timer(14.0)
+	cl.timeout.connect(func():
+		if is_instance_valid(layer):
+			layer.queue_free())
+	hint_layer = layer
+
+
+## smart buttons: wipers only when it rains, lights only at night / fog / rain (unless the player moved them himself)
+func _smart_off(id: String) -> bool:
+	if not Gfx.smart_buttons or HudLayout.has_saved(id):
+		return false
+	match id:
+		"c_wipers":
+			return not (weather in ["rain", "storm"])
+		"c_lights":
+			return not (weather in ["night", "fog", "storm", "rain"])
+	return false
+
+
+## page 1 of the cabin block without the smart-hidden buttons, packed with no gaps
+func _smart_repack() -> void:
+	var ids := ["c_sigl", "c_horn", "c_sigr", "c_lights", "c_wipers", "c_more"]
+	var vis: Array = []
+	for id in ids:
+		if zones.has(id) and not _smart_off(id) and not HudLayout.has_saved(id):
+			vis.append(id)
+	var rows := ceili(float(vis.size()) / 3.0)
+	for i in vis.size():
+		var zc := zones[vis[i]] as Control
+		var x0 := 14.0 + (i % 3) * 132.0
+		var y0 := -196.0 - (rows - i / 3) * 84.0
+		zc.offset_left = x0
+		zc.offset_right = x0 + 124.0
+		zc.offset_top = y0
+		zc.offset_bottom = y0 + 76.0
+
+
 func _cab_page(n: int) -> void:
 	for zn in zones:
 		var z := str(zn)
+		if _smart_off(z):
+			(zones[zn] as Control).visible = false
+			continue
 		if not Controls.touch_wanted() and (z.begins_with("c_") or z.begins_with("p2_") or z == "hudcfg"):
 			(zones[zn] as Control).visible = false         # gamepad connected: no touch buttons
 			continue
@@ -2818,25 +2945,6 @@ func _update_repair_ui(delta: float) -> void:
 		spray_last = false
 
 
-func _est_gear(spd: float) -> String:
-	if spd < 2.0:
-		return "N"
-	var g := 1
-	for i in Car.GEARS.size():
-		if spd >= Car.GEARS[i]:
-			g = i + 1
-	return str(g)
-
-
-func _est_rpm(spd: float) -> float:
-	var g := 0
-	for i in Car.GEARS.size() - 1:
-		if spd >= Car.GEARS[i]:
-			g = i
-	var ratio := clampf((spd - Car.GEARS[g]) / (Car.GEARS[g + 1] - Car.GEARS[g]), 0.0, 1.0)
-	return lerpf(0.34, 0.95, ratio) if spd > 3.0 else 0.2
-
-
 func _update_hud() -> void:
 	var my := teams[my_team]
 	if grace_show > 0.0 and state == State.RUNNING:
@@ -2850,18 +2958,10 @@ func _update_hud() -> void:
 	timer_label.text = _fmt(shown_time)
 	var spd := my.car.speed_kmh if multiplayer.is_server() else my.speed
 	speed_label.text = "%d km/h" % int(spd)
-	speed_label.visible = not Gfx.gauge_on
-	if gauge != null:
-		gauge.visible = Gfx.gauge_on
-	if gauge != null and my.car != null and is_instance_valid(my.car):
-		var gr: float = float(my.car._rpm) if multiplayer.is_server() else _est_rpm(spd)
-		var gg := str(my.car.gear_sel) if my.car.gear_sel != "" else "N"
-		if not multiplayer.is_server():
-			gg = _est_gear(spd)
-		gauge.set_values(spd, gr, gg, float(my.car.top_speed))
 	if state == State.RUNNING:
 		if speed_fx != null and speed_fx.visible:
 			(speed_fx.material as ShaderMaterial).set_shader_parameter("amount", smoothstep(130.0, 210.0, spd))
+		_drive_shake = ((0.012 * clampf(spd / 200.0, 0.0, 1.0) if (_brake_in > 0.5 and spd > 60.0) else 0.0) + 0.003 * smoothstep(150.0, 220.0, spd)) * Gfx.fx
 		if glow_fx != null and glow_fx.visible:
 			var hard := _brake_in > 0.5 and spd > 40.0
 			var want_a := 0.5 if hard else smoothstep(110.0, 210.0, spd) * 0.4

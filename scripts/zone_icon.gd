@@ -33,6 +33,19 @@ func _top_poly(inset: float, rad: float, depth: float) -> PackedVector2Array:
 	return pts
 
 
+static var _tex := {}
+
+
+## Lucide svg for this kind (white, imported by Godot), null when we keep the code-drawn shape (pedals, handbrake, smile...)
+static func _lucide(k: String) -> Texture2D:
+	if _tex.has(k):
+		return _tex[k]
+	var path := "res://icons/lucide/%s.svg" % k
+	var t: Texture2D = load(path) if ResourceLoader.exists(path) else null
+	_tex[k] = t
+	return t
+
+
 func _draw() -> void:
 	# glossy top highlight (fades downwards) + a thin inner rim, like the buttons of the big racing games
 	var poly := _top_poly(3.0, radius - 2.0, 0.52)
@@ -59,6 +72,12 @@ func _draw() -> void:
 		col = Color(1.0, 0.8, 0.25)
 	elif kind == "beam":
 		col = Color(0.55, 0.8, 1.0)
+	var tex := _lucide(kind)
+	if tex != null:
+		var sz := Vector2(r, r) * 2.1
+		draw_texture_rect(tex, Rect2(c - sz * 0.5 + Vector2(0, r * 0.1), sz), false, Color(0, 0, 0, 0.55))
+		draw_texture_rect(tex, Rect2(c - sz * 0.5, sz), false, col)
+		return
 	draw_set_transform(c + Vector2(0, r * 0.07), 0.0, Vector2(r, r))
 	_shape(Color(0, 0, 0, 0.5), r)
 	draw_set_transform(c, 0.0, Vector2(r, r))

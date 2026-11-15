@@ -176,6 +176,7 @@ func _ready() -> void:
 	_slot_bar.add_theme_constant_override("separation", 6)
 	_slot_scroll.add_child(_slot_bar)
 	_tbtn(row2, UI.tx("▤ Hide bars", "▤ إخفاء الشريط"), NEUTRAL, func(): _hide_cb.call(), 17, 150)
+	_tbtn(row2, UI.tx("▦ Layouts", "▦ أنماط جاهزة"), NEUTRAL, _presets_ask, 17, 140)
 	_tbtn(row, UI.tx("↶ Undo", "↶ تراجع"), NEUTRAL, _do_undo, 17, 110)
 	_tbtn(row, UI.tx("↺ Reset ALL", "↺ إعادة الكل للأصل"), DANGER, _reset_all_ask, 17, 170)
 	var sp2 := Control.new()
@@ -1068,6 +1069,58 @@ func _reset_all_ask() -> void:
 		_reset_all()
 		close_it.call(), 22, Vector2(0, 54))
 	yes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	await get_tree().process_frame
+	if is_instance_valid(card):
+		card.pivot_offset = card.size * 0.5
+		card.scale = Vector2(0.92, 0.92)
+		card.modulate.a = 0.0
+		var tw2 := card.create_tween().set_parallel(true)
+		tw2.tween_property(card, "scale", Vector2.ONE, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw2.tween_property(card, "modulate:a", 1.0, 0.15)
+
+
+func _presets_ask() -> void:
+	if _confirm != null and is_instance_valid(_confirm):
+		return
+	_confirm = Control.new()
+	_confirm.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_confirm.z_index = 50
+	add_child(_confirm)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.6)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_confirm.add_child(dim)
+	var cc := CenterContainer.new()
+	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_confirm.add_child(cc)
+	var card := UI.panel(cc, UI.PANEL, 18)
+	card.add_theme_stylebox_override("panel", UI.sb(Color(0.08, 0.09, 0.13, 0.99), 20, UI.ACCENT, 2))
+	card.custom_minimum_size = Vector2(560, 0)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	card.add_child(v)
+	var h := UI.lbl(v, UI.tx("Ready-made layouts", "أنماط جاهزة للأزرار"), 26, Color(1.0, 0.8, 0.3), false)
+	h.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var m := UI.lbl(v, UI.tx("Replaces the current layout (Undo brings it back).", "تستبدل تخطيطك الحالي (زر «تراجع» يرجّعه)."), 16, UI.TXT2, true)
+	m.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var close_it := func():
+		var tw := _confirm.create_tween().set_parallel(true)
+		tw.tween_property(card, "modulate:a", 0.0, 0.12)
+		tw.tween_property(dim, "modulate:a", 0.0, 0.12)
+		tw.chain().tween_callback(_confirm.queue_free)
+	for pr in [["race", UI.tx("Race (the game's layout)", "سباق (تخطيط اللعبة)"), UI.tx("Everything in its normal place", "كل الأزرار بمكانها الأصلي")],
+			["clean", UI.tx("Clean", "نظيف"), UI.tx("Only what you need to drive", "فقط اللي تحتاجه للسواقة")],
+			["show", UI.tx("Showcase", "استعراض"), UI.tx("Few buttons, photo on: for video and screenshots", "أزرار قليلة وزر الصورة ظاهر: للتصوير")],
+			["pad", UI.tx("Gamepad", "يد تحكم"), UI.tx("No touch driving buttons", "بدون أزرار لمس للسواقة")]]:
+		var pid: String = pr[0]
+		var b := UI.btn(v, "%s\n%s" % [pr[1], pr[2]], UI.CARD2, func():
+			_push_undo()
+			HudLayout.apply_preset(pid)
+			_build_mocks()
+			close_it.call(), 19, Vector2(0, 70))
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var no := UI.btn(v, UI.tx("Cancel", "إلغاء"), NEUTRAL, close_it, 20, Vector2(0, 48))
+	no.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	await get_tree().process_frame
 	if is_instance_valid(card):
 		card.pivot_offset = card.size * 0.5

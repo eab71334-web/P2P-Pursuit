@@ -33,8 +33,8 @@ var auto := false             # dynamic resolution
 var show_fps := false
 var vsync := true
 var haptics := true
+var hints_seen := false        # the first-race button tips were shown
 var smart_buttons := true      # wipers only in rain, lights only at night / fog, hidden otherwise
-var gauge_on := true           # round speed / rpm gauge on the race screen
 var ui_mirror := false         # left-handed: the whole race HUD flipped left <-> right
 var human_chars := false     # EXPERIMENTAL: realistic skinned human characters (default = classic block characters)
 var vol_master := 1.0
@@ -199,8 +199,8 @@ func save() -> void:
 	cf.set_value("gfx", "show_fps", show_fps)
 	cf.set_value("gfx", "vsync", vsync)
 	cf.set_value("gfx", "haptics", haptics)
+	cf.set_value("gfx", "hints_seen", hints_seen)
 	cf.set_value("gfx", "smart_buttons", smart_buttons)
-	cf.set_value("gfx", "gauge_on", gauge_on)
 	cf.set_value("gfx", "ui_mirror", ui_mirror)
 	cf.set_value("gfx", "human_chars", human_chars)
 	cf.set_value("gfx", "vol_master", vol_master)
@@ -218,8 +218,8 @@ func _load() -> void:
 	show_fps = cf.get_value("gfx", "show_fps", false)
 	vsync = cf.get_value("gfx", "vsync", true)
 	haptics = cf.get_value("gfx", "haptics", true)
+	hints_seen = cf.get_value("gfx", "hints_seen", false)
 	smart_buttons = cf.get_value("gfx", "smart_buttons", true)
-	gauge_on = cf.get_value("gfx", "gauge_on", true)
 	ui_mirror = cf.get_value("gfx", "ui_mirror", false)
 	human_chars = cf.get_value("gfx", "human_chars", false)
 	vol_master = cf.get_value("gfx", "vol_master", 1.0)
