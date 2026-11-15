@@ -65,10 +65,10 @@ static var intro_seen := false
 
 static func names() -> Dictionary:
 	return {"gas": UI.tx("GAS", "بنزين"), "brake": UI.tx("BRAKE", "فرامل"), "c_horn": UI.tx("HORN", "بوق"),
-		"c_sigl": UI.tx("< SIGNAL", "< إشارة"), "c_sigr": UI.tx("SIGNAL >", "إشارة >"),
-		"c_lights": UI.tx("LIGHTS", "إضاءة"), "c_wipers": UI.tx("WIPER", "مساحات"), "c_more": UI.tx("MORE >>", "المزيد >>"),
+		"c_sigl": UI.tx("SIGNAL L", "إشارة يسار"), "c_sigr": UI.tx("SIGNAL R", "إشارة يمين"),
+		"c_lights": UI.tx("LIGHTS", "إضاءة"), "c_wipers": UI.tx("WIPER", "مساحات"), "c_more": UI.tx("MORE", "المزيد"),
 		"reset": UI.tx("Reset car", "إعادة السيارة"), "emote": UI.tx("Emote", "حركة"), "punch": UI.tx("Punch", "لكمة"),
-		"left": UI.tx("Steer <", "توجيه <"), "right": UI.tx("Steer >", "توجيه >"), "stickers": UI.tx("Stickers", "ملصقات"), "photo": UI.tx("Photo", "صورة"), "menu": UI.tx("Menu", "القائمة"), "hudcfg": UI.tx("Buttons", "الأزرار"), "radio_prev": UI.tx("Radio <", "راديو <"), "radio_name": UI.tx("Radio", "راديو"), "radio_next": UI.tx("Radio >", "راديو >"),
+		"left": UI.tx("Steer left", "توجيه يسار"), "right": UI.tx("Steer right", "توجيه يمين"), "stickers": UI.tx("Stickers", "ملصقات"), "photo": UI.tx("Photo", "صورة"), "menu": UI.tx("Menu", "القائمة"), "hudcfg": UI.tx("Buttons", "الأزرار"), "radio_prev": UI.tx("Radio back", "راديو السابق"), "radio_name": UI.tx("Radio", "راديو"), "radio_next": UI.tx("Radio next", "راديو التالي"),
 		"msize": UI.tx("SIZE", "الحجم"), "mnear": UI.tx("NEAR", "قرّب"), "map": UI.tx("MAP", "الخريطة"), "beacon": UI.tx("Signal", "إشارة"),
 		"g_left": UI.tx("Say: left", "قل: يسار"), "g_fwd": UI.tx("Say: forward", "قل: قدام"), "g_right": UI.tx("Say: right", "قل: يمين"), "g_stop": UI.tx("Say: stop", "قل: قف"),
 		"c_drink": UI.tx("DRINK", "اشرب"), "c_mirl": UI.tx("MIRROR L", "مرآة يسار"), "c_mirr": UI.tx("MIRROR R", "مرآة يمين"),

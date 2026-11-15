@@ -5,6 +5,7 @@ extends Control
 
 var kind := ""
 var tall := true
+var only := false
 
 
 func _init() -> void:
@@ -15,7 +16,10 @@ func _init() -> void:
 func _draw() -> void:
 	var r: float
 	var c: Vector2
-	if tall:
+	if only:
+		r = clampf(minf(size.x, size.y) * 0.26, 9.0, 40.0)
+		c = size * 0.5
+	elif tall:
 		var f := 0.25 if size.y >= 100.0 else (0.17 if size.y < 70.0 else 0.2)
 		r = clampf(minf(size.y * f, size.x * 0.24), 9.0, 36.0)
 		c = Vector2(size.x * 0.5, size.y * (0.3 if size.y >= 70.0 else 0.28))

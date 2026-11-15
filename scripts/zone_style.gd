@@ -10,8 +10,13 @@ const ICONS := {
 	"p2_haz": "hazard", "p2_flash": "beam", "p2_hb": "hbrake", "p2_win": "window", "p2_ac": "fan", "p2_dome": "bulb", "p2_greet": "hand",
 	"reset": "reset", "emote": "smile", "punch": "fist", "stickers": "star", "photo": "camera", "menu": "menu", "hudcfg": "grid",
 	"replay": "play", "radio_name": "radio", "msize": "expand", "mnear": "zoom", "map": "pin", "beacon": "wave",
+	"left": "arrow_l", "right": "arrow_r", "radio_prev": "arrow_l", "radio_next": "arrow_r",
 	"g_left": "arrow_l", "g_fwd": "arrow_u", "g_right": "arrow_r", "g_stop": "stop",
 }
+
+
+## buttons that show only an icon (a "<" / ">" character gets mirrored in Arabic, so arrows are drawn instead)
+const ICON_ONLY := ["left", "right", "radio_prev", "radio_next"]
 
 
 static func has_icon(id: String) -> bool:
@@ -26,19 +31,8 @@ static func box(id: String, active := false) -> StyleBoxFlat:
 	sb.shadow_color = Color(0, 0, 0, 0.35)
 	sb.shadow_size = 5
 	sb.shadow_offset = Vector2(0, 2)
-	match id:
-		"gas":
-			sb.bg_color = Color(0.08, 0.42, 0.2, 0.62)
-			sb.border_color = Color(0.4, 1.0, 0.55, 0.95)
-		"brake":
-			sb.bg_color = Color(0.5, 0.08, 0.1, 0.62)
-			sb.border_color = Color(1.0, 0.42, 0.42, 0.95)
-		"left", "right":
-			sb.bg_color = Color(0.1, 0.13, 0.2, 0.6)
-			sb.border_color = Color(0.75, 0.85, 1.0, 0.75)
-		_:
-			sb.bg_color = Color(0.05, 0.07, 0.11, 0.64)
-			sb.border_color = Color(1, 1, 1, 0.42)
+	sb.bg_color = Color(0.05, 0.07, 0.11, 0.64)
+	sb.border_color = Color(1, 1, 1, 0.42)
 	if active:
 		sb.bg_color = Color(1.0, 0.58, 0.05, 0.85)
 		sb.border_color = Color(1, 0.95, 0.7, 0.95)
@@ -56,6 +50,11 @@ static func decorate(p: Control, id: String, l: Label, w: float, h: float) -> vo
 		p.add_child(ic)
 	ic.kind = ICONS[id]
 	ic.tall = h >= 56.0
+	ic.only = ICON_ONLY.has(id)
+	if ic.only:
+		l.text = ""
+		ic.queue_redraw()
+		return
 	ic.queue_redraw()
 	var txt := l.text
 	if ic.tall:

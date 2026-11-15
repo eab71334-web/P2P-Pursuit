@@ -1411,8 +1411,8 @@ func _apply_steer_mode() -> void:
 		wheel_ui = null
 	wheel_angle = 0.0
 	if steer_mode == "buttons":
-		_make_zone("left", "<", 0.0, 1.0, 20, -170, 160, -40, 40)
-		_make_zone("right", ">", 0.0, 1.0, 180, -170, 320, -40, 40)
+		_make_zone("left", "", 0.0, 1.0, 20, -170, 160, -40, 40)
+		_make_zone("right", "", 0.0, 1.0, 180, -170, 320, -40, 40)
 	else:
 		wheel_ui = SteerUI.Wheel.new()
 		wheel_ui.lock = SteerUI.LOCK[steer_mode]
@@ -2391,12 +2391,12 @@ func _build_hud() -> void:
 	if my_role == "driver":
 		# page 1 = the six everyday buttons, page 2 = everything else (4 columns). Big, spaced buttons so a thumb hits them at speed.
 		var items := [
-			["c_sigl", UI.tx("< SIGNAL", "< إشارة"), "signal_left"], ["c_horn", UI.tx("HORN", "بوق"), "horn"], ["c_sigr", UI.tx("SIGNAL >", "إشارة >"), "signal_right"],
-			["c_lights", UI.tx("LIGHTS", "إضاءة"), "lights"], ["c_wipers", UI.tx("WIPER", "مساحات"), "wipers"], ["c_more", UI.tx("MORE >>", "المزيد >>"), "@more"],
+			["c_sigl", UI.tx("SIGNAL", "إشارة"), "signal_left"], ["c_horn", UI.tx("HORN", "بوق"), "horn"], ["c_sigr", UI.tx("SIGNAL", "إشارة"), "signal_right"],
+			["c_lights", UI.tx("LIGHTS", "إضاءة"), "lights"], ["c_wipers", UI.tx("WIPER", "مساحات"), "wipers"], ["c_more", UI.tx("MORE", "المزيد"), "@more"],
 			["c_drink", UI.tx("DRINK", "اشرب"), "drink"], ["c_mirl", UI.tx("MIRROR L", "مرآة يسار"), "mirror_left"], ["c_mirr", UI.tx("MIRROR R", "مرآة يمين"), "mirror_right"], ["c_kind", UI.tx("JUICE", "عصير"), ""],
 			["p2_haz", UI.tx("HAZARD", "طوارئ"), "hazard"], ["p2_flash", UI.tx("HIGH BEAM", "ضوء بعيد"), "flash"], ["p2_hb", UI.tx("HANDBRAKE", "فرامل يد"), "hbrake"],
 			["p2_win", UI.tx("WINDOWS", "نوافذ"), "window"], ["p2_ac", UI.tx("A/C FAN", "مروحة"), "ac"], ["p2_dome", UI.tx("CABIN LIGHT", "إضاءة داخلية"), "dome"],
-			["p2_greet", UI.tx("GREET", "تحية"), "greet"], ["p2_back", UI.tx("<< BACK", "<< رجوع"), "@back"]]
+			["p2_greet", UI.tx("GREET", "تحية"), "greet"], ["p2_back", UI.tx("BACK", "رجوع"), "@back"]]
 		for k in items.size():
 			var col: int
 			var row: int
@@ -2430,9 +2430,9 @@ func _build_hud() -> void:
 		cab_toast.modulate.a = 0.0
 		hud_root.add_child(cab_toast)
 	# radio (bottom centre): < station >   (tap the name to switch it off / on)
-	_make_zone("radio_prev", "<", 0.5, 1.0, -160, -70, -98, -12, 26, _radio_step.bind(-1))
+	_make_zone("radio_prev", "", 0.5, 1.0, -160, -70, -98, -12, 26, _radio_step.bind(-1))
 	_make_zone("radio_name", Radio.label(), 0.5, 1.0, -90, -70, 90, -12, 17, Radio.toggle)
-	_make_zone("radio_next", ">", 0.5, 1.0, 98, -70, 160, -12, 26, _radio_step.bind(1))
+	_make_zone("radio_next", "", 0.5, 1.0, 98, -70, 160, -12, 26, _radio_step.bind(1))
 	Radio.changed.connect(_update_radio_hud)
 	if show_touch:
 		_apply_steer_mode()
