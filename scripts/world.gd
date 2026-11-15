@@ -154,6 +154,7 @@ var hud_root: Control
 var timer_label: Label
 var medal_label: Label
 var speed_label: Label
+var gauge: HudGauge
 var role_label: Label
 var rank_label: Label
 var center_label: Label
@@ -2383,6 +2384,17 @@ func _build_hud() -> void:
 	speed_label.size = Vector2(340, 30)
 	speed_label.position.x = 24.0
 	hud_root.add_child(speed_label)
+	gauge = HudGauge.new()                                  # round speed + rpm + gear gauge, bottom centre above the radio
+	gauge.anchor_left = 0.5
+	gauge.anchor_right = 0.5
+	gauge.anchor_top = 1.0
+	gauge.anchor_bottom = 1.0
+	gauge.offset_left = -80
+	gauge.offset_right = 80
+	gauge.offset_top = -240
+	gauge.offset_bottom = -80
+	hud_root.add_child(gauge)
+	speed_label.visible = false
 	rank_label = Label.new()
 	rank_label.position = Vector2(14, 66)
 	_style_label(rank_label, 20)
@@ -2806,6 +2818,25 @@ func _update_repair_ui(delta: float) -> void:
 		spray_last = false
 
 
+func _est_gear(spd: float) -> String:
+	if spd < 2.0:
+		return "N"
+	var g := 1
+	for i in Car.GEARS.size():
+		if spd >= Car.GEARS[i]:
+			g = i + 1
+	return str(g)
+
+
+func _est_rpm(spd: float) -> float:
+	var g := 0
+	for i in Car.GEARS.size() - 1:
+		if spd >= Car.GEARS[i]:
+			g = i
+	var ratio := clampf((spd - Car.GEARS[g]) / (Car.GEARS[g + 1] - Car.GEARS[g]), 0.0, 1.0)
+	return lerpf(0.34, 0.95, ratio) if spd > 3.0 else 0.2
+
+
 func _update_hud() -> void:
 	var my := teams[my_team]
 	if grace_show > 0.0 and state == State.RUNNING:
@@ -2819,6 +2850,15 @@ func _update_hud() -> void:
 	timer_label.text = _fmt(shown_time)
 	var spd := my.car.speed_kmh if multiplayer.is_server() else my.speed
 	speed_label.text = "%d km/h" % int(spd)
+	speed_label.visible = not Gfx.gauge_on
+	if gauge != null:
+		gauge.visible = Gfx.gauge_on
+	if gauge != null and my.car != null and is_instance_valid(my.car):
+		var gr: float = float(my.car._rpm) if multiplayer.is_server() else _est_rpm(spd)
+		var gg := str(my.car.gear_sel) if my.car.gear_sel != "" else "N"
+		if not multiplayer.is_server():
+			gg = _est_gear(spd)
+		gauge.set_values(spd, gr, gg, float(my.car.top_speed))
 	if state == State.RUNNING:
 		if speed_fx != null and speed_fx.visible:
 			(speed_fx.material as ShaderMaterial).set_shader_parameter("amount", smoothstep(130.0, 210.0, spd))

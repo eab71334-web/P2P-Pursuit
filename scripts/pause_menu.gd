@@ -367,6 +367,15 @@ func _tab_game() -> void:
 	_row(UI.tx("Vibration", "الاهتزاز"), _seg(_onoff(), Gfx.haptics, func(x):
 		Gfx.haptics = x
 		Gfx.save()))
+	_row(UI.tx("Smart buttons (wipers in rain, lights at night)", "أزرار ذكية (المساحات بالمطر، الأضواء بالليل)"), _seg(_onoff(), Gfx.smart_buttons, func(x):
+		Gfx.smart_buttons = x
+		Gfx.save()))
+	_row(UI.tx("Speed gauge", "عدّاد السرعة الدائري"), _seg(_onoff(), Gfx.gauge_on, func(x):
+		Gfx.gauge_on = x
+		Gfx.save()))
+	_row(UI.tx("Left-handed layout (applies next race)", "وضع الأعسر: قلب الواجهة (من السباق القادم)"), _seg(_onoff(), Gfx.ui_mirror, func(x):
+		Gfx.ui_mirror = x
+		Gfx.save()))
 
 
 func _pad() -> Node:
