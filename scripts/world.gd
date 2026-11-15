@@ -1472,8 +1472,18 @@ func _hud_tick() -> void:
 		if not zp.visible or zp.get_child_count() < 2:
 			continue
 		var pr := _zone_pressed(str(k))
-		zp.self_modulate = Color(1.6, 1.6, 1.6) if pr else Color.WHITE
-		var want := 0.88 if pr else 1.0
+		var en := float(zp.get_meta("enter", 1.0))
+		var enf := 1.0
+		if en < 1.0:
+			en += get_process_delta_time() * 4.5
+			zp.set_meta("enter", en)
+			var t := clampf(en, 0.0, 1.0)
+			enf = 1.0 + 2.70158 * pow(t - 1.0, 3.0) + 1.70158 * pow(t - 1.0, 2.0)     # ease out back: a little overshoot
+			enf = lerpf(0.55, 1.0, enf)
+			zp.self_modulate = Color(1, 1, 1, t)
+		else:
+			zp.self_modulate = Color(1.6, 1.6, 1.6) if pr else Color.WHITE
+		var want := (0.88 if pr else 1.0) * enf
 		for ch in zp.get_children():
 			if ch is Label or ch is ZoneIcon:
 				var cc := ch as Control
@@ -2485,12 +2495,12 @@ func _build_hud() -> void:
 			_make_zone("g_right", L.t("z_right"), 0.0, 1.0, 220, gy, 312, gy + 70, 18, _set_gesture.bind(3))
 			_make_zone("g_stop", L.t("z_stop"), 0.0, 1.0, 320, gy, 412, gy + 70, 18, _set_gesture.bind(4))
 		# map / signal cluster: bottom-right (above GAS/BRAKE when touch driving)
-		var cy := -234.0 if show_touch else -100.0
-		var bw := 98.0 if show_touch else 110.0
+		var cy := -252.0 if show_touch else -100.0
+		var bw := 118.0 if show_touch else 110.0
 		var n_btn := 3 if Net.ffa else 4
-		var gap := 10.0
+		var gap := 14.0
 		var x := -20.0 - (bw * n_btn + gap * (n_btn - 1))
-		var ch := 60.0 if show_touch else 70.0
+		var ch := 72.0 if show_touch else 70.0
 		_make_zone("msize", UI.tx("SIZE", "الحجم"), 1.0, 1.0, x, cy, x + bw, cy + ch, 16, _map_size)
 		x += bw + gap
 		_make_zone("mnear", UI.tx("NEAR", "قرّب"), 1.0, 1.0, x, cy, x + bw, cy + ch, 16, _map_near)
@@ -2507,6 +2517,10 @@ func _build_hud() -> void:
 			hud_root.add_child(clipboard)
 	HudLayout.apply_world(zones)
 	_flip_hud()
+	var ik := 0
+	for zi in zones:
+		_enter_pop(zones[zi] as Control, 0.25 + 0.025 * float(ik))
+		ik += 1
 
 
 func _my_actions() -> CarActions:
@@ -2528,7 +2542,24 @@ const GLOW_SHADER := "shader_type canvas_item;\nuniform vec4 col : source_color 
 
 
 ## cabin button block has two pages: 1 = everyday, 2 = the extras (hazard, high beam, handbrake, windows, fan, cabin light, greet)
+func _enter_pop(zc: Control, delay: float) -> void:
+	zc.set_meta("enter", -delay)
+
+
 func _cab_page(n: int) -> void:
+	var was := {}
+	for zn0 in zones:
+		was[zn0] = (zones[zn0] as Control).visible
+	_cab_page_apply(n)
+	var k := 0
+	for zn1 in zones:
+		var z1 := str(zn1)
+		if (zones[zn1] as Control).visible and not was[zn1] and (z1.begins_with("c_") or z1.begins_with("p2_")):
+			_enter_pop(zones[zn1] as Control, 0.04 * float(k))
+			k += 1
+
+
+func _cab_page_apply(n: int) -> void:
 	for zn in zones:
 		var z := str(zn)
 		if not Controls.touch_wanted() and (z.begins_with("c_") or z.begins_with("p2_") or z == "hudcfg"):

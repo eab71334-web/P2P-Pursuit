@@ -59,8 +59,10 @@ func _draw() -> void:
 		col = Color(1.0, 0.8, 0.25)
 	elif kind == "beam":
 		col = Color(0.55, 0.8, 1.0)
-	draw_set_transform(c + Vector2(0, r * 0.07), 0.0, Vector2(r, r))
-	_shape(Color(0, 0, 0, 0.5), r)
+	for i in 4:                                              # soft glow behind the icon
+		draw_circle(c, r * (1.7 - 0.3 * float(i)), Color(col.r, col.g, col.b, 0.028))
+	draw_set_transform(c + Vector2(0, r * 0.12), 0.0, Vector2(r, r))
+	_shape(Color(0, 0, 0, 0.55), r)
 	draw_set_transform(c, 0.0, Vector2(r, r))
 	_shape(col, r)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

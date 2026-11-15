@@ -31,7 +31,7 @@ static func box(id: String, active := false) -> StyleBoxFlat:
 	sb.shadow_color = Color(0, 0, 0, 0.35)
 	sb.shadow_size = 5
 	sb.shadow_offset = Vector2(0, 2)
-	sb.bg_color = Color(0.05, 0.07, 0.11, 0.64)
+	sb.bg_color = Color(0.04, 0.055, 0.09, 0.78)
 	sb.border_color = Color(1, 1, 1, 0.42)
 	if active:
 		sb.bg_color = Color(1.0, 0.58, 0.05, 0.85)
