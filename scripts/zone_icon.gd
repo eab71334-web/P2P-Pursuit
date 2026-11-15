@@ -6,6 +6,7 @@ extends Control
 var kind := ""
 var tall := true
 var only := false
+var radius := 14.0
 
 
 func _init() -> void:
@@ -13,7 +14,34 @@ func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
+## the top half of the rounded body, as a polygon
+func _top_poly(inset: float, rad: float, depth: float) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	var x0 := inset
+	var x1 := size.x - inset
+	var y0 := inset
+	var yb := y0 + size.y * depth
+	var rr := minf(rad, minf((x1 - x0) * 0.5, (yb - y0)))
+	for i in 7:
+		var a := PI + float(i) * (PI * 0.5) / 6.0
+		pts.append(Vector2(x0 + rr, y0 + rr) + Vector2.from_angle(a) * rr)
+	for i in 7:
+		var a := PI * 1.5 + float(i) * (PI * 0.5) / 6.0
+		pts.append(Vector2(x1 - rr, y0 + rr) + Vector2.from_angle(a) * rr)
+	pts.append(Vector2(x1, yb))
+	pts.append(Vector2(x0, yb))
+	return pts
+
+
 func _draw() -> void:
+	# glossy top highlight (fades downwards) + a thin inner rim, like the buttons of the big racing games
+	var poly := _top_poly(3.0, radius - 2.0, 0.52)
+	var cols := PackedColorArray()
+	for q in poly:
+		cols.append(Color(1, 1, 1, lerpf(0.2, 0.0, clampf((q.y - 3.0) / (size.y * 0.52), 0.0, 1.0))))
+	draw_polygon(poly, cols)
+	var bot := Color(0, 0, 0, 0.0)
+	draw_rect(Rect2(Vector2(radius * 0.6, size.y - 6.0), Vector2(size.x - radius * 1.2, 3.0)), Color(0, 0, 0, 0.18))
 	var r: float
 	var c: Vector2
 	if only:

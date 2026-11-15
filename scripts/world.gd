@@ -1050,6 +1050,7 @@ func _read_driving_input() -> void:
 			thr = 1.0
 		if _zone_pressed("brake"):
 			brk = 1.0
+	_brake_in = brk
 	var v := Vector3(clampf(steer, -1.0, 1.0), thr, brk)
 	if multiplayer.is_server():
 		teams[my_team].input = v
@@ -1466,10 +1467,18 @@ func _hud_tick() -> void:
 		var zc := zones[k] as Control
 		if not is_equal_approx(zc.modulate.a, za):
 			zc.modulate.a = za
-	for k in ["gas", "brake", "left", "right"]:                  # pressed: the body lights up
-		if zones.has(k) and (zones[k] as Control).visible:
-			var pr := _zone_pressed(k)
-			(zones[k] as Control).self_modulate = Color(1.7, 1.7, 1.7) if pr else Color.WHITE
+	for k in zones:                                              # pressed: the body lights up and the icon + text shrink a little
+		var zp := zones[k] as Control
+		if not zp.visible or zp.get_child_count() < 2:
+			continue
+		var pr := _zone_pressed(str(k))
+		zp.self_modulate = Color(1.6, 1.6, 1.6) if pr else Color.WHITE
+		var want := 0.88 if pr else 1.0
+		for ch in zp.get_children():
+			if ch is Label or ch is ZoneIcon:
+				var cc := ch as Control
+				cc.pivot_offset = cc.size * 0.5
+				cc.scale = cc.scale.lerp(Vector2(want, want), 0.45)
 
 
 func _open_pause_menu() -> void:
@@ -1513,11 +1522,20 @@ func _touch_press(index: int, pos: Vector2) -> void:
 	for zn in zones:
 		if (zones[zn] as Control).visible and not HudLayout.is_removed(str(zn)) and _zone_has(zones[zn] as Control, pos):
 			zone_touch[index] = zn
+			_press_feel(str(zn))
 			if tap_zones.has(zn):
 				(tap_zones[zn] as Callable).call()
 			return
 	if look_touch == -1:
 		look_touch = index   # a touch outside every button = look around
+
+
+## a button was touched: short vibration + soft click (the driving pedals only vibrate, no click)
+func _press_feel(zn: String) -> void:
+	if Gfx.haptics and OS.has_feature("mobile"):
+		Input.vibrate_handheld(12 if ["gas", "brake", "left", "right"].has(zn) else 18, 0.5)
+	if not ["gas", "brake", "left", "right"].has(zn):
+		Sfx.play("click", -12.0, 1.0 + randf_range(-0.05, 0.08))
 
 
 ## hit test that also works for buttons the player scaled / rotated
@@ -2327,6 +2345,17 @@ func _build_hud() -> void:
 	speed_fx.material = FxShaders.speed_lines()
 	speed_fx.visible = Gfx.fx >= 0.5
 	hud_root.add_child(speed_fx)
+	glow_fx = ColorRect.new()
+	glow_fx.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	glow_fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var gsh := Shader.new()
+	gsh.code = GLOW_SHADER
+	var gm := ShaderMaterial.new()
+	gm.shader = gsh
+	glow_fx.material = gm
+	glow_fx.visible = Gfx.fx >= 0.5
+	hud_root.add_child(glow_fx)
+	hud_root.move_child(glow_fx, 0)
 	timer_label = _full_label(8, 56, 46)
 	medal_label = _full_label(62, 34, 24)
 	gesture_label = _full_label(100, 50, 34)
@@ -2343,14 +2372,23 @@ func _build_hud() -> void:
 		if Net.squads > 0:
 			role_label.text = (L.t("TEAMX") % char(65 + my_team % Net.squads)) + "  -  " + role_label.text
 	_style_label(role_label, 22)
+	role_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	role_label.size = Vector2(340, 30)
+	role_label.position.x = 24.0
 	hud_root.add_child(role_label)
 	speed_label = Label.new()
 	speed_label.position = Vector2(14, 36)
 	_style_label(speed_label, 22)
+	speed_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	speed_label.size = Vector2(340, 30)
+	speed_label.position.x = 24.0
 	hud_root.add_child(speed_label)
 	rank_label = Label.new()
 	rank_label.position = Vector2(14, 66)
 	_style_label(rank_label, 20)
+	rank_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	rank_label.size = Vector2(340, 30)
+	rank_label.position.x = 24.0
 	hud_root.add_child(rank_label)
 
 	grace_label = _full_label(132, 40, 26)
@@ -2482,6 +2520,11 @@ func _my_actions() -> CarActions:
 
 var cab_toast: Label
 var speed_fx: ColorRect
+var glow_fx: ColorRect                  # coloured screen-edge glow: warm at speed, red when braking hard
+var _glow_amt := 0.0
+var _glow_col := Color(1.0, 0.55, 0.15)
+var _brake_in := 0.0
+const GLOW_SHADER := "shader_type canvas_item;\nuniform vec4 col : source_color = vec4(1.0, 0.5, 0.1, 1.0);\nuniform float amount = 0.0;\nvoid fragment() {\n\tvec2 d = (UV - 0.5) * vec2(1.25, 1.0);\n\tfloat e = smoothstep(0.32, 0.78, length(d));\n\tCOLOR = vec4(col.rgb, e * amount);\n}\n"
 
 
 ## cabin button block has two pages: 1 = everyday, 2 = the extras (hazard, high beam, handbrake, windows, fan, cabin light, greet)
@@ -2779,6 +2822,15 @@ func _update_hud() -> void:
 	if state == State.RUNNING:
 		if speed_fx != null and speed_fx.visible:
 			(speed_fx.material as ShaderMaterial).set_shader_parameter("amount", smoothstep(130.0, 210.0, spd))
+		if glow_fx != null and glow_fx.visible:
+			var hard := _brake_in > 0.5 and spd > 40.0
+			var want_a := 0.5 if hard else smoothstep(110.0, 210.0, spd) * 0.4
+			var want_c := Color(1.0, 0.15, 0.1) if hard else Color(1.0, 0.55, 0.15)
+			_glow_amt = lerpf(_glow_amt, want_a, 0.12)
+			_glow_col = _glow_col.lerp(want_c, 0.2)
+			var gmat := glow_fx.material as ShaderMaterial
+			gmat.set_shader_parameter("amount", _glow_amt)
+			gmat.set_shader_parameter("col", _glow_col)
 		Score.drive(spd, my.car != null and is_instance_valid(my.car) and my.car.damage >= 80.0)
 	var shown := false
 	for m in MEDALS:

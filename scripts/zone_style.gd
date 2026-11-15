@@ -36,6 +36,9 @@ static func box(id: String, active := false) -> StyleBoxFlat:
 	if active:
 		sb.bg_color = Color(1.0, 0.58, 0.05, 0.85)
 		sb.border_color = Color(1, 0.95, 0.7, 0.95)
+		sb.shadow_color = Color(1.0, 0.6, 0.1, 0.55)                  # glows while switched on
+		sb.shadow_size = 14
+		sb.shadow_offset = Vector2.ZERO
 	return sb
 
 
@@ -49,6 +52,7 @@ static func decorate(p: Control, id: String, l: Label, w: float, h: float) -> vo
 		ic.name = "Icon"
 		p.add_child(ic)
 	ic.kind = ICONS[id]
+	ic.radius = 20.0 if (id == "gas" or id == "brake") else 14.0
 	ic.tall = h >= 56.0
 	ic.only = ICON_ONLY.has(id)
 	if ic.only:
