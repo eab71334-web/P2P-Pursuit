@@ -10,7 +10,7 @@ const WEATHER_NAMES := {
 	"clear": ["Clear", "صافي"], "fog": ["Fog", "ضباب"], "rain": ["Rain", "مطر"], "night": ["Night", "ليل"], "storm": ["Storm", "عاصفة"],
 }
 const THEME_NAMES := {
-	"mountain": ["Mountain", "جبل"], "snow": ["Snow", "ثلج"], "autumn": ["Autumn", "خريف"],
+	"mountain": ["Mountain", "جبل"], "snow": ["Snow", "ثلج"], "autumn": ["Autumn", "خريف"], "desert": ["Desert", "صحراء"], "beach": ["Beach", "شاطئ"],
 }
 const TIER_NAMES := [["ROOKIE CUP", "كأس المبتدئين"], ["PRO SERIES", "سلسلة المحترفين"], ["EXPERT LEAGUE", "دوري الخبراء"], ["LEGEND CHAMPIONSHIP", "بطولة الأساطير"]]
 const PLACE := {"autumn": [["Maple", "القيقب"], ["Amber", "العنبر"], ["Harvest", "الحصاد"]], "snow": [["Frost", "الصقيع"], ["Glacier", "الجليد"], ["Aurora", "الشفق"]],

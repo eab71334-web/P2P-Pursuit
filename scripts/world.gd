@@ -23,6 +23,12 @@ const THEMES := {
 	"autumn": {"top": Color(0.5, 0.62, 0.8), "hor": Color(0.95, 0.85, 0.7), "fog": 0.004, "ground": Color(0.5, 0.36, 0.18),
 		"bank": Color(0.55, 0.42, 0.25), "road": Color(0.3, 0.26, 0.22), "trunk": Color(0.3, 0.18, 0.1),
 		"l1": Color(0.85, 0.4, 0.1), "l2": Color(0.9, 0.62, 0.15), "mount": Color(0.6, 0.45, 0.35)},
+	"desert": {"top": Color(0.28, 0.5, 0.86), "hor": Color(0.98, 0.88, 0.7), "fog": 0.0032, "ground": Color(0.86, 0.7, 0.42),
+		"bank": Color(0.8, 0.62, 0.38), "road": Color(0.28, 0.27, 0.27), "trunk": Color(0.35, 0.25, 0.14),
+		"l1": Color(0.45, 0.5, 0.25), "l2": Color(0.55, 0.58, 0.3), "mount": Color(0.78, 0.55, 0.34), "tree_p": 0.18},
+	"beach": {"top": Color(0.15, 0.55, 0.9), "hor": Color(0.8, 0.93, 0.98), "fog": 0.0026, "ground": Color(0.95, 0.88, 0.68),
+		"bank": Color(0.9, 0.82, 0.62), "road": Color(0.3, 0.3, 0.32), "trunk": Color(0.5, 0.36, 0.2),
+		"l1": Color(0.1, 0.55, 0.25), "l2": Color(0.2, 0.68, 0.32), "mount": Color(0.35, 0.6, 0.5), "tree_p": 0.5},
 	"mountain": {"top": Color(0.3, 0.45, 0.75), "hor": Color(0.75, 0.82, 0.9), "fog": 0.0028, "ground": Color(0.22, 0.3, 0.25),
 		"bank": Color(0.6, 0.6, 0.64), "road": Color(0.22, 0.22, 0.25), "trunk": Color(0.3, 0.2, 0.12),
 		"l1": Color(0.1, 0.3, 0.18), "l2": Color(0.14, 0.38, 0.22), "mount": Color(0.55, 0.57, 0.62), "pillar": Color(0.42, 0.4, 0.4)},
@@ -856,6 +862,45 @@ func crash_fx(team: int, dv: float) -> void:
 	Sfx.play3d("crash_hard" if dv > 9.0 else "crash_soft", car, clampf(dv * 0.6 - 6.0, -6.0, 6.0), randf_range(0.9, 1.1))
 	if team == my_team:
 		shake = maxf(shake, clampf(dv / 14.0, 0.2, 0.9))
+	if dv > 7.0 and not Net.dedicated and car != null:
+		_crash_burst(car.global_position + Vector3(0, 0.8, 0), dv)
+
+
+## a puff of dust and a spray of glittering glass where the cars hit
+func _crash_burst(pos: Vector3, dv: float) -> void:
+	for kind in 2:
+		var p := CPUParticles3D.new()
+		p.top_level = true
+		p.global_position = pos
+		p.one_shot = true
+		p.emitting = true
+		p.explosiveness = 0.95
+		p.amount = Gfx.particles(24 if kind == 0 else 40)
+		p.lifetime = 1.4 if kind == 0 else 1.1
+		p.direction = Vector3.UP
+		p.spread = 70.0
+		p.initial_velocity_min = 2.0 if kind == 0 else 4.0
+		p.initial_velocity_max = clampf(dv * 0.5, 4.0, 9.0)
+		p.gravity = Vector3(0, 0.5 if kind == 0 else -9.0, 0)
+		var q := QuadMesh.new()
+		q.size = Vector2(1.3, 1.3) if kind == 0 else Vector2(0.09, 0.09)
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.vertex_color_use_as_albedo = true
+		q.material = m
+		p.mesh = q
+		var g := Gradient.new()
+		if kind == 0:
+			g.colors = PackedColorArray([Color(0.6, 0.57, 0.52, 0.0), Color(0.6, 0.57, 0.52, 0.55), Color(0.5, 0.5, 0.5, 0.0)])
+			g.offsets = PackedFloat32Array([0.0, 0.2, 1.0])
+		else:
+			g.colors = PackedColorArray([Color(0.85, 0.95, 1.0, 1.0), Color(0.75, 0.9, 1.0, 0.9), Color(0.7, 0.85, 1.0, 0.0)])
+			g.offsets = PackedFloat32Array([0.0, 0.6, 1.0])
+		p.color_ramp = g
+		add_child(p)
+		get_tree().create_timer(2.5).timeout.connect(p.queue_free)
 
 
 # --- repair requests (any teammate may do the work; only one goes outside)
@@ -2230,7 +2275,7 @@ func _build_trees() -> void:
 		if track.in_tunnel(i):
 			continue
 		for side in [-1.0, 1.0]:
-			if rng.randf() > (0.55 if mountain else 0.8) * Gfx.trees:
+			if rng.randf() > (0.55 if mountain else 0.8) * Gfx.trees * float(th.get("tree_p", 1.0)):
 				continue
 			var left := Track.left_of(track.headings[i])
 			var off := Track.ROAD_WIDTH * 0.5 + 6.0 + rng.randf_range(0.0, 30.0)
@@ -2449,7 +2494,7 @@ func _build_mountains() -> void:
 			far_x.append(t)
 		else:
 			near_x.append(t)
-		if h > 240.0 * k and track.theme != "autumn":
+		if h > 240.0 * k and not (track.theme in ["autumn", "desert", "beach"]):
 			caps.append(Transform3D(bs * Basis.from_scale(Vector3(w * 0.3, h * 0.3, w * 0.3)), pos + Vector3(0, h * 0.85 - 6.0, 0)))
 	var mc: Color = th["mount"]
 	var hz: Color = th["hor"]
