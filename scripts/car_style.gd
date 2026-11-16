@@ -22,9 +22,7 @@ static func mat(c: Color, metal := 0.0, rough := 0.6, emit := 0.0) -> StandardMa
 
 static func box(parent: Node, size: Vector3, pos: Vector3, m: Material, rot := Vector3.ZERO) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = size
-	mi.mesh = bm
+	mi.mesh = Scenery.rounded_box(size, 0.045)
 	mi.material_override = m
 	mi.position = pos
 	mi.rotation_degrees = rot

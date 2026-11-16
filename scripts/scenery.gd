@@ -199,3 +199,61 @@ static func window_material() -> StandardMaterial3D:
 	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	m.roughness = 0.6
 	return m
+
+
+static var _rb_cache := {}
+
+## a box with softly rounded edges and smooth shading: 4x4 vertices per face, cached per size. Used for the car parts.
+static func rounded_box(size: Vector3, radius := 0.05) -> ArrayMesh:
+	var r := minf(radius, minf(size.x, minf(size.y, size.z)) * 0.3)
+	if r < 0.008:
+		r = 0.0
+	var key := Vector4(snappedf(size.x, 0.005), snappedf(size.y, 0.005), snappedf(size.z, 0.005), snappedf(r, 0.005))
+	if _rb_cache.has(key):
+		return _rb_cache[key]
+	var h := size * 0.5
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var offs := [-h, -h + Vector3(r, r, r), h - Vector3(r, r, r), h]
+	for face in 6:
+		var axis := face / 2
+		var sgn := 1.0 if face % 2 == 0 else -1.0
+		var u := (axis + 1) % 3
+		var v := (axis + 2) % 3
+		var grid: Array = []
+		for j in 4:
+			var row: Array = []
+			for i in 4:
+				var p := Vector3.ZERO
+				p[axis] = h[axis] * sgn
+				p[u] = (offs[i] as Vector3)[u]
+				p[v] = (offs[j] as Vector3)[v]
+				var c := Vector3(clampf(p.x, -h.x + r, h.x - r), clampf(p.y, -h.y + r, h.y - r), clampf(p.z, -h.z + r, h.z - r))
+				var d := p - c
+				var nrm := Vector3.ZERO
+				if r > 0.0 and d.length() > 0.00001:
+					nrm = d.normalized()
+					p = c + nrm * r
+				else:
+					nrm[axis] = sgn
+				row.append([p, nrm])
+			grid.append(row)
+		for j in 3:
+			for i in 3:
+				var a: Array = grid[j][i]
+				var b: Array = grid[j][i + 1]
+				var c2: Array = grid[j + 1][i + 1]
+				var d2: Array = grid[j + 1][i]
+				var order := [a, b, c2, a, c2, d2]
+				var tri_n: Vector3 = ((b[0] as Vector3) - (a[0] as Vector3)).cross((c2[0] as Vector3) - (a[0] as Vector3))
+				var outward := Vector3.ZERO
+				outward[axis] = sgn
+				if tri_n.dot(outward) < 0.0:
+					order = [a, c2, b, a, d2, c2]
+				for q in order:
+					st.set_normal(q[1])
+					st.set_uv(Vector2(0.0, 0.0))
+					st.add_vertex(q[0])
+	var m := st.commit()
+	_rb_cache[key] = m
+	return m

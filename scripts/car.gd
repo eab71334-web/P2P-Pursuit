@@ -278,9 +278,7 @@ func _mat(c: Color) -> StandardMaterial3D:
 
 func _box(parent: Node, size: Vector3, pos: Vector3, c: Color) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = size
-	mi.mesh = bm
+	mi.mesh = Scenery.rounded_box(size, 0.06)
 	mi.material_override = body_mat if (body_mat != null and c == body_color) else _mat(c)
 	mi.position = pos
 	parent.add_child(mi)
