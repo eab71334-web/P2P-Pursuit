@@ -478,6 +478,29 @@ func _build_fx() -> void:
 func _build_ground_fx() -> void:
 	if preview:
 		return
+	# soft contact shadow under the car (always on, even where real shadows are off)
+	var gt := GradientTexture2D.new()
+	gt.fill = GradientTexture2D.FILL_RADIAL
+	gt.fill_from = Vector2(0.5, 0.5)
+	gt.fill_to = Vector2(1.0, 0.5)
+	var gg := Gradient.new()
+	gg.colors = PackedColorArray([Color(0, 0, 0, 0.6), Color(0, 0, 0, 0.0)])
+	gt.gradient = gg
+	gt.width = 64
+	gt.height = 64
+	var sq := QuadMesh.new()
+	sq.size = Vector2(3.0, 5.2)
+	sq.orientation = PlaneMesh.FACE_Y
+	var sm := StandardMaterial3D.new()
+	sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	sm.albedo_texture = gt
+	sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	sq.material = sm
+	var sh := MeshInstance3D.new()
+	sh.mesh = sq
+	sh.position = Vector3(0, 0.08, 0.2)
+	sh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(sh)
 	for x in [-0.85, 0.85]:
 		var g := Gradient.new()
 		g.colors = PackedColorArray([Color(0.62, 0.55, 0.45, 0.0), Color(0.62, 0.55, 0.45, 0.5), Color(0.6, 0.55, 0.5, 0.0)])

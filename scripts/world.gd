@@ -165,6 +165,7 @@ var hud_root: Control
 var timer_label: Label
 var medal_label: Label
 var speed_label: Label
+var _fov_kick := 0.0
 var _drive_shake := 0.0          # light camera shake when braking hard / at very high speed
 var hint_layer: Control
 var role_label: Label
@@ -1077,7 +1078,7 @@ func _update_look(delta: float) -> void:
 		return
 	var dragging := look_touch != -1 or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
 	if local_avatar.cam:
-		local_avatar.cam.fov = move_toward(local_avatar.cam.fov, 40.0 if map_mode else 82.0, delta * 160.0)
+		local_avatar.cam.fov = move_toward(local_avatar.cam.fov, 40.0 if map_mode else 82.0 + _fov_kick, delta * 160.0)
 	if map_mode and not dragging:
 		if solo and local_avatar.role == "driver":      # the dashboard screen is on the passenger side
 			look_yaw = move_toward(look_yaw, -0.72, delta * 5.0)
@@ -1648,7 +1649,7 @@ func _build_environment() -> void:
 		env.ambient_light_energy = 0.9
 		env.fog_enabled = true
 		env.fog_light_color = th["hor"]
-		env.fog_density = th["fog"] * Gfx.fog_mul()
+		env.fog_density = th["fog"] * Gfx.fog_mul() * 0.7
 		sun.light_energy = 1.0
 		sun.light_color = Color(1.0, 0.95, 0.86)                 # warm sun
 		env.fog_sun_scatter = 0.22                               # haze glows towards the sun
@@ -1720,6 +1721,17 @@ func _apply_weather(env: Environment, sm: ProceduralSkyMaterial, sun: Directiona
 			env.ambient_light_energy = 0.28
 			sun.light_color = Color(0.55, 0.65, 1.0)
 			sun.light_energy = 0.12
+
+
+## the film look per weather: warm at golden hour, cold at night, washed out in rain and fog
+func _grade_look() -> Dictionary:
+	if weather == "night" or weather == "storm":
+		return {"tint": Vector3(0.9, 0.97, 1.12), "shadow_tint": Vector3(0.1, 0.25, 0.6), "contrast": 1.0, "sat": 0.95, "vig": 0.35, "bloom": 1.3}
+	if weather == "rain" or weather == "fog":
+		return {"tint": Vector3(0.98, 1.0, 1.03), "shadow_tint": Vector3(0.0, 0.05, 0.15), "contrast": 1.06, "sat": 0.86, "vig": 0.3, "bloom": 0.45}
+	if Net.track_seed % 3 == 0:
+		return {"tint": Vector3(1.12, 0.98, 0.84), "shadow_tint": Vector3(0.25, 0.08, 0.2), "contrast": 1.13, "sat": 1.15, "vig": 0.36, "bloom": 0.95}
+	return {"tint": Vector3(1.04, 1.0, 0.96), "shadow_tint": Vector3(0.05, 0.1, 0.25), "contrast": 1.1, "sat": 1.1, "vig": 0.28, "bloom": 0.6}
 
 
 func _weather_grip() -> float:
@@ -2670,6 +2682,19 @@ func _build_hud() -> void:
 	speed_fx.material = FxShaders.speed_lines()
 	speed_fx.visible = Gfx.fx >= 0.5
 	hud_root.add_child(speed_fx)
+	grade_fx = ColorRect.new()
+	grade_fx.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	grade_fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var grsh := Shader.new()
+	grsh.code = GRADE_SHADER
+	var grm := ShaderMaterial.new()
+	grm.shader = grsh
+	var gp := _grade_look()
+	for k in gp:
+		grm.set_shader_parameter(k, gp[k])
+	grade_fx.material = grm
+	grade_fx.visible = Gfx.fx >= 0.8 and not blind_mode
+	hud_root.add_child(grade_fx)
 	glow_fx = ColorRect.new()
 	glow_fx.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	glow_fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2681,6 +2706,7 @@ func _build_hud() -> void:
 	glow_fx.visible = Gfx.fx >= 0.5
 	hud_root.add_child(glow_fx)
 	hud_root.move_child(glow_fx, 0)
+	hud_root.move_child(grade_fx, 0)
 	timer_label = _full_label(8, 56, 46)
 	medal_label = _full_label(62, 34, 24)
 	gesture_label = _full_label(100, 50, 34)
@@ -2869,6 +2895,40 @@ func _my_actions() -> CarActions:
 
 var cab_toast: Label
 var speed_fx: ColorRect
+const GRADE_SHADER := """
+shader_type canvas_item;
+uniform sampler2D scr : hint_screen_texture, repeat_disable, filter_linear;
+uniform vec3 tint = vec3(1.0);
+uniform vec3 shadow_tint = vec3(0.0);
+uniform float contrast = 1.1;
+uniform float sat = 1.1;
+uniform float vig = 0.3;
+uniform float bloom = 0.6;
+uniform float blur = 0.0;
+void fragment() {
+	vec2 uv = SCREEN_UV;
+	vec2 d = uv - vec2(0.5);
+	vec3 c = texture(scr, uv).rgb;
+	if (blur > 0.001) {
+		vec3 acc = c;
+		for (int i = 1; i < 5; i++) {
+			acc += texture(scr, uv - d * blur * float(i) * 0.03).rgb;
+		}
+		c = mix(c, acc / 5.0, smoothstep(0.1, 0.5, length(d)));
+	}
+	vec3 b = texture(scr, uv + vec2(0.01, 0.0)).rgb + texture(scr, uv - vec2(0.01, 0.0)).rgb + texture(scr, uv + vec2(0.0, 0.015)).rgb + texture(scr, uv - vec2(0.0, 0.015)).rgb;
+	b = max(b * 0.25 - vec3(0.72), vec3(0.0));
+	c += b * bloom;
+	float l = dot(c, vec3(0.299, 0.587, 0.114));
+	c = mix(vec3(l), c, sat);
+	c = (c - 0.5) * contrast + 0.5;
+	c = c * tint + shadow_tint * (1.0 - clamp(l, 0.0, 1.0)) * 0.08;
+	float v = smoothstep(0.3, 0.85, length(d * vec2(1.0, 0.85)));
+	c *= 1.0 - vig * v;
+	COLOR = vec4(max(c, vec3(0.0)), 1.0);
+}
+"""
+var grade_fx: ColorRect              # cinematic colour grade + bloom + speed blur + vignette (medium quality and up)
 var glow_fx: ColorRect                  # coloured screen-edge glow: warm at speed, red when braking hard
 var _glow_amt := 0.0
 var _glow_col := Color(1.0, 0.55, 0.15)
@@ -3281,6 +3341,9 @@ func _update_hud() -> void:
 		if speed_fx != null and speed_fx.visible:
 			(speed_fx.material as ShaderMaterial).set_shader_parameter("amount", smoothstep(130.0, 210.0, spd))
 		_drive_shake = ((0.012 * clampf(spd / 200.0, 0.0, 1.0) if (_brake_in > 0.5 and spd > 60.0) else 0.0) + 0.003 * smoothstep(150.0, 220.0, spd)) * Gfx.fx
+		if grade_fx != null and grade_fx.visible:
+			(grade_fx.material as ShaderMaterial).set_shader_parameter("blur", smoothstep(120.0, 230.0, spd) * 0.9)
+		_fov_kick = lerpf(_fov_kick, 11.0 * smoothstep(60.0, 220.0, spd) * Gfx.fx, 0.06)
 		if glow_fx != null and glow_fx.visible:
 			var hard := _brake_in > 0.5 and spd > 40.0
 			var want_a := 0.5 if hard else smoothstep(110.0, 210.0, spd) * 0.4
