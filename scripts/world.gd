@@ -29,6 +29,9 @@ const THEMES := {
 	"beach": {"top": Color(0.15, 0.55, 0.9), "hor": Color(0.8, 0.93, 0.98), "fog": 0.0026, "ground": Color(0.95, 0.88, 0.68),
 		"bank": Color(0.9, 0.82, 0.62), "road": Color(0.3, 0.3, 0.32), "trunk": Color(0.5, 0.36, 0.2),
 		"l1": Color(0.1, 0.55, 0.25), "l2": Color(0.2, 0.68, 0.32), "mount": Color(0.35, 0.6, 0.5), "tree_p": 0.5},
+	"city": {"top": Color(0.05, 0.07, 0.16), "hor": Color(0.28, 0.2, 0.34), "fog": 0.0035, "ground": Color(0.09, 0.09, 0.11),
+		"bank": Color(0.32, 0.33, 0.37), "road": Color(0.13, 0.13, 0.15), "trunk": Color(0.2, 0.15, 0.1),
+		"l1": Color(0.06, 0.2, 0.12), "l2": Color(0.08, 0.26, 0.15), "mount": Color(0.12, 0.13, 0.22), "tree_p": 0.15},
 	"mountain": {"top": Color(0.3, 0.45, 0.75), "hor": Color(0.75, 0.82, 0.9), "fog": 0.0028, "ground": Color(0.22, 0.3, 0.25),
 		"bank": Color(0.6, 0.6, 0.64), "road": Color(0.22, 0.22, 0.25), "trunk": Color(0.3, 0.2, 0.12),
 		"l1": Color(0.1, 0.3, 0.18), "l2": Color(0.14, 0.38, 0.22), "mount": Color(0.55, 0.57, 0.62), "pillar": Color(0.42, 0.4, 0.4)},
@@ -210,6 +213,8 @@ func _ready() -> void:
 	track = Track.from_stage(Net.stage)
 	th = THEMES[track.theme]
 	weather = str(Net.stage.get("weather", "clear"))
+	if str(Net.stage.get("theme", "")) == "city" and weather == "clear":
+		weather = "night"          # the city stage is a night stage
 	blind_mode = Net.blind and my_role == "driver" and not solo
 	if my_role == "navigator" or solo:
 		_build_ipad()
@@ -867,6 +872,9 @@ func crash_fx(team: int, dv: float) -> void:
 	Sfx.play3d("crash_hard" if dv > 9.0 else "crash_soft", car, clampf(dv * 0.6 - 6.0, -6.0, 6.0), randf_range(0.9, 1.1))
 	if team == my_team:
 		shake = maxf(shake, clampf(dv / 14.0, 0.2, 0.9))
+	if solo and team == my_team and dv > 12.0 and Engine.time_scale == 1.0 and state == State.RUNNING:   # impact slow-motion
+		Engine.time_scale = 0.35
+		get_tree().create_timer(0.6, true, false, true).timeout.connect(func(): Engine.time_scale = 1.0)
 	if dv > 7.0 and not Net.dedicated and car != null:
 		_crash_burst(car.global_position + Vector3(0, 0.8, 0), dv)
 
@@ -2356,6 +2364,55 @@ func _build_trees() -> void:
 	_build_roadside_extras(rng, avoid, min_d2)
 
 
+## city: blocks of towers with lit windows and neon signs, on both sides of the road
+func _build_city(rng: RandomNumberGenerator, avoid: PackedVector3Array) -> void:
+	var n := track.points.size()
+	var W := Track.ROAD_WIDTH
+	var towers: Array[Transform3D] = []
+	var neon: Array = [[], [], []]
+	var last_pos: Array[Vector3] = []
+	for i in range(6, n - 6, 3):
+		if track.in_tunnel(i):
+			continue
+		var left := Track.left_of(track.headings[i])
+		for side in [-1.0, 1.0]:
+			if rng.randf() < 0.18:
+				continue
+			var sz := Vector3(rng.randf_range(10.0, 20.0), rng.randf_range(14.0, 70.0), rng.randf_range(10.0, 20.0))
+			var off := W * 0.5 + 9.0 + sz.x * 0.5 + rng.randf_range(0.0, 10.0)
+			var pos: Vector3 = track.points[i] + left * side * off
+			pos.y = track.points[i].y
+			var ok := true
+			for q in avoid:
+				var dx: float = q.x - pos.x
+				var dz: float = q.z - pos.z
+				var r: float = W * 0.5 + 6.0 + maxf(sz.x, sz.z) * 0.5
+				if dx * dx + dz * dz < r * r:
+					ok = false
+					break
+			if ok:
+				for lp in last_pos:
+					if absf(lp.x - pos.x) < 12.0 and absf(lp.z - pos.z) < 12.0:
+						ok = false
+						break
+			if not ok:
+				continue
+			last_pos.append(pos)
+			var yaw := track.headings[i]
+			var b := Basis(Vector3.UP, yaw)
+			towers.append(Transform3D(b * Basis.from_scale(sz), pos + Vector3(0, sz.y * 0.5, 0)))
+			if rng.randf() < 0.5:
+				var c := rng.randi() % 3
+				var face: Vector3 = -left * side * (sz.x * 0.5 + 0.2)
+				neon[c].append(Transform3D(b * Basis.from_scale(Vector3(0.3, rng.randf_range(2.0, 4.0), rng.randf_range(4.0, 8.0))), pos + face + Vector3(0, rng.randf_range(5.0, minf(sz.y - 2.0, 18.0)), 0)))
+	_multimesh(_unit_box(), Scenery.window_material(), towers)
+	var cols := [Color(1.0, 0.2, 0.55), Color(0.2, 0.9, 1.0), Color(1.0, 0.75, 0.15)]
+	for c in 3:
+		var arr: Array[Transform3D] = []
+		arr.assign(neon[c])
+		_multimesh(_unit_box(), Scenery.emissive(cols[c], 3.0), arr)
+
+
 ## beach: a real sea along the side of the track that is furthest from the road, with a wall at the shore so cars can't drive in
 func _build_sea() -> void:
 	var pts := PackedVector3Array(track.points)
@@ -2429,7 +2486,7 @@ func _build_roadside_extras(rng: RandomNumberGenerator, avoid: PackedVector3Arra
 				rp.y = track.points[i].y
 				var rs := rng.randf_range(0.8, 2.6)
 				rocks.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.RIGHT, rng.randf_range(-0.3, 0.3)) * Basis.from_scale(Vector3(rs * 1.3, rs, rs * 1.1)), rp + Vector3(0, rs * 0.35, 0)))
-			if not mountain and i % 14 == 0 and rng.randf() < 0.6:     # small house with roof, well off the road
+			if not mountain and track.theme != "city" and i % 14 == 0 and rng.randf() < 0.6:     # small house with roof, well off the road
 				var hp: Vector3 = track.points[i] + left * side * (W * 0.5 + 26.0 + rng.randf_range(0, 14))
 				var clear := true
 				for q in avoid:
@@ -2487,6 +2544,8 @@ func _build_roadside_extras(rng: RandomNumberGenerator, avoid: PackedVector3Arra
 	_multimesh(_unit_box(), _mat(Color(0.8, 0.8, 0.82)), flag_poles)
 	_make_grandstand()
 	_make_birds(rng)
+	if track.theme == "city":
+		_build_city(rng, avoid)
 
 
 func _make_grandstand() -> void:
@@ -3732,6 +3791,7 @@ func _can_pause() -> bool:
 
 
 func _exit_tree() -> void:
+	Engine.time_scale = 1.0
 	_drop_tunnel_fx()
 	if get_tree() != null:
 		get_tree().paused = false

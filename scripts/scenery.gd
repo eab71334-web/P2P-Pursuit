@@ -167,3 +167,35 @@ static func sea_material(shore_dir: Vector3, origin: Vector3, shore_d: float, su
 	m.set_shader_parameter("sky_h", Vector3(sky_h.r, sky_h.g, sky_h.b))
 	m.set_shader_parameter("sky_t", Vector3(sky_t.r, sky_t.g, sky_t.b))
 	return m
+
+
+static var _windows: ImageTexture
+
+## tower facade: dark glass with a grid of windows, about a third of them lit (warm or cool), same pattern used as emission
+static func window_material() -> StandardMaterial3D:
+	if _windows == null:
+		var r := RandomNumberGenerator.new()
+		r.seed = 77
+		var img := Image.create(64, 64, false, Image.FORMAT_RGB8)
+		img.fill(Color(0.05, 0.06, 0.09))
+		for gy in 16:
+			for gx in 8:
+				if r.randf() < 0.38:
+					var warm := r.randf() < 0.65
+					var c := Color(1.0, 0.82, 0.5) if warm else Color(0.6, 0.85, 1.0)
+					c *= r.randf_range(0.6, 1.0)
+					for yy in 3:
+						for xx in 5:
+							img.set_pixel(gx * 8 + 1 + xx, gy * 4 + yy, c)
+		_windows = ImageTexture.create_from_image(img)
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = _windows
+	m.emission_enabled = true
+	m.emission_texture = _windows
+	m.emission_energy_multiplier = 1.6
+	m.uv1_triplanar = true
+	m.uv1_world_triplanar = true
+	m.uv1_scale = Vector3(0.1, 0.12, 0.1)
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	m.roughness = 0.6
+	return m

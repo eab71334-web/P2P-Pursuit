@@ -937,7 +937,7 @@ func _build_custom() -> Control:
 	lv.add_theme_constant_override("separation", 8)
 	lm.add_child(lv)
 	var th_opts := [["", UI.tx("Random", "عشوائي")]]
-	for th in ["mountain", "snow", "autumn", "desert", "beach"]:
+	for th in ["mountain", "snow", "autumn", "desert", "beach", "city"]:
 		th_opts.append([th, Career.nm(Career.THEME_NAMES[th])])
 	_seg(lv, UI.tx("TRACK", "المضمار"), th_opts, "theme", str(pref.get("theme", "")), true)
 	# centre: the picture

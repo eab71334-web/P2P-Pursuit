@@ -45,8 +45,8 @@ var _pos := Vector3.ZERO
 var _h := 0.0
 
 
-const THEMES := ["mountain", "mountain", "mountain", "snow", "autumn", "desert", "beach"]
-const THEME_LIST := ["mountain", "snow", "autumn", "desert", "beach"]
+const THEMES := ["mountain", "mountain", "mountain", "snow", "autumn", "desert", "beach", "city"]
+const THEME_LIST := ["mountain", "snow", "autumn", "desert", "beach", "city"]
 const ADJ := ["Misty", "Frozen", "Wild", "Hidden", "Black", "Silver", "Howling", "Broken", "Lonely", "Golden", "Thunder"]
 const NOUNS := {
 	"mountain": ["Pass", "Ridge", "Summit", "Gorge", "Col", "Peak"],
@@ -54,6 +54,7 @@ const NOUNS := {
 	"autumn": ["Woods", "Orchard", "Canyon", "Vineyard", "Hills"],
 	"desert": ["Dunes", "Mesa", "Oasis", "Wadi", "Canyon"],
 	"beach": ["Coast", "Bay", "Cove", "Boardwalk", "Lagoon"],
+	"city": ["Downtown", "Harbour", "Skyline", "Avenue", "Midnight"],
 }
 
 
@@ -432,7 +433,7 @@ func _add_rare(rng: RandomNumberGenerator) -> void:
 
 ## mountain and snow stages get one or two tunnels on long straights (40-80 m); the co-driver calls them out
 func _add_tunnels(rng: RandomNumberGenerator) -> void:
-	if theme in ["autumn", "desert", "beach"]:
+	if theme in ["autumn", "desert", "beach", "city"]:
 		return
 	var n := points.size()
 	# straight runs (same heading) that are long enough and clear of other hazards

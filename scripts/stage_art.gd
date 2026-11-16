@@ -14,6 +14,8 @@ const THEMES := {
 		"tree": Color(0.4, 0.5, 0.24), "amp": [0.16, 0.12, 0.08], "sharp": false},
 	"beach": {"far": Color(0.45, 0.68, 0.7), "mid": Color(0.4, 0.66, 0.5), "near": Color(0.9, 0.84, 0.64), "ground": Color(0.95, 0.88, 0.68),
 		"tree": Color(0.1, 0.55, 0.25), "amp": [0.14, 0.1, 0.07], "sharp": false},
+	"city": {"far": Color(0.2, 0.22, 0.34), "mid": Color(0.14, 0.15, 0.24), "near": Color(0.09, 0.1, 0.16), "ground": Color(0.1, 0.1, 0.13),
+		"tree": Color(0.1, 0.2, 0.15), "amp": [0.2, 0.14, 0.1], "sharp": true},
 	"autumn": {"far": Color(0.55, 0.42, 0.44), "mid": Color(0.5, 0.32, 0.2), "near": Color(0.4, 0.26, 0.12), "ground": Color(0.38, 0.33, 0.14),
 		"tree": Color(0.86, 0.4, 0.1), "amp": [0.2, 0.15, 0.1], "sharp": false},
 }
