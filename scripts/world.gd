@@ -1722,10 +1722,10 @@ func _build_environment() -> void:
 			sun.rotation_degrees = Vector3(-14, 30, 0)
 			sun.light_color = Color(1.0, 0.68, 0.38)
 			env.fog_sun_scatter = 0.5
-		if Gfx.fx >= 0.8 and weather != "night":                 # real shadows on medium and high quality
+		if Gfx.shadows and weather != "night":                   # real shadows (Shadows setting)
 			sun.shadow_enabled = true
 			sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
-			sun.directional_shadow_max_distance = 80.0
+			sun.directional_shadow_max_distance = 55.0 if Gfx.fx < 0.9 else 90.0
 			sun.shadow_blur = 1.5
 		if weather == "clear" or weather == "":
 			_make_sun_glare(sun)
@@ -1898,6 +1898,11 @@ func _build_ambience() -> void:
 	_tunnel_fx.wet = 0.0
 	_tunnel_fx.dry = 1.0
 	AudioServer.add_bus_effect(0, _tunnel_fx)
+
+
+func _gfx_changed() -> void:
+	if grade_fx != null and is_instance_valid(grade_fx):
+		grade_fx.visible = Gfx.cinema and not blind_mode
 
 
 func _drop_tunnel_fx() -> void:
@@ -2472,16 +2477,16 @@ func _build_roadside_extras(rng: RandomNumberGenerator, avoid: PackedVector3Arra
 		var left := Track.left_of(track.headings[i])
 		var flat := Basis(Vector3.UP, track.headings[i])
 		for side in [-1.0, 1.0]:
-			if rng.randf() < 0.55 * Gfx.trees:                       # bush
+			if rng.randf() < 0.55 * Gfx.trees * Gfx.detail:          # bush
 				var bp: Vector3 = track.points[i] + left * side * (W * 0.5 + 5.0 + rng.randf_range(0, 9))
 				bp.y = track.points[i].y
 				bushes.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU) * Basis.from_scale(Vector3(rng.randf_range(1.0, 2.2), rng.randf_range(0.7, 1.3), rng.randf_range(1.0, 2.2))), bp + Vector3(0, 0.4, 0)))
-			if rng.randf() < 0.28 * Gfx.trees:                       # rock
+			if rng.randf() < 0.28 * Gfx.trees * Gfx.detail:          # rock
 				var rp: Vector3 = track.points[i] + left * side * (W * 0.5 + 5.5 + rng.randf_range(0, 18))
 				rp.y = track.points[i].y
 				var rs := rng.randf_range(0.8, 2.6)
 				rocks.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.RIGHT, rng.randf_range(-0.3, 0.3)) * Basis.from_scale(Vector3(rs * 1.3, rs, rs * 1.1)), rp + Vector3(0, rs * 0.35, 0)))
-			if not mountain and track.theme != "city" and i % 14 == 0 and rng.randf() < 0.6:     # small house with roof, well off the road
+			if not mountain and track.theme != "city" and i % 14 == 0 and rng.randf() < 0.6 * Gfx.detail:     # small house with roof, well off the road
 				var hp: Vector3 = track.points[i] + left * side * (W * 0.5 + 26.0 + rng.randf_range(0, 14))
 				var clear := true
 				for q in avoid:
@@ -2504,7 +2509,7 @@ func _build_roadside_extras(rng: RandomNumberGenerator, avoid: PackedVector3Arra
 			continue
 		last = i
 		var side2 := -1.0 if dh > 0.0 else 1.0                       # outside of the bend
-		for k in range(0, 8):
+		for k in range(0, maxi(2, int(8.0 * Gfx.detail))):
 			var ti := mini(i + k, n - 2)
 			var tl := Track.left_of(track.headings[ti])
 			for row in 2:
@@ -2570,7 +2575,7 @@ func _make_birds(rng: RandomNumberGenerator) -> void:
 	if weather in ["night", "storm", "fog"]:
 		return
 	var mid := track.points[track.points.size() / 2]
-	for b in 7:
+	for b in int(7.0 * Gfx.detail):
 		var bird := Node3D.new()
 		var bm := _mat(Color(0.12, 0.12, 0.14))
 		for sd in [-1.0, 1.0]:
@@ -2916,7 +2921,7 @@ func _build_hud() -> void:
 	for k in gp:
 		grm.set_shader_parameter(k, gp[k])
 	grade_fx.material = grm
-	grade_fx.visible = Gfx.fx >= 0.8 and not blind_mode
+	grade_fx.visible = Gfx.cinema and not blind_mode
 	hud_root.add_child(grade_fx)
 	glow_fx = ColorRect.new()
 	glow_fx.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -2930,6 +2935,8 @@ func _build_hud() -> void:
 	hud_root.add_child(glow_fx)
 	hud_root.move_child(glow_fx, 0)
 	hud_root.move_child(grade_fx, 0)
+	if not Gfx.changed.is_connected(_gfx_changed):
+		Gfx.changed.connect(_gfx_changed)
 	timer_label = _full_label(8, 56, 46)
 	medal_label = _full_label(62, 34, 24)
 	gesture_label = _full_label(100, 50, 34)
@@ -3812,6 +3819,8 @@ func _can_pause() -> bool:
 
 func _exit_tree() -> void:
 	Engine.time_scale = 1.0
+	if Gfx.changed.is_connected(_gfx_changed):
+		Gfx.changed.disconnect(_gfx_changed)
 	_drop_tunnel_fx()
 	if get_tree() != null:
 		get_tree().paused = false

@@ -65,7 +65,7 @@ func _build() -> void:
 	var note := UI.tx("Weak device mode lowers resolution, view distance, effects and mirrors so the game runs smoothly on old phones.",
 		"وضع الجهاز الضعيف يخفّض الدقة ومدى الرؤية والمؤثرات والمرايات ليشتغل اللعب بسلاسة على الأجهزة القديمة.")
 	var presets: Array = []
-	for p in ["auto", "weak", "low", "medium", "high"]:
+	for p in ["auto", "weak", "low", "medium", "high", "ultra"]:
 		presets.append([p, Gfx.preset_label(p)])
 	_row(UI.tx("Graphics quality", "جودة الرسوميات"), note, _seg(presets, Gfx.preset, func(v): Gfx.set_preset(v); _rebuild()))
 	var fo: Array = []
@@ -91,6 +91,12 @@ func _build() -> void:
 		_seg([[0.25, UI.tx("Min", "أدنى")], [0.5, UI.tx("Low", "قليل")], [0.8, UI.tx("Medium", "متوسط")], [1.0, UI.tx("Full", "كامل")]], _near(Gfx.fx, [0.25, 0.5, 0.8, 1.0]), func(v): Gfx.set_value("fx", v); _rebuild()))
 	_row(UI.tx("Scenery (trees)", "المناظر (الأشجار)"), "",
 		_seg([[0.3, UI.tx("Few", "قليل")], [0.55, UI.tx("Some", "عادي")], [0.85, UI.tx("Many", "كثير")], [1.0, UI.tx("Full", "كامل")]], _near(Gfx.trees, [0.3, 0.55, 0.85, 1.0]), func(v): Gfx.set_value("trees", v); _rebuild()))
+	_row(UI.tx("Shadows", "الظلال"), UI.tx("Real sun shadows on the cars and roadside.", "ظلال حقيقية للشمس على السيارات وجوانب الطريق."),
+		_seg([[true, UI.tx("On", "تشغيل")], [false, UI.tx("Off", "إيقاف")]], Gfx.shadows, func(v): Gfx.set_value("shadows", v); _rebuild()))
+	_row(UI.tx("Cinematic look", "المظهر السينمائي"), UI.tx("Film colours, glow on lights, speed blur and soft dark edges.", "ألوان سينمائية ووهج على الأضواء وضبابية السرعة وحواف داكنة ناعمة."),
+		_seg([[true, UI.tx("On", "تشغيل")], [false, UI.tx("Off", "إيقاف")]], Gfx.cinema, func(v): Gfx.set_value("cinema", v); _rebuild()))
+	_row(UI.tx("Scenery detail", "تفاصيل المحيط"), UI.tx("Crowd, birds, bushes, rocks and houses beside the road.", "الجمهور والطيور والشجيرات والصخور والبيوت بجانب الطريق."),
+		_seg([[0.25, UI.tx("Few", "قليل")], [0.5, UI.tx("Some", "عادي")], [0.8, UI.tx("Many", "كثير")], [1.0, UI.tx("Full", "كامل")]], _near(Gfx.detail, [0.25, 0.5, 0.8, 1.0]), func(v): Gfx.set_value("detail", v); _rebuild()))
 	_row(UI.tx("Mirrors", "المرايات"), UI.tx("Working side and rear-view mirrors cost performance.", "المرايات الحقيقية (الجانبية والأمامية) تستهلك أداء."),
 		_seg([[0, UI.tx("Off", "إيقاف")], [1, UI.tx("Rear-view", "الأمامية")], [2, UI.tx("All", "الكل")]], Gfx.mirrors, func(v): Gfx.set_value("mirrors", v); _rebuild()))
 	_row(UI.tx("Map screen refresh", "تحديث شاشة الخريطة"), "",

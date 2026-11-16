@@ -6,16 +6,17 @@ extends Node
 signal changed
 
 const FPS_OPTIONS := [30, 45, 60, 90, 120, 0]            # 0 = unlimited
-const PRESET_ORDER := ["weak", "low", "medium", "high"]
+const PRESET_ORDER := ["weak", "low", "medium", "high", "ultra"]
 ## per-preset values. dist = view distance factor, fx = particle amount factor, mirrors: 0 off / 1 side / 2 full,
 ## map_fps = refresh rate of the map screen, trees = scenery density, hero = animated 3D showroom in menus
 const PRESETS := {
-	"weak": {"scale": 0.55, "msaa": 0, "dist": 0.35, "fx": 0.25, "mirrors": 0, "map_fps": 8, "trees": 0.3, "hero": false, "fps": 30, "auto": true, "mirror_fps": 10},
-	"low": {"scale": 0.7, "msaa": 0, "dist": 0.55, "fx": 0.5, "mirrors": 1, "map_fps": 15, "trees": 0.55, "hero": true, "fps": 30, "auto": true, "mirror_fps": 15},
-	"medium": {"scale": 0.85, "msaa": 0, "dist": 0.8, "fx": 0.8, "mirrors": 2, "map_fps": 24, "trees": 0.85, "hero": true, "fps": 60, "auto": false, "mirror_fps": 24},
-	"high": {"scale": 1.0, "msaa": 2, "dist": 1.0, "fx": 1.0, "mirrors": 2, "map_fps": 60, "trees": 1.0, "hero": true, "fps": 60, "auto": false, "mirror_fps": 30},
+	"weak": {"scale": 0.55, "msaa": 0, "dist": 0.35, "fx": 0.25, "mirrors": 0, "map_fps": 8, "trees": 0.3, "hero": false, "fps": 30, "auto": true, "mirror_fps": 10, "shadows": false, "cinema": false, "detail": 0.25},
+	"low": {"scale": 0.7, "msaa": 0, "dist": 0.55, "fx": 0.5, "mirrors": 1, "map_fps": 15, "trees": 0.55, "hero": true, "fps": 30, "auto": true, "mirror_fps": 15, "shadows": false, "cinema": false, "detail": 0.5},
+	"medium": {"scale": 0.85, "msaa": 0, "dist": 0.8, "fx": 0.8, "mirrors": 2, "map_fps": 24, "trees": 0.85, "hero": true, "fps": 60, "auto": false, "mirror_fps": 24, "shadows": true, "cinema": true, "detail": 0.8},
+	"high": {"scale": 1.0, "msaa": 2, "dist": 1.0, "fx": 1.0, "mirrors": 2, "map_fps": 60, "trees": 1.0, "hero": true, "fps": 60, "auto": false, "mirror_fps": 30, "shadows": true, "cinema": true, "detail": 1.0},
+	"ultra": {"scale": 1.0, "msaa": 4, "dist": 1.0, "fx": 1.0, "mirrors": 2, "map_fps": 60, "trees": 1.0, "hero": true, "fps": 60, "auto": false, "mirror_fps": 30, "shadows": true, "cinema": true, "detail": 1.0},
 }
-const KEYS := ["scale", "msaa", "dist", "fx", "mirrors", "map_fps", "trees", "hero", "fps", "auto", "mirror_fps"]
+const KEYS := ["scale", "msaa", "dist", "fx", "mirrors", "map_fps", "trees", "hero", "fps", "auto", "mirror_fps", "shadows", "cinema", "detail"]
 const SAVE := "user://gfx.cfg"
 
 var preset := "auto"          # auto | weak | low | medium | high | custom
@@ -24,6 +25,9 @@ var scale := 1.0              # 3D resolution scale
 var msaa := 0                 # 0 / 2 / 4
 var dist := 1.0
 var fx := 1.0
+var shadows := true           # real sun shadows
+var cinema := true            # colour grade, glow, speed blur, vignette
+var detail := 0.8             # roadside life: crowd, birds, props, bushes, rocks
 var mirrors := 2
 var map_fps := 30
 var mirror_fps := 30
@@ -69,10 +73,7 @@ func detect() -> String:
 			weak_gpu = true
 	if weak_gpu or cores <= 3:
 		return "weak" if (cores <= 4 and weak_gpu) else "low"
-	var mobile := OS.has_feature("mobile") or OS.get_name() in ["Android", "iOS"]
-	if mobile:
-		return "low" if cores <= 4 else "medium"
-	return "high"
+	return "medium"         # default for every normal device; players can raise it to High / Ultra in the settings
 
 
 func preset_label(p: String) -> String:
@@ -81,6 +82,7 @@ func preset_label(p: String) -> String:
 		"low": return UI.tx("Low", "منخفض")
 		"medium": return UI.tx("Medium", "متوسط")
 		"high": return UI.tx("High", "عالي")
+		"ultra": return UI.tx("Ultra", "فائق")
 		"auto": return UI.tx("Auto", "تلقائي")
 	return UI.tx("Custom", "مخصص")
 
@@ -228,3 +230,7 @@ func _load() -> void:
 		for k in KEYS:
 			if cf.has_section_key("gfx", k):
 				set(k, cf.get_value("gfx", k))
+		if PRESETS.has(preset):                                  # settings saved before these options existed: take them from the preset
+			for k in ["shadows", "cinema", "detail"]:
+				if not cf.has_section_key("gfx", k):
+					set(k, PRESETS[preset][k])

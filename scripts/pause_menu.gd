@@ -324,7 +324,7 @@ func _tab_controls() -> void:
 
 func _tab_graphics() -> void:
 	var presets: Array = []
-	for p in ["auto", "weak", "low", "medium", "high"]:
+	for p in ["auto", "weak", "low", "medium", "high", "ultra"]:
 		presets.append([p, Gfx.preset_label(p)])
 	_row(UI.tx("Graphics quality", "جودة الرسوميات"), _seg(presets, Gfx.preset, func(x): Gfx.set_preset(x)))
 	var fo: Array = []
@@ -336,6 +336,9 @@ func _tab_graphics() -> void:
 	_row(UI.tx("Effects", "المؤثرات"), _seg([[0.25, UI.tx("Min", "أدنى")], [0.5, UI.tx("Low", "قليل")], [0.8, UI.tx("Medium", "متوسط")], [1.0, UI.tx("Full", "كامل")]], _near(Gfx.fx, [0.25, 0.5, 0.8, 1.0]), func(x): Gfx.set_value("fx", x)))
 	_row(UI.tx("Mirrors", "المرايا"), _seg([[0, UI.tx("Off", "إيقاف")], [1, UI.tx("Rear-view", "الأمامية")], [2, UI.tx("All", "الكل")]], Gfx.mirrors, func(x): Gfx.set_value("mirrors", x)))
 	_row(UI.tx("Anti-aliasing", "تنعيم الحواف"), _seg([[0, UI.tx("Off", "إيقاف")], [2, "2x"], [4, "4x"]], Gfx.msaa, func(x): Gfx.set_value("msaa", x)))
+	_row(UI.tx("Shadows", "الظلال"), _seg(_onoff(), Gfx.shadows, func(x): Gfx.set_value("shadows", x)))
+	_row(UI.tx("Cinematic look", "المظهر السينمائي"), _seg(_onoff(), Gfx.cinema, func(x): Gfx.set_value("cinema", x)))
+	_row(UI.tx("Scenery detail", "تفاصيل المحيط"), _seg([[0.25, UI.tx("Few", "قليل")], [0.5, UI.tx("Some", "عادي")], [0.8, UI.tx("Many", "كثير")], [1.0, UI.tx("Full", "كامل")]], _near(Gfx.detail, [0.25, 0.5, 0.8, 1.0]), func(x): Gfx.set_value("detail", x)))
 	_row(UI.tx("Adaptive resolution", "دقة تلقائية"), _seg(_onoff(), Gfx.auto, func(x): Gfx.set_value("auto", x)))
 
 
