@@ -63,6 +63,12 @@ var _smoke: CPUParticles3D
 var _fire_top: CPUParticles3D
 var _fire_in: CPUParticles3D
 var _foam: CPUParticles3D
+var _dust: Array[CPUParticles3D] = []   # tyre dust / rain spray, one emitter per rear wheel
+var _sparks: CPUParticles3D
+var _skid_mm: MultiMesh
+var _skid_i := 0
+var _skid_last: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+var wet := false                         # set by the world when it rains
 var _fire_light: OmniLight3D
 var _snd := {}
 var _rpm := 0.2
@@ -135,6 +141,7 @@ func _ready() -> void:
 	_add_wheels()
 	_build_visuals()
 	_build_fx()
+	_build_ground_fx()
 	var fcode := str(lo.get("flag", "none"))
 	if Flags.valid(fcode):
 		_flag_mat = Flags.attach(self, fcode, _mat(Color(0.75, 0.77, 0.82)))
@@ -234,9 +241,10 @@ func add_lights() -> void:
 	for x in [-0.6, 0.6]:
 		var sp := SpotLight3D.new()
 		sp.position = Vector3(x, 0.9, -2.0)
-		sp.spot_range = 55.0
-		sp.spot_angle = 32.0
-		sp.light_energy = 1.6
+		sp.spot_range = 80.0
+		sp.spot_angle = 36.0
+		sp.light_energy = 3.2
+		sp.shadow_enabled = false
 		sp.light_color = Color(1.0, 0.95, 0.8)
 		add_child(sp)
 	var cab := OmniLight3D.new()
@@ -467,6 +475,88 @@ func _build_fx() -> void:
 	add_child(_fire_light)
 
 
+func _build_ground_fx() -> void:
+	if preview:
+		return
+	for x in [-0.85, 0.85]:
+		var g := Gradient.new()
+		g.colors = PackedColorArray([Color(0.62, 0.55, 0.45, 0.0), Color(0.62, 0.55, 0.45, 0.5), Color(0.6, 0.55, 0.5, 0.0)])
+		g.offsets = PackedFloat32Array([0.0, 0.25, 1.0])
+		var d := _particles(Vector3(x, 0.15, 1.35), 26, 1.1, 0.7, false, g)
+		d.direction = Vector3(0, 1, 0.6)
+		d.spread = 35.0
+		d.initial_velocity_min = 1.0
+		d.initial_velocity_max = 3.0
+		d.gravity = Vector3(0, 0.3, 0)
+		d.scale_amount_min = 0.6
+		d.scale_amount_max = 1.6
+		_dust.append(d)
+	var sg := Gradient.new()
+	sg.colors = PackedColorArray([Color(1.0, 0.95, 0.6, 1.0), Color(1.0, 0.5, 0.1, 0.8), Color(1.0, 0.3, 0.05, 0.0)])
+	sg.offsets = PackedFloat32Array([0.0, 0.4, 1.0])
+	_sparks = _particles(Vector3(0, 0.15, 0.4), 30, 0.45, 0.07, true, sg)
+	_sparks.direction = Vector3(0, 1, 0.5)
+	_sparks.spread = 50.0
+	_sparks.initial_velocity_min = 3.0
+	_sparks.initial_velocity_max = 7.0
+	_sparks.gravity = Vector3(0, -12.0, 0)
+	_sparks.explosiveness = 0.6
+	# skid marks: a fixed ring of dark flat strips that is reused, so it never grows
+	var q := BoxMesh.new()
+	q.size = Vector3(0.28, 0.01, 0.9)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_color = Color(0.03, 0.03, 0.035, 0.55)
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	q.material = m
+	_skid_mm = MultiMesh.new()
+	_skid_mm.transform_format = MultiMesh.TRANSFORM_3D
+	_skid_mm.mesh = q
+	_skid_mm.instance_count = 140
+	_skid_mm.visible_instance_count = 140
+	for i in 140:
+		_skid_mm.set_instance_transform(i, Transform3D(Basis(), Vector3(0, -500, 0)))
+	var mi := MultiMeshInstance3D.new()
+	mi.multimesh = _skid_mm
+	mi.top_level = true
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.extra_cull_margin = 4000.0
+	add_child(mi)
+
+
+func _update_ground_fx(delta: float) -> void:
+	if _dust.is_empty():
+		return
+	var lat := absf(_vel_est.dot(global_basis.x))
+	var spd := speed_kmh
+	var slide := lat > 3.5 and spd > 15.0
+	var airborne := true
+	for w in wheel_list:
+		if w.is_in_contact():
+			airborne = false
+	for d in _dust:
+		d.emitting = not airborne and (slide or (spd > 70.0 and wet))
+		var tone := 0.78 if wet else 0.55
+		d.color = Color(tone, tone + 0.02, tone + 0.06, 1.0) if wet else Color(0.62, 0.55, 0.45, 1.0)
+	# sparks: only when the body is hurt and moving fast (scraping)
+	_sparks.emitting = damage >= 60.0 and spd > 40.0 and not airborne
+	# skid marks under the rear tyres while sliding
+	if slide and not airborne and _skid_mm != null:
+		for k in 2:
+			var wp := global_transform * Vector3(-0.85 if k == 0 else 0.85, 0.0, 1.35)
+			if wp.distance_to(_skid_last[k]) > 0.8:
+				var fwd := (wp - _skid_last[k]).normalized() if _skid_last[k] != Vector3.ZERO else -global_basis.z
+				if absf(fwd.y) > 0.9 or fwd.length() < 0.5:
+					fwd = -global_basis.z
+				var bz := fwd.cross(Vector3.UP).normalized()
+				var b := Basis(bz, Vector3.UP, -fwd.slide(Vector3.UP).normalized())
+				_skid_mm.set_instance_transform(_skid_i % 140, Transform3D(b, Vector3(wp.x, wp.y - 0.1, wp.z)))
+				_skid_i += 1
+				_skid_last[k] = wp
+	else:
+		_skid_last = [Vector3.ZERO, Vector3.ZERO] as Array[Vector3]
+
+
 func _build_audio() -> void:
 	_snd["engine"] = Sfx.loop3d("engine_loop", self, -8.0)
 	_snd["intake"] = Sfx.loop3d("intake_loop", self, -40.0)
@@ -633,6 +723,7 @@ func _process(delta: float) -> void:
 		var right_hand := _wheel_pivot.transform * (Vector3(cos(ar), 0.0, -sin(ar)) * r)
 		driver_avatar.set_wheel_hands(left_hand, right_hand)
 	_update_motion_audio(delta)
+	_update_ground_fx(delta)
 	_update_damage_fx(delta)
 	_tick_mirrors(delta)
 	_update_gear(delta)
