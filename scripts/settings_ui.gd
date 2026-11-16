@@ -91,6 +91,8 @@ func _build() -> void:
 		_seg([[0.25, UI.tx("Min", "أدنى")], [0.5, UI.tx("Low", "قليل")], [0.8, UI.tx("Medium", "متوسط")], [1.0, UI.tx("Full", "كامل")]], _near(Gfx.fx, [0.25, 0.5, 0.8, 1.0]), func(v): Gfx.set_value("fx", v); _rebuild()))
 	_row(UI.tx("Scenery (trees)", "المناظر (الأشجار)"), "",
 		_seg([[0.3, UI.tx("Few", "قليل")], [0.55, UI.tx("Some", "عادي")], [0.85, UI.tx("Many", "كثير")], [1.0, UI.tx("Full", "كامل")]], _near(Gfx.trees, [0.3, 0.55, 0.85, 1.0]), func(v): Gfx.set_value("trees", v); _rebuild()))
+	_row(UI.tx("Driving feel", "إحساس القيادة"), UI.tx("Easy = grippy and forgiving. Realistic = heavier, the tail slides more. Applies from the next race.", "سهل = تماسك أعلى وتوجيه أسرع وأسهل. واقعي = أثقل والذيل ينزلق أكثر. يطبّق من السباق التالي."),
+		_seg([["arcade", UI.tx("Easy", "سهل")], ["balanced", UI.tx("Balanced", "متوازن")], ["sim", UI.tx("Realistic", "واقعي")]], Gfx.handling, func(v): Gfx.handling = v; Gfx.save(); _rebuild()))
 	_row(UI.tx("Shadows", "الظلال"), UI.tx("Real sun shadows on the cars and roadside.", "ظلال حقيقية للشمس على السيارات وجوانب الطريق."),
 		_seg([[true, UI.tx("On", "تشغيل")], [false, UI.tx("Off", "إيقاف")]], Gfx.shadows, func(v): Gfx.set_value("shadows", v); _rebuild()))
 	_row(UI.tx("Cinematic look", "المظهر السينمائي"), UI.tx("Film colours, glow on lights, speed blur and soft dark edges.", "ألوان سينمائية ووهج على الأضواء وضبابية السرعة وحواف داكنة ناعمة."),

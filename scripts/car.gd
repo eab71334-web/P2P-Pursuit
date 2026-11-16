@@ -128,7 +128,7 @@ func _ready() -> void:
 	hd = HANDLING.get(model, HANDLING["hatch"])
 	mass = 450.0
 	linear_damp = 0.12
-	angular_damp = 1.5
+	angular_damp = 1.5 * _hm(1.47, 0.8)
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 	center_of_mass = Vector3(0, float(hd["com"]), 0)
 	if is_remote:
@@ -191,12 +191,17 @@ func _add_wheels() -> void:
 
 # ------------------------------------------------------------------ controls
 
+## driving-feel factor: arcade value / sim value, 1.0 for balanced
+func _hm(arcade: float, sim: float) -> float:
+	return arcade if Gfx.handling == "arcade" else (sim if Gfx.handling == "sim" else 1.0)
+
+
 func set_controls(steer: float, throttle: float, brk: float) -> void:
 	var fs := -global_transform.basis.z.dot(linear_velocity)
 	speed_kmh = absf(fs) * 3.6
 	# steering lock shrinks smoothly with speed (no snap-oversteer at 200 km/h)
-	var lim := (0.42 / (1.0 + pow(speed_kmh / 70.0, 1.7)) + 0.035) * float(hd["steer"])
-	var srate := lerpf(2.4, 0.9, clampf(speed_kmh / 160.0, 0.0, 1.0)) * float(hd["rate"])
+	var lim := (0.42 / (1.0 + pow(speed_kmh / 70.0, 1.7)) + 0.035) * float(hd["steer"]) * _hm(1.12, 0.92)
+	var srate := lerpf(2.4, 0.9, clampf(speed_kmh / 160.0, 0.0, 1.0)) * float(hd["rate"]) * _hm(1.25, 0.85)
 	steer_target = steer
 	throttle_in = throttle
 	brake_in = brk
@@ -235,7 +240,7 @@ func set_handbrake(on: bool) -> void:
 func _apply_fric() -> void:
 	for w in wheel_list:
 		var k := 1.0 if w.use_as_steering else float(hd["rear"]) * (0.3 if hb else 1.0)
-		w.wheel_friction_slip = 3.2 * _grip * grip_base * k
+		w.wheel_friction_slip = 3.2 * _grip * grip_base * k * _hm(1.15, 0.9)
 
 
 ## dark-mode lights: headlights + a dim cabin light so the blind driver can see the co-driver
