@@ -105,3 +105,65 @@ static func glare_texture() -> GradientTexture2D:
 		_glare.width = 256
 		_glare.height = 256
 	return _glare
+
+
+## sea: layered waves (normals from summed sines), depth colour from the shore, fresnel sky reflection, sun glitter, lapping foam at the shore
+const SEA_SHADER := """
+shader_type spatial;
+render_mode unshaded, cull_disabled, depth_draw_always;
+uniform vec3 shore_dir = vec3(0.0, 0.0, 1.0);
+uniform vec3 origin = vec3(0.0);
+uniform float shore_d = 100.0;
+uniform vec3 sun_dir = vec3(0.4, 0.8, 0.4);
+uniform vec3 shallow : source_color = vec3(0.16, 0.8, 0.76);
+uniform vec3 deep : source_color = vec3(0.02, 0.26, 0.5);
+uniform vec3 sky_h : source_color = vec3(0.8, 0.93, 0.98);
+uniform vec3 sky_t : source_color = vec3(0.15, 0.55, 0.9);
+varying vec3 wp;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) {
+	vec2 i = floor(p); vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
+}
+void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+void fragment() {
+	vec2 p = wp.xz;
+	float t = TIME;
+	float sd = dot(p - origin.xz, shore_dir.xz) - shore_d;
+	vec2 g = vec2(0.0);
+	g += vec2(0.8, 0.6) * cos(dot(vec2(0.8, 0.6), p) * 0.35 + t * 1.3) * 0.35 * 0.35;
+	g += vec2(-0.5, 0.86) * cos(dot(vec2(-0.5, 0.86), p) * 0.7 + t * 1.9) * 0.7 * 0.12;
+	g += vec2(0.95, -0.3) * cos(dot(vec2(0.95, -0.3), p) * 1.6 + t * 2.7) * 1.6 * 0.04;
+	g += (vec2(vnoise(p * 0.9 + t * 0.4), vnoise(p * 0.9 - t * 0.35 + 7.0)) - 0.5) * 0.25;
+	vec3 N = normalize(vec3(-g.x, 1.0, -g.y));
+	vec3 V = normalize(CAMERA_POSITION_WORLD - wp);
+	float fres = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0);
+	float depth = smoothstep(0.0, 140.0, sd);
+	vec3 col = mix(shallow, deep, depth);
+	col = mix(col, mix(sky_h, sky_t, 0.4), clamp(fres * 0.8 + 0.08, 0.0, 0.9));
+	vec3 H = normalize(normalize(sun_dir) + V);
+	float spec = pow(max(dot(N, H), 0.0), 220.0) * 2.0 + pow(max(dot(N, H), 0.0), 40.0) * 0.12;
+	float sparkle = step(0.93, vnoise(p * 3.0 + t * 1.5)) * smoothstep(0.55, 1.0, vnoise(p * 0.15)) * 0.5;
+	col += vec3(1.0, 0.95, 0.85) * (spec + sparkle * 0.5);
+	float lap = 2.5 + sin(t * 0.9 - sd * 0.12) * 2.0;
+	float fo = smoothstep(lap + 1.8, lap - 0.8, sd) * smoothstep(-5.0, 0.0, sd) * (0.55 + 0.45 * vnoise(p * 1.4 + t * 0.6));
+	float far_fo = smoothstep(0.7, 0.95, vnoise(p * 0.5 + t * 0.2)) * 0.12 * smoothstep(10.0, 60.0, sd);
+	col = mix(col, vec3(1.0), clamp(fo + far_fo, 0.0, 1.0));
+	ALBEDO = col;
+	ALPHA = clamp(max(smoothstep(-6.0, 3.0, sd) * mix(0.62, 0.97, smoothstep(0.0, 40.0, sd)), fo), 0.0, 1.0);
+}
+"""
+
+static func sea_material(shore_dir: Vector3, origin: Vector3, shore_d: float, sun_dir: Vector3, sky_h: Color, sky_t: Color) -> ShaderMaterial:
+	var sh := Shader.new()
+	sh.code = SEA_SHADER
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	m.set_shader_parameter("shore_dir", shore_dir)
+	m.set_shader_parameter("origin", origin)
+	m.set_shader_parameter("shore_d", shore_d)
+	m.set_shader_parameter("sun_dir", sun_dir)
+	m.set_shader_parameter("sky_h", Vector3(sky_h.r, sky_h.g, sky_h.b))
+	m.set_shader_parameter("sky_t", Vector3(sky_t.r, sky_t.g, sky_t.b))
+	return m

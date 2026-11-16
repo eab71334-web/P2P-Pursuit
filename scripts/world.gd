@@ -86,6 +86,10 @@ var weather := "clear"
 var _rain: CPUParticles3D
 var _wx_env: Environment
 var _bolt_wait := 6.0
+var _amb_rain: AudioStreamPlayer
+var _amb_waves: AudioStreamPlayer
+var _tunnel_fx: AudioEffectReverb
+var _tunnel_wet := 0.0
 var _bolt: ColorRect
 var _obst_at := {}
 var blind_mode := false
@@ -217,6 +221,7 @@ func _ready() -> void:
 	_build_teams()
 	_build_hud()
 	_build_weather_fx()
+	_build_ambience()
 	if not Net.dedicated:
 		director = ReplayDirector.new()
 		add_child(director)
@@ -1863,7 +1868,52 @@ func _sun_update(delta: float) -> void:
 		_cloud_root.rotation.y += delta * 0.003
 
 
+## weather and place sounds (non-positional beds) + the echo inside tunnels
+func _build_ambience() -> void:
+	if Net.dedicated:
+		return
+	if weather in ["rain", "storm"]:
+		_amb_rain = AudioStreamPlayer.new()
+		_amb_rain.stream = Sfx.stream("rain_loop", true)
+		_amb_rain.volume_db = -60.0
+		add_child(_amb_rain)
+		_amb_rain.play()
+	if track.theme == "beach":
+		_amb_waves = AudioStreamPlayer.new()
+		_amb_waves.stream = Sfx.stream("waves_loop", true)
+		_amb_waves.volume_db = -22.0 + Sfx.master_db
+		add_child(_amb_waves)
+		_amb_waves.play()
+	_tunnel_fx = AudioEffectReverb.new()
+	_tunnel_fx.room_size = 0.85
+	_tunnel_fx.damping = 0.4
+	_tunnel_fx.wet = 0.0
+	_tunnel_fx.dry = 1.0
+	AudioServer.add_bus_effect(0, _tunnel_fx)
+
+
+func _drop_tunnel_fx() -> void:
+	if _tunnel_fx != null:
+		for i in AudioServer.get_bus_effect_count(0):
+			if AudioServer.get_bus_effect(0, i) == _tunnel_fx:
+				AudioServer.remove_bus_effect(0, i)
+				break
+
+
+func _ambience_tick(delta: float) -> void:
+	if teams.is_empty() or Net.dedicated:
+		return
+	var inside := track.in_tunnel(teams[my_team].prog)
+	if _amb_rain != null:
+		var want := (-10.0 if weather == "storm" else -15.0) + Sfx.master_db - (14.0 if inside else 0.0)
+		_amb_rain.volume_db = lerpf(_amb_rain.volume_db, want, clampf(delta * 3.0, 0.0, 1.0))
+	if _tunnel_fx != null:
+		_tunnel_wet = lerpf(_tunnel_wet, 0.38 if inside else 0.0, clampf(delta * 2.5, 0.0, 1.0))
+		_tunnel_fx.wet = _tunnel_wet
+
+
 func _weather_process(delta: float) -> void:
+	_ambience_tick(delta)
 	if _rain and not teams.is_empty():
 		var c := teams[my_team].car
 		if is_instance_valid(c):
@@ -1880,6 +1930,7 @@ func _weather_process(delta: float) -> void:
 			tw.tween_property(_bolt, "color:a", 0.4, 0.05)
 			tw.tween_property(_bolt, "color:a", 0.0, 0.35)
 			Sfx.play("boom", -12.0, 0.45)
+			get_tree().create_timer(randf_range(0.5, 1.8)).timeout.connect(func(): Sfx.play("thunder", -4.0, randf_range(0.85, 1.05)))
 
 
 ## the server drives a bot car: follow the road ahead, brake for corners, make small mistakes at low skill
@@ -2023,6 +2074,8 @@ func _build_track() -> void:
 	gm.position.y = track.floor_y
 	ground.add_child(gm)
 	add_child(ground)
+	if track.theme == "beach":
+		_build_sea()
 
 	var banks := StaticBody3D.new()
 	add_child(banks)
@@ -2301,6 +2354,52 @@ func _build_trees() -> void:
 	_multimesh(_unit_box(), _mat(th["l1"]), leaves1)
 	_multimesh(_unit_box(), _mat(th["l2"]), leaves2)
 	_build_roadside_extras(rng, avoid, min_d2)
+
+
+## beach: a real sea along the side of the track that is furthest from the road, with a wall at the shore so cars can't drive in
+func _build_sea() -> void:
+	var pts := PackedVector3Array(track.points)
+	for b in track.branches:
+		pts.append_array(b["points"])
+	var mid := Vector3.ZERO
+	for q in pts:
+		mid += q
+	mid /= float(pts.size())
+	var best_d := 1e9
+	var best_dir := Vector3.RIGHT
+	for k in 8:
+		var a := TAU * float(k) / 8.0 + 0.3
+		var dir := Vector3(cos(a), 0, sin(a))
+		var md := -1e9
+		for q in pts:
+			md = maxf(md, (q - mid).dot(dir))
+		if md < best_d:
+			best_d = md
+			best_dir = dir
+	var d0 := best_d + 75.0
+	var L := 5000.0
+	var sea := MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(9000.0, L + 12.0)
+	sea.mesh = pm
+	var golden := weather == "clear" and Net.track_seed % 3 == 0
+	var sun_dir := Basis.from_euler(Vector3(deg_to_rad(-14.0 if golden else -50.0), deg_to_rad(30.0), 0.0)).z
+	sea.material_override = Scenery.sea_material(best_dir, mid, d0, sun_dir, th["hor"], th["top"])
+	sea.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	sea.top_level = true
+	sea.position = Vector3(mid.x, track.floor_y + 0.03, mid.z) + best_dir * (d0 - 6.0 + L * 0.5 + 6.0)
+	sea.rotation.y = atan2(best_dir.x, best_dir.z)
+	add_child(sea)
+	var wall := StaticBody3D.new()
+	var cs := CollisionShape3D.new()
+	var bs := BoxShape3D.new()
+	bs.size = Vector3(9000.0, 6.0, 2.0)
+	cs.shape = bs
+	wall.add_child(cs)
+	wall.top_level = true
+	wall.position = Vector3(mid.x, track.floor_y + 2.0, mid.z) + best_dir * (d0 + 1.0)
+	wall.rotation.y = atan2(best_dir.x, best_dir.z)
+	add_child(wall)
 
 
 ## bushes, rocks, grandstand, houses, parked cars, crowds, flags and birds
@@ -3633,6 +3732,7 @@ func _can_pause() -> bool:
 
 
 func _exit_tree() -> void:
+	_drop_tunnel_fx()
 	if get_tree() != null:
 		get_tree().paused = false
 	Gfx.racing = false

@@ -78,6 +78,8 @@ var _cover_ang := 0.0
 var _lever_ang := 0.0
 var _prev_vel := Vector3.ZERO
 var _debris_cd := 0.0
+var _pop_cd := 0.0
+var _thr_prev := 0.0
 var _last_pos := Vector3.ZERO
 var _vel_est := Vector3.ZERO
 var _wheel_pivot: Node3D
@@ -589,6 +591,7 @@ func _build_audio() -> void:
 	_snd["hiss"] = Sfx.loop3d("smoke_hiss", self, -40.0)
 	_snd["spray"] = Sfx.loop3d("spray_loop", self, -40.0)
 	_snd["wind"] = Sfx.loop3d("wind_loop", self, -60.0)
+	_snd["turbo"] = Sfx.loop3d("turbo_loop", self, -60.0)
 	for k in _snd:
 		(_snd[k] as AudioStreamPlayer3D).position = Vector3(0, 1.0, -1.4)
 		(_snd[k] as AudioStreamPlayer3D).stream.resource_local_to_scene = false
@@ -789,6 +792,15 @@ func _update_motion_audio(delta: float) -> void:
 	var wd: AudioStreamPlayer3D = _snd["wind"]
 	wd.volume_db = -60.0 if wopen < 0.02 else -34.0 + wopen * 6.0 + clampf(spd / 110.0, 0.0, 1.0) * 24.0
 	wd.pitch_scale = 0.85 + clampf(spd / 220.0, 0.0, 0.5)
+	var tb: AudioStreamPlayer3D = _snd["turbo"]
+	tb.pitch_scale = 0.55 + _rpm * 0.9
+	tb.volume_db = -60.0 if throttle_in < 0.15 else -44.0 + throttle_in * _rpm * 22.0
+	# lifting off at speed: a couple of exhaust pops
+	_pop_cd = maxf(_pop_cd - get_process_delta_time(), 0.0)
+	if _thr_prev > 0.7 and throttle_in < 0.2 and spd > 70.0 and _pop_cd <= 0.0 and not is_remote:
+		_pop_cd = 1.2
+		Sfx.play3d("exhaust_pop", self, -9.0, randf_range(0.9, 1.1))
+	_thr_prev = throttle_in
 
 
 func _update_damage_fx(delta: float) -> void:
