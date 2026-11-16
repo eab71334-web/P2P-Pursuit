@@ -2321,9 +2321,7 @@ func _build_obstacles() -> void:
 func _build_trees() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = Net.track_seed
-	var trunks: Array[Transform3D] = []
-	var leaves1: Array[Transform3D] = []
-	var leaves2: Array[Transform3D] = []
+	var tree_x: Array[Transform3D] = []
 	var avoid := PackedVector3Array(track.points)
 	for b in track.branches:
 		avoid.append_array(b["points"])
@@ -2355,12 +2353,9 @@ func _build_trees() -> void:
 			var s := rng.randf_range(0.8, 2.1)
 			pos.y = track.points[i].y
 			var b := Basis(Vector3.UP, rng.randf() * TAU)
-			trunks.append(Transform3D(b * Basis.from_scale(Vector3(0.5, 2.0 * s, 0.5)), pos + Vector3(0, s, 0)))
-			leaves1.append(Transform3D(b * Basis.from_scale(Vector3(3.2 * s, 2.0 * s, 3.2 * s)), pos + Vector3(0, 2.8 * s, 0)))
-			leaves2.append(Transform3D(b * Basis.from_scale(Vector3(2.0 * s, 1.8 * s, 2.0 * s)), pos + Vector3(0, 4.5 * s, 0)))
-	_multimesh(_unit_box(), _mat(th["trunk"]), trunks)
-	_multimesh(_unit_box(), _mat(th["l1"]), leaves1)
-	_multimesh(_unit_box(), _mat(th["l2"]), leaves2)
+			tree_x.append(Transform3D(b * Basis.from_scale(Vector3.ONE * s), pos))
+	var kind := {"autumn": "round", "beach": "palm", "desert": "cactus"}.get(track.theme, "conifer") as String
+	_multimesh(Scenery.tree_mesh(kind, th["trunk"], th["l1"], th["l2"]), Scenery.veg_material(), tree_x)
 	_build_roadside_extras(rng, avoid, min_d2)
 
 
@@ -2656,9 +2651,34 @@ func _build_mountains() -> void:
 			caps.append(Transform3D(bs * Basis.from_scale(Vector3(w * 0.3, h * 0.3, w * 0.3)), pos + Vector3(0, h * 0.85 - 6.0, 0)))
 	var mc: Color = th["mount"]
 	var hz: Color = th["hor"]
-	_multimesh(Scenery.peak_mesh(), Scenery.plain(mc.lerp(hz, 0.4), 1.0, false), far_x)
-	_multimesh(Scenery.peak_mesh(), Scenery.plain(mc.lerp(hz, 0.12), 1.0, false), near_x)
-	_multimesh(Scenery.peak_mesh(), Scenery.plain(Color(0.96, 0.97, 1.0).lerp(hz, 0.25), 1.0, false), caps)
+	var low_c: Color = (th["l1"] as Color).lerp(mc, 0.25).darkened(0.15)
+	if track.theme in ["desert", "beach"]:
+		low_c = (th["ground"] as Color).darkened(0.12)
+	var rock_c: Color = mc.darkened(0.1)
+	var snow_c := Color(0.95, 0.97, 1.0)
+	var snow_line := 0.68 if not (track.theme in ["autumn", "desert", "beach", "city"]) else 2.0
+	var variants: Array[ArrayMesh] = []
+	for vi in 3:
+		variants.append(Scenery.mountain_mesh(Net.track_seed + vi * 7 + 3, low_c, rock_c, snow_c, snow_line))
+	var far_tint := Color(1, 1, 1).lerp(hz.lightened(0.1), 0.45)
+	var near_tint := Color(1, 1, 1).lerp(hz.lightened(0.1), 0.12)
+	for vi in 3:
+		var fv: Array[Transform3D] = []
+		var nv: Array[Transform3D] = []
+		for t in far_x:
+			if int(absf(t.origin.x + t.origin.z)) % 3 == vi:
+				fv.append(Transform3D(t.basis, t.origin - Vector3(0, t.basis.get_scale().y * 0.5, 0)))
+		for t in near_x:
+			if int(absf(t.origin.x + t.origin.z)) % 3 == vi:
+				nv.append(Transform3D(t.basis, t.origin - Vector3(0, t.basis.get_scale().y * 0.5, 0)))
+		var mf := Scenery.veg_material()
+		mf.albedo_color = far_tint
+		mf.disable_fog = true
+		var mn := Scenery.veg_material()
+		mn.albedo_color = near_tint
+		mn.disable_fog = true
+		_multimesh(variants[vi], mf, fv)
+		_multimesh(variants[vi], mn, nv)
 	# clouds: flat clumps that drift slowly around us
 	if weather in ["night"]:
 		return

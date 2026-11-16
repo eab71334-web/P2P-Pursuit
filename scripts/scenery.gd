@@ -257,3 +257,169 @@ static func rounded_box(size: Vector3, radius := 0.05) -> ArrayMesh:
 	var m := st.commit()
 	_rb_cache[key] = m
 	return m
+
+
+# ------------------------------------------------------------------ vegetation + mountains (low-poly, flat shaded, vertex coloured)
+
+static var _veg_cache := {}
+
+
+static func _tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, ca: Color, cb: Color, cc: Color, centre: Vector3) -> void:
+	var n := (b - a).cross(c - a)
+	if n.length() < 0.000001:
+		return
+	n = n.normalized()
+	if n.dot((a + b + c) / 3.0 - centre) < 0.0:
+		var t := b
+		b = c
+		c = t
+		var tc := cb
+		cb = cc
+		cc = tc
+		n = -n
+	st.set_normal(n)
+	st.set_color(ca)
+	st.add_vertex(a)
+	st.set_normal(n)
+	st.set_color(cb)
+	st.add_vertex(b)
+	st.set_normal(n)
+	st.set_color(cc)
+	st.add_vertex(c)
+
+
+## cone / frustum around the y axis: radius r0 at y0, r1 at y0+h
+static func _frustum(st: SurfaceTool, base: Vector3, r0: float, r1: float, h: float, segs: int, c0: Color, c1: Color, centre: Vector3, bend := Vector3.ZERO) -> void:
+	for i in segs:
+		var a0 := TAU * float(i) / float(segs)
+		var a1 := TAU * float(i + 1) / float(segs)
+		var p00 := base + Vector3(cos(a0) * r0, 0, sin(a0) * r0)
+		var p01 := base + Vector3(cos(a1) * r0, 0, sin(a1) * r0)
+		var p10 := base + bend + Vector3(cos(a0) * r1, h, sin(a0) * r1)
+		var p11 := base + bend + Vector3(cos(a1) * r1, h, sin(a1) * r1)
+		_tri(st, p00, p01, p11, c0, c0, c1, centre)
+		if r1 > 0.0001:
+			_tri(st, p00, p11, p10, c0, c1, c1, centre)
+
+
+static func _blob(st: SurfaceTool, c: Vector3, rad: float, segs: int, rings: int, cb: Color, ct: Color, squash := 0.85) -> void:
+	for j in rings:
+		var v0 := PI * float(j) / float(rings)
+		var v1 := PI * float(j + 1) / float(rings)
+		for i in segs:
+			var a0 := TAU * float(i) / float(segs)
+			var a1 := TAU * float(i + 1) / float(segs)
+			var p := func(v: float, a: float) -> Vector3:
+				return c + Vector3(sin(v) * cos(a) * rad, cos(v) * rad * squash, sin(v) * sin(a) * rad)
+			var q00: Vector3 = p.call(v0, a0)
+			var q01: Vector3 = p.call(v0, a1)
+			var q10: Vector3 = p.call(v1, a0)
+			var q11: Vector3 = p.call(v1, a1)
+			var col0 := cb.lerp(ct, clampf(0.5 + cos(v0) * 0.5, 0.0, 1.0))
+			var col1 := cb.lerp(ct, clampf(0.5 + cos(v1) * 0.5, 0.0, 1.0))
+			_tri(st, q00, q10, q11, col0, col1, col1, c)
+			_tri(st, q00, q11, q01, col0, col1, col0, c)
+
+
+## kind: conifer | round | palm | cactus. About 6 m tall at scale 1.
+static func tree_mesh(kind: String, trunk: Color, l1: Color, l2: Color) -> ArrayMesh:
+	var key := "%s%s%s%s" % [kind, trunk.to_html(), l1.to_html(), l2.to_html()]
+	if _veg_cache.has(key):
+		return _veg_cache[key]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	match kind:
+		"conifer":
+			_frustum(st, Vector3(0, 0, 0), 0.26, 0.2, 1.4, 6, trunk.darkened(0.15), trunk, Vector3(0, 0.7, 0))
+			var tiers := [[0.9, 1.75, 2.3], [2.3, 1.4, 2.1], [3.6, 0.98, 1.9], [4.7, 0.62, 1.5]]
+			for k in tiers.size():
+				var t: Array = tiers[k]
+				var f := float(k) / 3.0
+				_frustum(st, Vector3(0, t[0], 0), t[1], 0.0, t[2], 9, l1.lerp(l2, f * 0.7).darkened(0.12), l1.lerp(l2, 0.35 + f * 0.65), Vector3(0, float(t[0]) + 0.4, 0))
+		"round":
+			_frustum(st, Vector3(0, 0, 0), 0.34, 0.22, 2.6, 6, trunk.darkened(0.15), trunk, Vector3(0, 1.3, 0))
+			_blob(st, Vector3(0, 3.6, 0), 1.9, 8, 5, l1, l2)
+			_blob(st, Vector3(1.0, 3.0, 0.5), 1.2, 7, 4, l1.darkened(0.1), l2.darkened(0.05))
+			_blob(st, Vector3(-0.9, 3.3, -0.4), 1.3, 7, 4, l1, l2.lightened(0.05))
+		"palm":
+			var bend := Vector3(0.7, 0, 0.3)
+			var p := Vector3.ZERO
+			for k in 5:
+				var f0 := float(k) / 5.0
+				var seg_bend := bend * 0.2 * (1.0 + f0)
+				_frustum(st, p, 0.3 - f0 * 0.1, 0.3 - (f0 + 0.2) * 0.1, 1.05, 6, trunk.darkened(0.2 - f0 * 0.2), trunk, p + Vector3(0, 0.5, 0), seg_bend)
+				p += Vector3(seg_bend.x, 1.05, seg_bend.z)
+			for k in 8:
+				var a := TAU * float(k) / 8.0
+				var d := Vector3(cos(a), 0, sin(a))
+				var s := Vector3(-d.z, 0, d.x) * 0.38
+				var p0 := p
+				var p1 := p + d * 1.4 + Vector3(0, 0.55, 0)
+				var p2 := p + d * 2.6 + Vector3(0, -0.15, 0)
+				var cc := l1.lerp(l2, float(k % 3) / 2.0)
+				_tri(st, p0 + s * 0.3, p0 - s * 0.3, p1 + s, cc.darkened(0.1), cc.darkened(0.1), cc, p + Vector3(0, -1, 0) + d * 0.1)
+				_tri(st, p0 - s * 0.3, p1 - s, p1 + s, cc.darkened(0.1), cc, cc, p + Vector3(0, -1, 0))
+				_tri(st, p1 + s, p1 - s, p2, cc, cc, cc.lightened(0.1), p + Vector3(0, -1, 0))
+		"cactus":
+			var g := Color(0.22, 0.5, 0.26).lerp(l1, 0.2)
+			_frustum(st, Vector3.ZERO, 0.36, 0.3, 3.4, 7, g.darkened(0.15), g, Vector3(0, 1.7, 0))
+			_frustum(st, Vector3(0, 3.4, 0), 0.3, 0.0, 0.35, 7, g, g.lightened(0.1), Vector3(0, 3.5, 0))
+			_frustum(st, Vector3(0.3, 1.5, 0), 0.2, 0.2, 0.7, 6, g.darkened(0.1), g, Vector3(0.6, 1.8, 0), Vector3(0.5, 0, 0))
+			_frustum(st, Vector3(1.0, 1.9, 0), 0.2, 0.17, 1.1, 6, g.darkened(0.05), g.lightened(0.05), Vector3(1.0, 2.4, 0))
+			_frustum(st, Vector3(-0.3, 1.0, 0), 0.19, 0.19, 0.6, 6, g.darkened(0.1), g, Vector3(-0.6, 1.3, 0), Vector3(-0.45, 0, 0))
+			_frustum(st, Vector3(-0.9, 1.3, 0), 0.19, 0.16, 0.9, 6, g.darkened(0.05), g.lightened(0.05), Vector3(-0.9, 1.7, 0))
+	var m := st.commit()
+	_veg_cache[key] = m
+	return m
+
+
+## foliage material: vertex colours carry all the colour
+static func veg_material() -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.vertex_color_use_as_albedo = true
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.roughness = 1.0
+	return m
+
+
+## a faceted mountain: ridged noise on a cone, colours by height (ground -> rock -> snow). Base radius 0.5, height 1.
+static func mountain_mesh(seed_v: int, low: Color, rock: Color, snow: Color, snow_line: float) -> ArrayMesh:
+	var n := FastNoiseLite.new()
+	n.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	n.seed = seed_v
+	n.frequency = 1.6
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var R := 9
+	var S := 20
+	var grid: Array = []
+	for r in R + 1:
+		var t := float(r) / float(R)
+		var row: Array = []
+		for s in S:
+			var a := TAU * float(s) / float(S)
+			var base_r := 0.5 * pow(1.0 - t, 0.9)
+			var ridge := 1.0 - absf(n.get_noise_3d(cos(a) * 1.3, t * 2.2, sin(a) * 1.3))
+			var wob := 1.0 + (ridge - 0.6) * 0.5 * (1.0 - t * 0.5)
+			var rad := base_r * wob
+			var hy := pow(t, 0.8) + (ridge - 0.6) * 0.1 * sin(t * PI)
+			row.append(Vector3(cos(a) * rad, hy, sin(a) * rad))
+		grid.append(row)
+	var colour_at := func(p: Vector3, i: int) -> Color:
+		var jit := n.get_noise_2d(p.x * 6.0 + float(i), p.z * 6.0) * 0.07
+		var y: float = p.y + jit
+		var c := low.lerp(rock, smoothstep(0.12, 0.42, y))
+		c = c.lerp(snow, smoothstep(snow_line - 0.03, snow_line + 0.05, y))
+		return c * (0.9 + 0.1 * n.get_noise_3d(p.x * 9.0, p.y * 9.0, p.z * 9.0))
+	var centre := Vector3(0, 0.3, 0)
+	for r in R:
+		for s in S:
+			var s2 := (s + 1) % S
+			var a: Vector3 = grid[r][s]
+			var b: Vector3 = grid[r][s2]
+			var c: Vector3 = grid[r + 1][s2]
+			var d: Vector3 = grid[r + 1][s]
+			_tri(st, a, b, c, colour_at.call(a, s), colour_at.call(b, s), colour_at.call(c, s), centre)
+			if r + 1 < R:
+				_tri(st, a, c, d, colour_at.call(a, s), colour_at.call(c, s), colour_at.call(d, s), centre)
+	return st.commit()
