@@ -689,7 +689,9 @@ func _update_ground_fx(delta: float) -> void:
 
 
 func _build_audio() -> void:
-	_snd["engine"] = Sfx.loop3d("engine_loop", self, -8.0)
+	var et: String = ENG_TYPE.get(model, "i4t")
+	for li in 3:
+		_snd["e%d" % li] = Sfx.loop3d("eng_%s_%d" % [et, li], self, -80.0)
 	_snd["intake"] = Sfx.loop3d("intake_loop", self, -40.0)
 	_snd["road"] = Sfx.loop3d("road_loop", self, -40.0)
 	_snd["skid"] = Sfx.loop3d("skid_loop", self, -40.0)
@@ -719,6 +721,10 @@ const HANDLING := {
 	"hyper":   {"roll": 0.04, "steer": 0.95, "rate": 1.0, "rear": 1.02, "down": 3.2, "stiff": 54.0, "damp": 1.5, "com": 0.0},
 }
 var hd: Dictionary = HANDLING["hatch"]
+
+## engine sound type per car and the rpm of its three sample layers (must match tools/make_engines.py)
+const ENG_TYPE := {"hatch": "i4t", "buggy": "i4r", "muscle": "v8", "sierra": "i4t", "pickup": "v6d", "charger": "v8", "coupe": "i6", "m4": "i6", "gt3": "f6", "hyper": "v12"}
+const ENG_RPM := {"i4t": [900, 3200, 6200], "i4r": [1100, 3800, 7200], "v8": [700, 2600, 5600], "v6d": [650, 2300, 4300], "i6": [900, 3500, 7000], "f6": [1000, 4500, 8800], "v12": [1000, 5000, 9000]}
 
 const GEARS := [0.0, 36.0, 68.0, 100.0, 133.0, 170.0]
 
@@ -913,9 +919,17 @@ func _update_motion_audio(delta: float) -> void:
 	if damage >= 80.0:
 		target += sin(Time.get_ticks_msec() * 0.03) * 0.04      # misfiring engine
 	_rpm = lerpf(_rpm, clampf(target, 0.1, 1.0), clampf(delta * 5.5, 0.0, 1.0))
-	var eng: AudioStreamPlayer3D = _snd["engine"]
-	eng.pitch_scale = 0.55 + _rpm * 1.55
-	eng.volume_db = -10.0 + throttle_in * 5.0 + _rpm * 3.0
+	# three recorded-style rpm layers per engine type, cross-faded by the real (or virtual) engine rpm and pitched to match it exactly
+	var et_rpms: Array = ENG_RPM[ENG_TYPE.get(model, "i4t")]
+	var rpm_now := float(spec["idle"]) + (_rpm - 0.1) / 0.88 * (float(spec["red"]) - float(spec["idle"]))
+	rpm_now = maxf(rpm_now, 500.0)
+	var ld := -9.0 + throttle_in * 6.0                        # on throttle the engine is louder and harsher than on the overrun
+	for li in 3:
+		var lr := float(et_rpms[li])
+		var wgt := maxf(1.0 - absf(log(rpm_now / lr)) / log(2.3), 0.0)
+		var pl: AudioStreamPlayer3D = _snd["e%d" % li]
+		pl.pitch_scale = clampf(rpm_now / lr, 0.45, 2.2)
+		pl.volume_db = -80.0 if wgt < 0.01 else ld + 20.0 * log(wgt * 0.8 + 0.2) / log(10.0) + _rpm * 2.0
 	var inta: AudioStreamPlayer3D = _snd["intake"]
 	inta.pitch_scale = 0.7 + _rpm * 0.9
 	inta.volume_db = -38.0 + throttle_in * _rpm * 26.0

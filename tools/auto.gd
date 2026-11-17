@@ -6,6 +6,7 @@ var step := 0
 var shots: Array = []
 var mode := ""
 var _bi := 0
+var _t_on := 0.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -740,20 +741,18 @@ func _process(d: float) -> void:
 				Net.lobby_closed.connect(func(r): print("CLOSED ", r))
 				var e := Net.join_game(OS.get_environment("SRV") if OS.get_environment("SRV") != "" else "127.0.0.1", OS.get_environment("NAME"))
 				print("JOIN err=", e)
-			elif step == 1 and t > 22.0:
-				step = 2; shot("online_" + OS.get_environment("NAME") + "0")
-				if OS.get_environment("NAME") == "A":
-					get_tree().current_scene._send_sticker(6)
+			elif step == 1 and t > 10.0 and "teams" in get_tree().current_scene:
+				step = 2; _t_on = t; shot("online_" + OS.get_environment("NAME") + "0")
 				print("INGAME ", Net.in_game, " players=", Net.players)
 				Input.action_press("accel")
-			elif step == 2 and t > 23.5 and not _stk_seen:
+			elif step == 2 and t > _t_on + 1.5 and not _stk_seen:
 				_stk_seen = true
 				var ww := get_tree().current_scene
 				var seen := []
 				for tt in ww.teams:
 					seen.append(tt.car.get_node_or_null("Sticker") != null)
 				print("STICKERS_SEEN ", seen)
-			elif step == 2 and t > 30.0:
+			elif step == 2 and t > _t_on + 14.0:
 				step = 3; shot("online_" + OS.get_environment("NAME") + "1")
 				var w := get_tree().current_scene
 				print("SCENE ", w.name, " speed=", w.teams[w.my_team].speed if "teams" in w else -1)
