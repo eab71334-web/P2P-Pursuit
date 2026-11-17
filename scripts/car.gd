@@ -45,6 +45,7 @@ var preview := false         # garage preview: no sound, no physics
 var power_mult := 1.0
 # --- realistic mode (Driving feel = Realistic): real mass, power, gearbox, drag, brakes and weight distribution (see CarSpecs)
 var real := false
+var rough := 1.0                 # road surface roughness: 1 asphalt, ~3 gravel / grass off the road
 var spec: Dictionary = {}
 var gear := 1
 var eng_rpm := 900.0
@@ -763,7 +764,7 @@ func _stabilize(delta: float) -> void:
 		apply_central_force(-up * float(hd["down"]) * 0.9 * sp * sp * 0.55)
 	# road texture: small uneven bumps under each tyre (the suspension answers with real wheel travel and the tyre can briefly unload)
 	if real and on_ground >= 1 and sp > 4.0 and not is_remote:
-		var amp := 0.10 + 0.10 * clampf(sp / 60.0, 0.0, 1.0)
+		var amp := (0.10 + 0.10 * clampf(sp / 60.0, 0.0, 1.0)) * rough
 		for w in wheel_list:
 			if w.is_in_contact():
 				var q := w.global_position
@@ -884,6 +885,13 @@ func _process(delta: float) -> void:
 	_update_cluster(delta)
 
 
+func _wheel_air() -> bool:
+	for w in wheel_list:
+		if w.is_in_contact():
+			return false
+	return true
+
+
 func _update_motion_audio(delta: float) -> void:
 	if _snd.is_empty():
 		return
@@ -918,6 +926,14 @@ func _update_motion_audio(delta: float) -> void:
 	var sk: AudioStreamPlayer3D = _snd["skid"]
 	sk.volume_db = -60.0 if lat < 3.0 else -26.0 + clampf((lat - 3.0) / 8.0, 0.0, 1.0) * 16.0
 	sk.pitch_scale = 0.9 + clampf(spd / 200.0, 0.0, 0.4)
+	if real and not is_remote and spd > 25.0 and not _wheel_air():
+		# tyre squeal that grows BEFORE the grip limit: lateral g as a share of what the tyres can hold, so the driver hears the limit coming
+		var lat_g := absf(angular_velocity.y) * spd / 3.6 / 9.81
+		var lim := float(spec["mu"]) * _mu_up * _grip * (1.0 + float(spec["cla"]) * 0.5 * 1.2 * pow(spd / 3.6, 2.0) / (mass * 9.81))
+		var lat_ratio := lat_g / maxf(lim, 0.3)
+		var sq := clampf((lat_ratio - 0.72) / 0.28, 0.0, 1.0)
+		sk.volume_db = maxf(sk.volume_db, -42.0 + sq * 26.0)
+		sk.pitch_scale = 0.85 + sq * 0.35 + clampf(spd / 400.0, 0.0, 0.2)
 	var wopen: float = actions.win_avg if actions != null else 0.0
 	var wd: AudioStreamPlayer3D = _snd["wind"]
 	wd.volume_db = -60.0 if wopen < 0.02 else -34.0 + wopen * 6.0 + clampf(spd / 110.0, 0.0, 1.0) * 24.0

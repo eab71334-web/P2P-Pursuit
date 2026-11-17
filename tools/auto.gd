@@ -5,6 +5,7 @@ var t := 0.0
 var step := 0
 var shots: Array = []
 var mode := ""
+var _bi := 0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -756,6 +757,38 @@ func _process(d: float) -> void:
 				step = 3; shot("online_" + OS.get_environment("NAME") + "1")
 				var w := get_tree().current_scene
 				print("SCENE ", w.name, " speed=", w.teams[w.my_team].speed if "teams" in w else -1)
+				get_tree().quit()
+		"bumpcheck":
+			if step == 0 and t > 2.0:
+				step = 1
+				sc._on_solo()
+			elif step == 1 and t > 20.0:
+				var w := get_tree().current_scene
+				var bi := -1
+				for o in w.track.obstacles:
+					if o["kind"] == "bump":
+						bi = int(o["index"])
+						break
+				print("BUMPIDX ", bi, " of ", w.track.points.size(), " obstacles ", w.track.obstacles.size())
+				if bi < 0:
+					get_tree().quit()
+					return
+				_bi = bi
+				step = 2
+			elif step >= 2 and step < 8 and t > 20.0 + (step - 1) * 2.5:
+				var w := get_tree().current_scene
+				var offs := [45, 42, 40, 38, 36, 33]
+				var back: int = offs[step - 2]
+				var j := maxi(_bi - back / 3, 2)
+				var car = w.teams[w.my_team].car
+				car.freeze = true
+				car.global_transform = Transform3D(Basis(Vector3.UP, w.track.headings[j]), w.track.points[j] + Vector3(0, 1.0, 0))
+				car.linear_velocity = Vector3.ZERO
+				w.teams[w.my_team].prog = j
+				step += 1
+				await get_tree().create_timer(1.2).timeout
+				shot("bump%d" % back)
+			elif step == 8 and t > 40.0:
 				get_tree().quit()
 		"solo":
 			if step == 0 and t > 2.0:

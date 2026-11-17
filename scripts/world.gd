@@ -140,6 +140,7 @@ var final_pcts: Array = []
 var grace_left := -1.0             # server: seconds until the race is closed after the first finisher
 var grace_show := -1.0             # clients: the same countdown, for the HUD
 var grace_label: Label
+var bump_label: Label
 var skip_wait_btn: Button
 var ceremony: Ceremony
 var _rewarded := false
@@ -665,6 +666,9 @@ func _physics_process(delta: float) -> void:
 				inp.x = clampf(inp.x + ts.disturb_dir * 0.9, -1.0, 1.0)
 			_update_progress(ts)
 			ts.car.set_grip(0.28 if (track.ice_at(ts.prog) and not ts.wrong) else _weather_grip())
+			var pp: Vector3 = track.points[clampi(ts.prog, 0, track.points.size() - 1)]
+			var lat_off := absf((ts.car.global_position - pp).dot(Track.left_of(track.headings[clampi(ts.prog, 0, track.points.size() - 1)])))
+			ts.car.rough = 1.0 if lat_off < Track.ROAD_WIDTH * 0.5 + 0.3 else 3.2       # off the asphalt the ground is much rougher
 			if ts.car.global_position.y < track.y_at(ts.prog) - 7.0:
 				ts.penalty += 5.0
 				_reset_team(ts)
@@ -2319,8 +2323,137 @@ func _build_obstacles() -> void:
 					var pos := p + left * lat + Track.forward(h) * rng.randf_range(-4.0, 4.0) + Vector3(0, sz * 0.45, 0)
 					_obst_box(body, Vector3(sz, sz * 0.9, sz * 0.9), Transform3D(basis, pos), Color(0.36, 0.36, 0.4))
 			"bump":
-				var basis := Basis(Vector3.UP, h) * Basis(Vector3.RIGHT, deg_to_rad(7.5))
-				_obst_box(body, Vector3(10.6, 0.6, 6.5), Transform3D(basis, p), Color(0.82, 0.86, 0.9))
+				_make_hump(body, p, h)
+				for sd in [[150.0, "150 m"], [60.0, "60 m"]]:
+					_make_bump_sign(i, float(sd[0]), str(sd[1]))
+
+
+## a real road hump: smooth cosine profile across the whole road (0.14 m high, 4.2 m long), yellow/dark paint stripes, solid trimesh collider
+func _make_hump(body: StaticBody3D, p: Vector3, h: float) -> void:
+	var W := Track.ROAD_WIDTH
+	var len_m := 4.2
+	var hgt := 0.14
+	var nx := 14
+	var nz := 8
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var flat := Basis(Vector3.UP, h)
+	for ix in nx:
+		for iz in nz:
+			var corners := []
+			for dd in [[0, 0], [1, 0], [1, 1], [0, 0], [1, 1], [0, 1]]:
+				var u := float(ix + dd[0]) / float(nx)
+				var w := float(iz + dd[1]) / float(nz)
+				var x := (u - 0.5) * W
+				var z := (w - 0.5) * len_m
+				var y := hgt * (0.5 - 0.5 * cos(w * TAU))
+				corners.append(Vector3(x, y + 0.012, z))
+			var stripe := (ix % 2 == 0)
+			var col := Color(0.95, 0.78, 0.08) if stripe else Color(0.16, 0.16, 0.18)
+			for c in corners:
+				st.set_color(col)
+				st.add_vertex(c)
+	st.generate_normals()
+	var mesh := st.commit()
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	var m := StandardMaterial3D.new()
+	m.vertex_color_use_as_albedo = true
+	m.roughness = 0.9
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mi.material_override = m
+	mi.transform = Transform3D(flat, p)
+	add_child(mi)
+	var cs := CollisionShape3D.new()
+	cs.shape = mesh.create_trimesh_shape()
+	cs.transform = Transform3D(flat, p)
+	body.add_child(cs)
+
+
+func _sign_mat(c: Color) -> StandardMaterial3D:
+	var m := _mat(c)
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return m
+
+
+func _tri_mesh(w: float, hh: float) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_normal(Vector3(0, 0, 1))
+	for v in [Vector3(-w * 0.5, 0, 0), Vector3(0, hh, 0), Vector3(w * 0.5, 0, 0)]:
+		st.add_vertex(v)
+	return st.commit()
+
+
+func _half_disc_mesh(r: float) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_normal(Vector3(0, 0, 1))
+	var n := 10
+	for i in n:
+		var a0 := PI * float(i) / float(n)
+		var a1 := PI * float(i + 1) / float(n)
+		st.add_vertex(Vector3(0, 0, 0))
+		st.add_vertex(Vector3(r * cos(a1), r * sin(a1), 0))
+		st.add_vertex(Vector3(r * cos(a0), r * sin(a0), 0))
+	return st.commit()
+
+
+## the EU/US style warning: red-bordered triangle with a hump pictogram, and a plate with the distance to it, on the right of the road
+func _make_bump_sign(idx: int, dist_m: float, txt: String) -> void:
+	var j := idx
+	var acc := 0.0
+	while j > 1 and acc < dist_m:
+		acc += track.points[j].distance_to(track.points[j - 1])
+		j -= 1
+	if j < 4 or track.in_tunnel(j):
+		return
+	var h := track.headings[j]
+	var W := Track.ROAD_WIDTH
+	var base: Vector3 = track.points[j] + Track.left_of(h) * -(W * 0.5 + 2.6)
+	var flat := Basis(Vector3.UP, h)
+	var root := Node3D.new()
+	root.transform = Transform3D(flat * Basis.from_scale(Vector3.ONE * 1.35), base)
+	add_child(root)
+	var post := MeshInstance3D.new()
+	var pm := CylinderMesh.new()
+	pm.top_radius = 0.045
+	pm.bottom_radius = 0.045
+	pm.height = 2.9
+	post.mesh = pm
+	post.material_override = _mat(Color(0.55, 0.57, 0.6))
+	post.position = Vector3(0, 1.45, 0)
+	root.add_child(post)
+	var red := MeshInstance3D.new()
+	red.mesh = _tri_mesh(1.1, 0.96)
+	red.material_override = _sign_mat(Color(0.85, 0.08, 0.08))
+	red.position = Vector3(0, 1.55, 0.07)
+	root.add_child(red)
+	var wht := MeshInstance3D.new()
+	wht.mesh = _tri_mesh(0.74, 0.64)
+	wht.material_override = _sign_mat(Color(0.97, 0.97, 0.95))
+	wht.position = Vector3(0, 1.67, 0.076)
+	root.add_child(wht)
+	var pic := MeshInstance3D.new()
+	pic.mesh = _half_disc_mesh(0.17)
+	pic.material_override = _sign_mat(Color(0.05, 0.05, 0.06))
+	pic.position = Vector3(0, 1.82, 0.082)
+	root.add_child(pic)
+	var plate := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(1.0, 0.42, 0.03)
+	plate.mesh = bm
+	plate.material_override = _sign_mat(Color(0.97, 0.97, 0.95))
+	plate.position = Vector3(0, 1.22, 0.07)
+	root.add_child(plate)
+	var lb := Label3D.new()
+	lb.text = txt
+	lb.font_size = 96
+	lb.pixel_size = 0.0045
+	lb.modulate = Color(0.05, 0.05, 0.06)
+	lb.outline_size = 0
+	lb.position = Vector3(0, 1.22, 0.095)
+	root.add_child(lb)
 
 
 func _build_trees() -> void:
@@ -2995,6 +3128,8 @@ func _build_hud() -> void:
 
 	grace_label = _full_label(132, 40, 26)
 	grace_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
+	bump_label = _full_label(176, 40, 30)
+	bump_label.add_theme_color_override("font_color", Color(1.0, 0.7, 0.1))
 	skip_wait_btn = Button.new()
 	skip_wait_btn.text = UI.tx("Skip", "تخطي")
 	skip_wait_btn.add_theme_font_size_override("font_size", 22)
@@ -3561,6 +3696,20 @@ func _update_hud() -> void:
 		grace_label.text = UI.tx("Race ends in %d s", "السباق ينتهي بعد %d ث") % ceili(maxf(grace_show, 0.0))
 	else:
 		grace_label.text = ""
+	# distance to the next road hump ahead, like the warning signs
+	var bd := -1.0
+	if state == State.RUNNING and not my.finished:
+		for o in track.obstacles:
+			if o["kind"] == "bump" and int(o["index"]) > my.prog:
+				var dd := 0.0
+				for k in range(my.prog, mini(int(o["index"]), track.points.size() - 1)):
+					dd += track.points[k].distance_to(track.points[k + 1])
+					if dd > 260.0:
+						break
+				if dd <= 220.0:
+					bd = dd
+				break
+	bump_label.text = "" if bd < 0.0 else UI.tx("Speed bump in %d m", "مطب بعد %d م") % (int(bd / 10.0) * 10)
 	if skip_wait_btn:
 		skip_wait_btn.visible = grace_show > 0.0 and state == State.RUNNING and my.finished
 	var shown_time := my.finish_time if my.finished else maxf(race_time, 0.0)
