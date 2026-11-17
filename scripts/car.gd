@@ -43,6 +43,17 @@ var drop := 0.0     # how much lower the roof sits than the standard cabin (slee
 var sd := 0.0       # matching seat drop
 var preview := false         # garage preview: no sound, no physics
 var power_mult := 1.0
+# --- realistic mode (Driving feel = Realistic): real mass, power, gearbox, drag, brakes and weight distribution (see CarSpecs)
+var real := false
+var spec: Dictionary = {}
+var gear := 1
+var eng_rpm := 900.0
+var _gb_shift := 0.0
+var _up_power := 1.0
+var _mu_up := 1.0
+var _vgear := 1                  # gear shown / heard in the other modes (virtual gearbox spread over the real gear ratios)
+const REAL_FORCE_K := 1.0        # calibrated by tools/carbench.gd: engine_force -> real newtons
+const REAL_BRAKE_K := 0.16        # calibrated: brake value per wheel -> real braking force
 var top_speed := TOP_SPEED_KMH
 var grip_base := 1.0
 var armor := 1.0             # damage taken multiplier (lower = tougher)
@@ -114,6 +125,13 @@ func setup(p_team: int, color: Color, remote: bool, p_lo := {}, p_preview := fal
 	grip_base = float(m["grip"]) * (1.0 + 0.05 * int(up.get("tires", 0))) * float(fm["grip"])
 	armor = float(m["armor"]) * (1.0 - 0.08 * int(up.get("armor", 0))) * float(fm["armor"])
 	overheat_kmh = float(m["top"]) * 0.88 + 6.0 * int(up.get("cooling", 0))
+	spec = CarSpecs.get_spec(model)
+	real = Gfx.handling == "sim" and not p_preview
+	_up_power = (1.0 + 0.06 * eng) * float(fm["power"])
+	_mu_up = (1.0 + 0.05 * int(up.get("tires", 0))) * float(fm["grip"])
+	if real:
+		top_speed = float(spec["top"]) * (1.0 + 0.03 * eng) * float(fm["top"])
+		overheat_kmh = float(spec["top"]) * 0.93 + 6.0 * int(up.get("cooling", 0))
 	burn_time = 45.0 + 5.0 * int(up.get("cooling", 0))
 	ext_mult = 1.0 + 0.15 * int(up.get("extinguisher", 0))
 	if lo.has("paint") and Catalog.PAINTS.has(lo["paint"]):
@@ -126,11 +144,13 @@ func seat_origin(role: String) -> Vector3:
 
 func _ready() -> void:
 	hd = HANDLING.get(model, HANDLING["hatch"])
-	mass = 450.0
-	linear_damp = 0.12
+	mass = float(spec["mass"]) if real else 450.0
+	linear_damp = 0.0 if real else 0.12
+	if real:
+		linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE       # the project's default linear damping must not add to the real air drag
 	angular_damp = 1.5 * _hm(1.47, 0.8)
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
-	center_of_mass = Vector3(0, float(hd["com"]), 0)
+	center_of_mass = Vector3(0, float(hd["com"]), ((0.5 - float(spec["wf"])) * 2.6) if real else 0.0)
 	if is_remote:
 		freeze = true
 		freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
@@ -141,6 +161,8 @@ func _ready() -> void:
 	shape.position = Vector3(0, 0.75, 0)
 	add_child(shape)
 	_add_wheels()
+	if real:
+		_setup_real_wheels()
 	_build_visuals()
 	_build_fx()
 	_build_ground_fx()
@@ -153,6 +175,15 @@ func _ready() -> void:
 		actions.name = "Actions"
 		add_child(actions)
 		actions.setup(self)
+
+
+func _setup_real_wheels() -> void:
+	var drive := str(spec["drive"])
+	for w in wheel_list:
+		var front := w.use_as_steering
+		w.use_as_traction = drive == "AWD" or (drive == "FWD" and front) or (drive == "RWD" and not front)
+		w.suspension_max_force = 9000.0 * float(spec["mass"]) / 450.0
+		w.wheel_friction_slip = float(spec["mu"]) * _mu_up * (1.0 if front else float(hd["rear"]))
 
 
 func rim_color() -> Color:
@@ -186,6 +217,7 @@ func _add_wheels() -> void:
 			w.use_as_traction = true
 			w.use_as_steering = z < 0.0
 			add_child(w)
+			wheel_list.append(w)
 			CarStyle.make_wheel(w, rim_color(), model, Catalog.wheel_style(model, str(lo.get("wheel", "stock"))))
 
 
@@ -211,12 +243,77 @@ func set_controls(steer: float, throttle: float, brk: float) -> void:
 		steering = move_toward(steering, 0.0, get_physics_process_delta_time() * 3.5)
 		return
 	steering = move_toward(steering, -steer * lim, get_physics_process_delta_time() * srate)
+	if real:
+		_real_drive(throttle, brk, fs)
+		return
 	if brk > 0.0 and fs < 0.5:
 		engine_force = brk * 600.0
 		brake = 0.0
 	else:
 		engine_force = -throttle * ENGINE * power * power_mult if speed_kmh < top_speed * (1.0 if power >= 1.0 else 0.8) else 0.0
 		brake = brk * BRAKE_FORCE
+
+
+## Realistic powertrain: engine torque curve -> gearbox (automatic, with shift pauses) -> wheels. Brakes with ABS, traction control.
+func _real_drive(throttle: float, brk: float, fs: float) -> void:
+	var delta := get_physics_process_delta_time()
+	var gears: Array = spec["g"]
+	var red := float(spec["red"])
+	var idle := float(spec["idle"])
+	var v := absf(fs)
+	if brk > 0.0 and fs < 0.5:                                   # reverse
+		engine_force = brk * 0.18 * mass * REAL_FORCE_K * 0.25
+		brake = 0.0
+		gear = 1
+		eng_rpm = idle + 600.0 * brk
+		return
+	# wheel-driven rpm, with the clutch slipping when starting off
+	var rpm_w := CarSpecs.rpm_for(spec, gear, v)
+	var launch := lerpf(idle, float(spec["tq_lo"]) * 1.1, throttle)
+	eng_rpm = clampf(maxf(rpm_w, launch if v < 12.0 else idle), idle, red * 1.03)
+	# automatic gearbox
+	_gb_shift = maxf(_gb_shift - delta, 0.0)
+	if _gb_shift <= 0.0:
+		if rpm_w > red * 0.95 and gear < gears.size() and throttle > 0.2:
+			gear += 1
+			_gb_shift = 0.2
+		elif gear > 1:
+			var down := CarSpecs.rpm_for(spec, gear - 1, v)
+			var want := red * (0.55 if throttle > 0.6 else 0.36)
+			if rpm_w < want and down < red * 0.9:
+				gear -= 1
+				_gb_shift = 0.12
+		if v < 1.0:
+			gear = 1
+	# torque -> force at the wheels
+	var ratio := float(gears[gear - 1]) * float(spec["fd"])
+	var tq := CarSpecs.torque_at(spec, eng_rpm) * throttle * _up_power * power
+	if eng_rpm >= red or _gb_shift > 0.0:
+		tq = 0.0
+	var f_total := tq * ratio * 0.9 / float(spec["r"])          # newtons at the road
+	f_total *= lerpf(float(spec.get("acc", 0.88)), 1.0, clampf(v / 28.0, 0.0, 1.0))   # clutch / launch losses below ~100 km/h
+	# traction control: back off when a driven wheel spins
+	var slip := 1.0
+	for w in wheel_list:
+		if w.use_as_traction and w.is_in_contact():
+			slip = minf(slip, w.get_skidinfo())
+	if slip < 0.6:
+		f_total *= clampf(slip + 0.35, 0.4, 1.0)
+	var n_drive := 0
+	for w in wheel_list:
+		if w.use_as_traction:
+			n_drive += 1
+	engine_force = -f_total / maxf(float(n_drive), 1.0) * REAL_FORCE_K
+	# brakes with ABS
+	var b := brk * float(spec["brake"]) * mass * 0.25 * REAL_BRAKE_K
+	if brk > 0.0 and v > 4.0:
+		var worst := 1.0
+		for w in wheel_list:
+			if w.is_in_contact():
+				worst = minf(worst, w.get_skidinfo())
+		if worst < 0.7:
+			b *= clampf(worst + 0.25, 0.45, 1.0)
+	brake = b
 
 
 ## 1 = normal, ~0.25 = ice
@@ -240,7 +337,10 @@ func set_handbrake(on: bool) -> void:
 func _apply_fric() -> void:
 	for w in wheel_list:
 		var k := 1.0 if w.use_as_steering else float(hd["rear"]) * (0.3 if hb else 1.0)
-		w.wheel_friction_slip = 3.2 * _grip * grip_base * k * _hm(1.15, 0.9)
+		if real:
+			w.wheel_friction_slip = float(spec["mu"]) * _mu_up * _grip * k
+		else:
+			w.wheel_friction_slip = 3.2 * _grip * grip_base * k * _hm(1.15, 0.9)
 
 
 ## dark-mode lights: headlights + a dim cabin light so the blind driver can see the co-driver
@@ -651,7 +751,13 @@ func _stabilize(delta: float) -> void:
 		if w.is_in_contact():
 			on_ground += 1
 	# aerodynamic downforce (grows with speed squared) presses the car onto the road
-	if on_ground >= 2 and sp > 12.0:
+	if real:
+		if sp > 0.5:
+			var drag := 0.5 * 1.2 * float(spec["cd"]) * float(spec["a"]) * sp * sp + 0.012 * mass * 9.8      # air + rolling resistance
+			apply_central_force(-v.normalized() * drag)
+		if on_ground >= 2 and sp > 10.0:
+			apply_central_force(-up * 0.5 * 1.2 * float(spec["cla"]) * sp * sp)                               # downforce
+	elif on_ground >= 2 and sp > 12.0:
 		apply_central_force(-up * float(hd["down"]) * 0.9 * sp * sp * 0.55)
 	# anti-roll: kill the roll spin around the car's long axis and pitch spin around its side axis
 	var av := angular_velocity
