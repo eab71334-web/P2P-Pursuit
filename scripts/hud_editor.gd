@@ -62,6 +62,7 @@ func _ready() -> void:
 	_layer = Control.new()                         # the mock buttons live here, under the bars and dialogs
 	_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_layer.layout_direction = Control.LAYOUT_DIRECTION_LTR       # Arabic would mirror the anchors: the finger and the button would move in opposite directions
 	add_child(_layer)
 	_guides = Control.new()
 	_guides.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)

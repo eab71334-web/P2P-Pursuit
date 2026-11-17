@@ -198,8 +198,8 @@ static func _def(id: String) -> Dictionary:
 
 static func set_entry(id: String, e: Dictionary) -> void:
 	_load()
-	e["fx"] = clampf(float(e["fx"]), 0.03, 0.97)
-	e["fy"] = clampf(float(e["fy"]), 0.04, 0.96)
+	e["fx"] = clampf(float(e["fx"]), 0.05, 0.95)           # a button can never be pushed off the screen where it can't be grabbed again
+	e["fy"] = clampf(float(e["fy"]), 0.06, 0.94)
 	e["sc"] = clampf(float(e["sc"]), SC_MIN, SC_MAX)
 	e["rot"] = wrapf(float(e["rot"]), -180.0, 180.0)
 	e["al"] = clampf(float(e.get("al", 1.0)), 0.15, 1.0)
@@ -225,10 +225,12 @@ static func place(c: Control, id: String) -> void:
 	var d := _def(id)
 	var w: float = d["w"]
 	var h: float = d["h"]
-	c.anchor_left = e["fx"]
-	c.anchor_right = e["fx"]
-	c.anchor_top = e["fy"]
-	c.anchor_bottom = e["fy"]
+	var px := clampf(float(e["fx"]), 0.05, 0.95)           # layouts saved before are pulled back on screen too
+	var py := clampf(float(e["fy"]), 0.06, 0.94)
+	c.anchor_left = px
+	c.anchor_right = px
+	c.anchor_top = py
+	c.anchor_bottom = py
 	c.offset_left = -w * 0.5
 	c.offset_right = w * 0.5
 	c.offset_top = -h * 0.5

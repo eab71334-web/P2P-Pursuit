@@ -6,6 +6,7 @@ var step := 0
 var shots: Array = []
 var mode := ""
 var _bi := 0
+var _hed: HudEditor
 var _t_on := 0.0
 
 func _ready() -> void:
@@ -756,6 +757,29 @@ func _process(d: float) -> void:
 				step = 3; shot("online_" + OS.get_environment("NAME") + "1")
 				var w := get_tree().current_scene
 				print("SCENE ", w.name, " speed=", w.teams[w.my_team].speed if "teams" in w else -1)
+				get_tree().quit()
+		"hudedit":
+			if step == 0 and t > 2.0:
+				step = 1
+				TranslationServer.set_locale("ar")
+				get_tree().root.set("layout_direction", 3)
+				var ed := HudEditor.new()
+				ed.layout_direction = Control.LAYOUT_DIRECTION_RTL
+				get_tree().root.add_child(ed)
+				await get_tree().process_frame
+				await get_tree().process_frame
+				var id := "horn"
+				for k2 in ed._mock:
+					var f2 := float(HudLayout.entry(k2)["fx"])
+					if f2 > 0.25 and f2 < 0.7:
+						id = k2
+				var c0 := ed._centre(id)
+				var fx0 := float(HudLayout.entry(id)["fx"])
+				ed._ptr_down(5, c0)
+				for k in 10:
+					ed._ptr_move(5, c0 + Vector2(10.0 * (k + 1), 0))
+				var c1 := ed._centre(id)
+				print("DRAG id=", id, " finger moved +100px  centre moved ", c1.x - c0.x, " fx ", fx0, " -> ", HudLayout.entry(id)["fx"])
 				get_tree().quit()
 		"bumpcheck":
 			if step == 0 and t > 2.0:
