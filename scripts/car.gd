@@ -891,6 +891,8 @@ func _update_motion_audio(delta: float) -> void:
 	var ratio := clampf((spd - GEARS[g]) / (GEARS[g + 1] - GEARS[g]), 0.0, 1.0)
 	var target := lerpf(0.34, 0.95, ratio) if spd > 3.0 else 0.16 + throttle_in * 0.55
 	target += (throttle_in - 0.4) * 0.12
+	if real and not is_remote and spd > 3.0:
+		target = (eng_rpm - float(spec["idle"])) / (float(spec["red"]) - float(spec["idle"])) * 0.88 + 0.1      # the real engine rpm from the gearbox model
 	if damage >= 80.0:
 		target += sin(Time.get_ticks_msec() * 0.03) * 0.04      # misfiring engine
 	_rpm = lerpf(_rpm, clampf(target, 0.1, 1.0), clampf(delta * 5.5, 0.0, 1.0))
@@ -1456,6 +1458,9 @@ func _update_cluster(delta: float) -> void:
 		g = int(gear_sel)
 	var in_gear := clampf((spd - (g - 1) * span) / span, 0.0, 1.0)
 	var target := 0.22 + in_gear * 0.72 if spd > 2.0 else 0.18 + throttle_in * 0.5
+	if real and not is_remote:
+		g = gear
+		target = (eng_rpm - float(spec["idle"])) / (float(spec["red"]) - float(spec["idle"])) * 0.88 + 0.1
 	_cl_rpm = lerpf(_cl_rpm, clampf(target, 0.1, 1.0), clampf(delta * 8.0, 0.0, 1.0))
 	_cl_gear_now = g
 	for n in _cl_needles:
