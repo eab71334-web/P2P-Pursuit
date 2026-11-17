@@ -726,6 +726,12 @@ var hd: Dictionary = HANDLING["hatch"]
 const ENG_TYPE := {"hatch": "i4t", "buggy": "i4r", "muscle": "v8", "sierra": "i4t", "pickup": "v6d", "charger": "v8", "coupe": "i6", "m4": "i6", "gt3": "f6", "hyper": "v12"}
 const ENG_RPM := {"i4t": [900, 3200, 6200], "i4r": [1100, 3800, 7200], "v8": [700, 2600, 5600], "v6d": [650, 2300, 4300], "i6": [900, 3500, 7000], "f6": [1000, 4500, 8800], "v12": [1000, 5000, 9000]}
 
+## body roll per car: g = degrees of roll per 1 g of cornering, hz = body roll frequency, z = damping ratio (low = it rocks more after a quick left-right)
+const ROLL := {
+	"hatch": {"g": 4.5, "hz": 1.4, "z": 0.38}, "buggy": {"g": 7.0, "hz": 1.1, "z": 0.30}, "muscle": {"g": 5.0, "hz": 1.3, "z": 0.34},
+	"sierra": {"g": 4.5, "hz": 1.4, "z": 0.38}, "pickup": {"g": 7.5, "hz": 1.0, "z": 0.30}, "charger": {"g": 5.0, "hz": 1.3, "z": 0.34},
+	"coupe": {"g": 3.0, "hz": 1.6, "z": 0.45}, "m4": {"g": 2.8, "hz": 1.7, "z": 0.45}, "gt3": {"g": 1.6, "hz": 2.2, "z": 0.55}, "hyper": {"g": 1.4, "hz": 2.3, "z": 0.55}}
+
 const GEARS := [0.0, 36.0, 68.0, 100.0, 133.0, 170.0]
 
 
@@ -785,6 +791,16 @@ func _stabilize(delta: float) -> void:
 			if absf(beta) < 2.0:
 				var over := maxf(absf(beta) - 0.14, 0.0)
 				apply_torque(Vector3.UP * signf(beta) * over * mass * 22.0 * clampf(sp / 25.0, 0.3, 1.2))
+	# body roll dynamics: the body rolls to the OUTSIDE of a turn, overshoots and rocks back when you flick left-right (spring + damper per car type)
+	if real and on_ground >= 2 and sp > 6.0 and not is_remote:
+		var rl: Dictionary = ROLL.get(model, ROLL["hatch"])
+		var fs2 := -b.z.dot(v)
+		var ay := angular_velocity.y * fs2 / 9.81                                  # lateral g, + = left turn
+		var phi_t := deg_to_rad(float(rl["g"])) * clampf(ay, -1.8, 1.8) * 0.7      # target roll (+ = right side down)
+		var phi := -asin(clampf(b.x.y, -1.0, 1.0))
+		var wr := angular_velocity.dot(fwd)
+		var wn := TAU * float(rl["hz"])
+		apply_torque(fwd * mass * 3.0 * (wn * wn * (phi_t - phi) - 2.0 * float(rl["z"]) * wn * wr))
 	# anti-roll: kill the roll spin around the car's long axis and pitch spin around its side axis
 	var av := angular_velocity
 	var roll_av := fwd * av.dot(fwd)

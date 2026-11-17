@@ -84,6 +84,10 @@ func _physics_process(delta: float) -> void:
 	if vf.length() > 3.0:
 		slip = rad_to_deg(acos(clampf((-ctr.z).dot(vf.normalized()), -1.0, 1.0)))
 	var roll := rad_to_deg(asin(clampf(ctr.x.y, -1.0, 1.0)))
+	if st != 0.0 and SCEN[sc][1] < -5.0 and OS.get_environment("ROLLLOG") != "" and int(t * 20.0) != int((t - delta) * 20.0) and t > 3.0 and t < 7.0:
+		print("  t=%.2f steer %+.0f roll %+.1f" % [t, st, roll])
+	if sc == 0 and OS.get_environment("ROLLLOG") != "" and int(t * 4.0) != int((t - delta) * 4.0) and t > 3.0:
+		print("  yaw %+.2f signed x.y %+.3f ay %+.2f" % [car.angular_velocity.y, ctr.x.y, car.angular_velocity.y * (-ctr.z).dot(v) / 9.81])
 	if t > 3.0:
 		lat_sum += absf(car.angular_velocity.y) * vf.length() / 9.81
 		n_s += 1
