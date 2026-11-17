@@ -291,6 +291,7 @@ func _real_drive(throttle: float, brk: float, fs: float) -> void:
 	if eng_rpm >= red or _gb_shift > 0.0:
 		tq = 0.0
 	var f_total := tq * ratio * 0.9 / float(spec["r"])          # newtons at the road
+	f_total *= clampf((top_speed - speed_kmh) / 4.0, 0.0, 1.0)         # the real car's top speed (gearing/limiter)
 	f_total *= lerpf(float(spec.get("acc", 0.88)), 1.0, clampf(v / 28.0, 0.0, 1.0))   # clutch / launch losses below ~100 km/h
 	# traction control: back off when a driven wheel spins
 	var slip := 1.0
@@ -760,6 +761,14 @@ func _stabilize(delta: float) -> void:
 			apply_central_force(-up * 0.5 * 1.2 * float(spec["cla"]) * sp * sp)                               # downforce
 	elif on_ground >= 2 and sp > 12.0:
 		apply_central_force(-up * float(hd["down"]) * 0.9 * sp * sp * 0.55)
+	# road texture: small uneven bumps under each tyre (the suspension answers with real wheel travel and the tyre can briefly unload)
+	if real and on_ground >= 1 and sp > 4.0 and not is_remote:
+		var amp := 0.10 + 0.10 * clampf(sp / 60.0, 0.0, 1.0)
+		for w in wheel_list:
+			if w.is_in_contact():
+				var q := w.global_position
+				var nz := sin(q.x * 1.7 + q.z * 2.3) * 0.5 + sin(q.x * 4.1 - q.z * 3.7) * 0.3 + sin(q.z * 7.3 + q.x * 5.9) * 0.2
+				apply_force(Vector3.UP * nz * amp * mass * 9.8 * 0.25, q - global_position)
 	# electronic stability: a slide up to ~8 deg is allowed (the car feels alive), beyond that a counter-yaw torque catches the tail
 	if real and on_ground >= 2 and sp > 8.0 and not hb:
 		var vh := Vector3(v.x, 0.0, v.z)

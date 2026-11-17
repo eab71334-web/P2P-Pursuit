@@ -14,7 +14,7 @@ var brake_start := Vector3.ZERO
 var top_logged := false
 var gear_log := ""
 var sc := 0
-var SCEN := [[60.0,1.0],[100.0,1.0],[100.0,0.5],[160.0,0.5],[160.0,1.0]]
+var SCEN := [[60.0,1.0],[100.0,1.0],[100.0,0.5],[160.0,0.5],[160.0,1.0],[120.0,-9.0],[160.0,-9.0]]
 var lat_sum := 0.0
 var n_s := 0
 var max_slip := 0.0
@@ -74,6 +74,8 @@ func _physics_process(delta: float) -> void:
 		n_s = 0
 		max_slip = 0.0
 		max_roll = 0.0
+	if st < -5.0:
+		st = 1.0 if int(t / 1.2) % 2 == 0 else -1.0     # chicane: quick left-right changes
 	car.set_controls(st, thr, brk)
 	var v := car.linear_velocity
 	var ctr := car.global_transform.basis
@@ -88,7 +90,7 @@ func _physics_process(delta: float) -> void:
 		max_slip = maxf(max_slip, slip)
 		max_roll = maxf(max_roll, absf(roll))
 	if t > 8.0:
-		lines += "   %3d km/h steer %.1f: %.2f g sustained | slip max %3.0f deg | roll max %4.1f deg | now %3.0f km/h\n" % [int(target), st, lat_sum / maxf(n_s, 1), max_slip, max_roll, sp]
+		lines += "   %3d km/h steer %.1f%s: %.2f g sustained | slip max %3.0f deg | roll max %4.1f deg | now %3.0f km/h\n" % [int(target), SCEN[sc][1], " (chicane)" if SCEN[sc][1] < -5.0 else "", lat_sum / maxf(n_s, 1), max_slip, max_roll, sp]
 		sc += 1
 		phase = 0
 		t = 0.0
