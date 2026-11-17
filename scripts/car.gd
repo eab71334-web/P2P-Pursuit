@@ -183,7 +183,7 @@ func _setup_real_wheels() -> void:
 		var front := w.use_as_steering
 		w.use_as_traction = drive == "AWD" or (drive == "FWD" and front) or (drive == "RWD" and not front)
 		w.suspension_max_force = 9000.0 * float(spec["mass"]) / 450.0
-		w.wheel_friction_slip = float(spec["mu"]) * _mu_up * (1.0 if front else float(hd["rear"]))
+		w.wheel_friction_slip = float(spec["mu"]) * _mu_up * (1.0 if front else lerpf(float(hd["rear"]), 1.0, 0.6))
 
 
 func rim_color() -> Color:
@@ -208,12 +208,12 @@ func _add_wheels() -> void:
 			w.wheel_radius = 0.4
 			w.wheel_rest_length = 0.2
 			w.suspension_travel = 0.3
-			w.suspension_stiffness = float(hd["stiff"])
+			w.suspension_stiffness = float(hd["stiff"]) * (0.3 if real else 1.0)
 			w.suspension_max_force = 9000.0
 			w.damping_compression = float(hd["damp"])
 			w.damping_relaxation = float(hd["damp"]) * 1.3
 			w.wheel_friction_slip = 3.2 * grip_base * (1.0 if z < 0.0 else float(hd["rear"]))
-			w.wheel_roll_influence = float(hd["roll"])
+			w.wheel_roll_influence = float(hd["roll"]) * (8.0 if real else 1.0)
 			w.use_as_traction = true
 			w.use_as_steering = z < 0.0
 			add_child(w)
@@ -297,8 +297,8 @@ func _real_drive(throttle: float, brk: float, fs: float) -> void:
 	for w in wheel_list:
 		if w.use_as_traction and w.is_in_contact():
 			slip = minf(slip, w.get_skidinfo())
-	if slip < 0.6:
-		f_total *= clampf(slip + 0.35, 0.4, 1.0)
+	if slip < 0.8:
+		f_total *= clampf(slip + 0.2, 0.3, 1.0)
 	var n_drive := 0
 	for w in wheel_list:
 		if w.use_as_traction:
@@ -338,6 +338,7 @@ func _apply_fric() -> void:
 	for w in wheel_list:
 		var k := 1.0 if w.use_as_steering else float(hd["rear"]) * (0.3 if hb else 1.0)
 		if real:
+			k = 1.0 if w.use_as_steering else lerpf(float(hd["rear"]), 1.0, 0.6) * (0.3 if hb else 1.0)
 			w.wheel_friction_slip = float(spec["mu"]) * _mu_up * _grip * k
 		else:
 			w.wheel_friction_slip = 3.2 * _grip * grip_base * k * _hm(1.15, 0.9)
@@ -759,14 +760,23 @@ func _stabilize(delta: float) -> void:
 			apply_central_force(-up * 0.5 * 1.2 * float(spec["cla"]) * sp * sp)                               # downforce
 	elif on_ground >= 2 and sp > 12.0:
 		apply_central_force(-up * float(hd["down"]) * 0.9 * sp * sp * 0.55)
+	# electronic stability: a slide up to ~8 deg is allowed (the car feels alive), beyond that a counter-yaw torque catches the tail
+	if real and on_ground >= 2 and sp > 8.0 and not hb:
+		var vh := Vector3(v.x, 0.0, v.z)
+		var fh := Vector3(fwd.x, 0.0, fwd.z).normalized()
+		if vh.length() > 6.0 and fh.length() > 0.1:
+			var beta := fh.signed_angle_to(vh.normalized(), Vector3.UP)
+			if absf(beta) < 2.0:
+				var over := maxf(absf(beta) - 0.14, 0.0)
+				apply_torque(Vector3.UP * signf(beta) * over * mass * 22.0 * clampf(sp / 25.0, 0.3, 1.2))
 	# anti-roll: kill the roll spin around the car's long axis and pitch spin around its side axis
 	var av := angular_velocity
 	var roll_av := fwd * av.dot(fwd)
 	var pitch_av := b.x * av.dot(b.x)
 	var k := 1.0 + 0.8 * clampf(sp / 40.0, 0.0, 1.0)
 	if on_ground >= 1:
-		apply_torque(-roll_av * mass * 4.0 * k)
-		apply_torque(-pitch_av * mass * 1.5 * k)
+		apply_torque(-roll_av * mass * (1.2 if real else 4.0) * k)
+		apply_torque(-pitch_av * mass * (0.6 if real else 1.5) * k)
 	# leaning more than ~25 degrees on the road: gently push the body back to level
 	var lean := up.cross(Vector3.UP)
 	if on_ground >= 2 and up.y < 0.9 and up.y > 0.2:
