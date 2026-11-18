@@ -781,6 +781,15 @@ func _process(d: float) -> void:
 				var c1 := ed._centre(id)
 				print("DRAG id=", id, " finger moved +100px  centre moved ", c1.x - c0.x, " fx ", fx0, " -> ", HudLayout.entry(id)["fx"])
 				get_tree().quit()
+		"tab":
+			if step == 0 and t > 4.0:
+				step = 1
+				sc.hub.select(OS.get_environment("TAB"))
+			elif step == 1 and t > 7.0:
+				step = 2
+				shot("tab_" + OS.get_environment("TAB"))
+			elif step == 2 and t > 8.0:
+				get_tree().quit()
 		"bumpcheck":
 			if step == 0 and t > 2.0:
 				step = 1
