@@ -76,6 +76,8 @@ func _physics_process(delta: float) -> void:
 		max_roll = 0.0
 	if st < -5.0:
 		st = 1.0 if int(t / 1.2) % 2 == 0 else -1.0     # chicane: quick left-right changes
+	if OS.get_environment("KICK") != "" and sc == 1 and t > 4.0 and t < 4.03:
+		car.angular_velocity += -car.global_basis.z * float(OS.get_environment("KICK"))
 	car.set_controls(st, thr, brk)
 	var v := car.linear_velocity
 	var ctr := car.global_transform.basis

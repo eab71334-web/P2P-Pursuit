@@ -792,7 +792,7 @@ func _stabilize(delta: float) -> void:
 				var over := maxf(absf(beta) - 0.14, 0.0)
 				apply_torque(Vector3.UP * signf(beta) * over * mass * 22.0 * clampf(sp / 25.0, 0.3, 1.2))
 	# body roll dynamics: the body rolls to the OUTSIDE of a turn, overshoots and rocks back when you flick left-right (spring + damper per car type)
-	if real and on_ground >= 2 and sp > 6.0 and not is_remote:
+	if real and on_ground >= 2 and sp > 6.0 and not is_remote and b.y.y > 0.93:          # only while the car is roughly upright: after a crash or a flip the normal physics must decide, never a strong spring
 		var rl: Dictionary = ROLL.get(model, ROLL["hatch"])
 		var fs2 := -b.z.dot(v)
 		var ay := angular_velocity.y * fs2 / 9.81                                  # lateral g, + = left turn
@@ -800,7 +800,8 @@ func _stabilize(delta: float) -> void:
 		var phi := -asin(clampf(b.x.y, -1.0, 1.0))
 		var wr := angular_velocity.dot(fwd)
 		var wn := TAU * float(rl["hz"])
-		apply_torque(fwd * mass * 3.0 * (wn * wn * (phi_t - phi) - 2.0 * float(rl["z"]) * wn * wr))
+		var rt := clampf(wn * wn * (phi_t - phi) - 2.0 * float(rl["z"]) * wn * wr, -120.0, 120.0)      # bounded: a collision can never turn this into a catapult
+		apply_torque(fwd * mass * 3.0 * rt)
 	# anti-roll: kill the roll spin around the car's long axis and pitch spin around its side axis
 	var av := angular_velocity
 	var roll_av := fwd * av.dot(fwd)

@@ -2328,11 +2328,11 @@ func _build_obstacles() -> void:
 					_make_bump_sign(i, float(sd[0]), str(sd[1]))
 
 
-## a real road hump: smooth cosine profile across the whole road (0.14 m high, 4.2 m long), yellow/dark paint stripes, solid trimesh collider
+## a real road hump: smooth cosine profile across the whole road (0.09 m high, 6.5 m long: a small hop at speed, never a launch), yellow/dark paint stripes, solid trimesh collider
 func _make_hump(body: StaticBody3D, p: Vector3, h: float) -> void:
 	var W := Track.ROAD_WIDTH
-	var len_m := 4.2
-	var hgt := 0.14
+	var len_m := 6.5
+	var hgt := 0.09
 	var nx := 14
 	var nz := 8
 	var st := SurfaceTool.new()

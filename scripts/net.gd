@@ -60,6 +60,7 @@ func _ready() -> void:
 	_setup_inputs()
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.connected_to_server.connect(_on_connected)
+	multiplayer.peer_connected.connect(_loosen_timeout)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
 
@@ -572,6 +573,15 @@ func return_to_menu() -> void:
 
 
 # ---------------------------------------------------------------- connection events
+
+## a slow phone can freeze for many seconds while it builds the race world: do not drop it for that (default limit is 5-30 s)
+func _loosen_timeout(id: int) -> void:
+	var p := multiplayer.multiplayer_peer
+	if p is ENetMultiplayerPeer:
+		var pp := (p as ENetMultiplayerPeer).get_peer(id)
+		if pp != null:
+			pp.set_timeout(64, 25000, 120000)
+
 
 func _on_connected() -> void:
 	register.rpc_id(1, player_name)
