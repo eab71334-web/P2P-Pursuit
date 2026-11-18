@@ -1,7 +1,7 @@
 #!/bin/bash
 # local online test: 1 headless server + 2 harness clients on this machine
 set -e
-cd /home/claude/rally-lan
+cd /home/claude/p2p-pursuit
 tools/run.sh none 4 1 >/dev/null 2>&1 || true
 cd /tmp/t
 pkill -x godot || true
