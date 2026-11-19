@@ -164,7 +164,9 @@ func _ready() -> void:
 	_add_wheels()
 	if real:
 		_setup_real_wheels()
+	var n_before := get_child_count()
 	_build_visuals()
+	_make_sway_pivot(n_before)
 	_build_fx()
 	_build_ground_fx()
 	var fcode := str(lo.get("flag", "none"))
@@ -867,8 +869,59 @@ func _tick_discs(delta: float) -> void:
 			(m2 as StandardMaterial3D).emission_energy_multiplier = _heat * 4.5
 
 
+# --- visual body sway: the shell rocks on its springs (roll with the steering, rebound after a left-right flick, dive/squat), per car type
+var _sway: Node3D = null
+var _sw_phi := 0.0
+var _sw_w := 0.0
+var _sw_th := 0.0
+var _sw_tw := 0.0
+var _sw_v := 0.0
+
+
+func _make_sway_pivot(first: int) -> void:
+	if not real:
+		return
+	_sway = Node3D.new()
+	_sway.name = "Sway"
+	var move: Array = []
+	for i in range(first, get_child_count()):
+		var ch := get_child(i)
+		if ch is Node3D and not (ch is Camera3D or ch is Light3D or ch is SubViewport or ch is CollisionShape3D or ch is VehicleWheel3D or ch is RemoteTransform3D):
+			move.append(ch)
+	add_child(_sway)
+	for ch in move:
+		remove_child(ch)
+		_sway.add_child(ch)
+
+
+func _update_sway(delta: float) -> void:
+	if _sway == null or delta <= 0.0 or delta > 0.2:
+		return
+	var rl: Dictionary = ROLL.get(model, ROLL["hatch"])
+	var sp := speed_kmh / 3.6
+	var gain := clampf(speed_kmh / 70.0, 0.0, 1.0)
+	# outside of the turn is down (steer_visual > 0 = right turn -> left side down)
+	var tgt := deg_to_rad(float(rl["g"])) * 1.5 * steer_visual * gain
+	var wn := TAU * float(rl["hz"])
+	var zt := float(rl["z"]) * 0.7
+	_sw_w += (wn * wn * (tgt - _sw_phi) - 2.0 * zt * wn * _sw_w) * delta
+	_sw_phi += _sw_w * delta
+	_sw_phi = clampf(_sw_phi, -0.2, 0.2)
+	# dive / squat from the speed change
+	var acc := (sp - _sw_v) / delta
+	_sw_v = sp
+	var ptgt := clampf(acc * 0.0045, -0.05, 0.05) * float(rl["g"]) / 4.5
+	_sw_tw += (wn * wn * (ptgt - _sw_th) - 2.0 * zt * wn * _sw_tw) * delta
+	_sw_th += _sw_tw * delta
+	_sw_th = clampf(_sw_th, -0.08, 0.08)
+	var bs := Basis.from_euler(Vector3(_sw_th, 0.0, _sw_phi))
+	var cy := Vector3(0, 0.45, 0)
+	_sway.transform = Transform3D(bs, cy - bs * cy)
+
+
 func _process(delta: float) -> void:
 	_tick_discs(delta)
+	_update_sway(delta)
 	if _flag_mat != null:
 		# the flag hangs at a standstill and streams out straight behind the car with speed
 		_flag_mat.set_shader_parameter("wind", clampf(maxf(speed_kmh, 18.0 if preview else 0.0) / 75.0, 0.0, 1.0))

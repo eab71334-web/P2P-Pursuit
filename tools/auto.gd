@@ -812,7 +812,7 @@ func _process(d: float) -> void:
 						if not wl.is_in_contact():
 							air += 1
 					var ground: float = w.track.y_at(ts.prog)
-					print("RUN t=%.0f spd=%.0f prog=%d/%d dy=%.1f air=%d up=%.2f dmg=%.0f" % [t - 20.0, ts.car.speed_kmh, ts.prog, w.track.points.size(), ts.car.global_position.y - ground, air, ts.car.global_basis.y.y, ts.damage])
+					print("RUN t=%.0f spd=%.0f prog=%d/%d dy=%.1f air=%d up=%.2f dmg=%.0f" % [t - 20.0, ts.car.speed_kmh, ts.prog, w.track.points.size(), ts.car.global_position.y - ground, air, ts.car.global_basis.y.y, ts.damage]); print("SW phi=%.3f st=%.2f th=%.3f" % [ts.car._sw_phi, ts.car.steer_visual, ts.car._sw_th])
 				if t > 95.0:
 					get_tree().quit()
 		"bumpcheck":
