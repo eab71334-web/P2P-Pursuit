@@ -333,6 +333,7 @@ func _build_ui() -> void:
 	solo_hub.career.connect(func(): _open_career())
 	solo_hub.custom.connect(func(): _go("custom"))
 	solo_hub.quick.connect(func(): _start_solo({}))
+	solo_hub.openworld.connect(func(): get_tree().change_scene_to_file("res://scenes/open_world.tscn"))
 	solo_hub.soon.connect(func(): _say(UI.tx("Coming in a later update.", "قريباً في تحديث قادم.")))
 	panels["solo"] = solo_hub
 	career_page = CareerPage.new()

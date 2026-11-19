@@ -8,6 +8,7 @@ signal career
 signal custom
 signal quick
 signal soon
+signal openworld
 
 var _badge: Label
 
@@ -149,8 +150,10 @@ func build() -> void:
 	var t3 := Tile.new(UI.tx("LEADERBOARDS", "لوحة الترتيب"), UI.tx("Fastest time on every track", "أسرع زمن على كل مضمار"), "mountain", "clear", false, true, UI.tx("COMING SOON", "قريباً"), Color(0, 0, 0, 0), "tunnel", "bounce", Color(0.95, 0.8, 0.2), 0.6)
 	t3.pressed.connect(func(): soon.emit())
 	grid.add_child(t3)
-	var t4 := Tile.new(UI.tx("WEEKLY CHALLENGE", "التحدي الأسبوعي"), UI.tx("A new event every week", "حدث جديد كل أسبوع"), "autumn", "storm", false, true, UI.tx("COMING SOON", "قريباً"), Color(0, 0, 0, 0), "bridge", "cruise", Color(0.3, 0.8, 0.45), 0.7)
-	t4.pressed.connect(func(): soon.emit())
+	var t4 := Tile.new(UI.tx("OPEN WORLD", "عالم مفتوح"), UI.tx("Free roam a big city, get out and walk", "تجوّل بحرية في مدينة كبيرة وانزل من السيارة"), "city", "clear", false, false, UI.tx("NEW", "جديد"), Color(0.2, 0.7, 0.4, 0.12), "village", "cruise", Color(0.3, 0.8, 0.45), 0.7)
+	t4.pressed.connect(func():
+		Sfx.play("click", -6.0)
+		openworld.emit())
 	grid.add_child(t4)
 	var all: Array = [big] + grid.get_children()
 	await get_tree().process_frame
