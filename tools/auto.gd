@@ -6,6 +6,7 @@ var step := 0
 var shots: Array = []
 var mode := ""
 var _bi := 0
+var _acc := 0.0
 var _hed: HudEditor
 var _t_on := 0.0
 
@@ -790,6 +791,30 @@ func _process(d: float) -> void:
 				shot("tab_" + OS.get_environment("TAB"))
 			elif step == 2 and t > 8.0:
 				get_tree().quit()
+		"botrun":
+			if step == 0 and t > 2.0:
+				step = 1
+				Gfx.handling = OS.get_environment("HANDLING") if OS.get_environment("HANDLING") != "" else "balanced"
+				sc._on_solo()
+			elif step == 1 and t > 20.0:
+				step = 2
+				var w0 := get_tree().current_scene
+				w0.teams[w0.my_team].bot = true
+				print("BOT ON handling=", Gfx.handling)
+			elif step == 2:
+				_acc += d
+				if _acc > 1.0:
+					_acc = 0.0
+					var w := get_tree().current_scene
+					var ts = w.teams[w.my_team]
+					var air := 0
+					for wl in ts.car.wheel_list:
+						if not wl.is_in_contact():
+							air += 1
+					var ground: float = w.track.y_at(ts.prog)
+					print("RUN t=%.0f spd=%.0f prog=%d/%d dy=%.1f air=%d up=%.2f dmg=%.0f" % [t - 20.0, ts.car.speed_kmh, ts.prog, w.track.points.size(), ts.car.global_position.y - ground, air, ts.car.global_basis.y.y, ts.damage])
+				if t > 95.0:
+					get_tree().quit()
 		"bumpcheck":
 			if step == 0 and t > 2.0:
 				step = 1

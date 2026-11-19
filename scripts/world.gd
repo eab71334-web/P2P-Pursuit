@@ -49,6 +49,7 @@ class TeamState extends RefCounted:
 	var dnf := false
 	var finish_time := 0.0
 	var flip := 0.0
+	var fly := 0.0
 	var wrong := false
 	var input := Vector3.ZERO
 	var disturb := 0.0
@@ -669,7 +670,15 @@ func _physics_process(delta: float) -> void:
 			var pp: Vector3 = track.points[clampi(ts.prog, 0, track.points.size() - 1)]
 			var lat_off := absf((ts.car.global_position - pp).dot(Track.left_of(track.headings[clampi(ts.prog, 0, track.points.size() - 1)])))
 			ts.car.rough = 1.0 if lat_off < Track.ROAD_WIDTH * 0.5 + 0.3 else 3.2       # off the asphalt the ground is much rougher
-			if ts.car.global_position.y < track.y_at(ts.prog) - 7.0:
+			var gdy: float = ts.car.global_position.y - track.y_at(ts.prog)
+			if gdy > 4.5 and not ts.wrong:          # flying (a physics glitch): put the car back after a moment, no penalty
+				ts.fly += delta
+				if ts.fly > 1.2:
+					ts.fly = 0.0
+					_reset_team(ts)
+			else:
+				ts.fly = 0.0
+			if ts.car.global_position.y < track.y_at(ts.prog) - 4.0:
 				ts.penalty += 5.0
 				_reset_team(ts)
 				show_message.rpc("fell", ts.idx)
