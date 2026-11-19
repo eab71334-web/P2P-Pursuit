@@ -235,8 +235,8 @@ func set_controls(steer: float, throttle: float, brk: float) -> void:
 	var fs := -global_transform.basis.z.dot(linear_velocity)
 	speed_kmh = absf(fs) * 3.6
 	# steering lock shrinks smoothly with speed (no snap-oversteer at 200 km/h)
-	var lim := (0.42 / (1.0 + pow(speed_kmh / 70.0, 1.7)) + 0.035) * float(hd["steer"]) * _hm(1.12, 0.92)
-	var srate := lerpf(2.4, 0.9, clampf(speed_kmh / 160.0, 0.0, 1.0)) * float(hd["rate"]) * _hm(1.25, 0.85)
+	var lim := (0.42 / (1.0 + pow(speed_kmh / 85.0, 1.7)) + 0.05) * float(hd["steer"]) * _hm(1.12, 1.1)
+	var srate := lerpf(2.8, 1.5, clampf(speed_kmh / 160.0, 0.0, 1.0)) * float(hd["rate"]) * _hm(1.25, 1.0)
 	steer_target = steer
 	throttle_in = throttle
 	brake_in = brk
@@ -896,6 +896,9 @@ func _make_sway_pivot(first: int) -> void:
 
 func _update_sway(delta: float) -> void:
 	if _sway == null or delta <= 0.0 or delta > 0.2:
+		return
+	if driver_avatar != null and driver_avatar.cam != null and driver_avatar.cam.current:      # we sit inside this car: the cabin must stay rigid around the camera
+		_sway.transform = Transform3D.IDENTITY
 		return
 	var rl: Dictionary = ROLL.get(model, ROLL["hatch"])
 	var sp := speed_kmh / 3.6
