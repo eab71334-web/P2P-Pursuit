@@ -789,8 +789,9 @@ func _stabilize(delta: float) -> void:
 		if vh.length() > 6.0 and fh.length() > 0.1:
 			var beta := fh.signed_angle_to(vh.normalized(), Vector3.UP)
 			if absf(beta) < 2.0:
-				var over := maxf(absf(beta) - 0.14, 0.0)
-				apply_torque(Vector3.UP * signf(beta) * over * mass * 22.0 * clampf(sp / 25.0, 0.3, 1.2))
+				var over := maxf(absf(beta) - 0.2, 0.0)
+				var yield_k := 1.0 - 0.75 * clampf(absf(steer_target) / 0.5, 0.0, 1.0)      # the driver is steering: do not fight the turn-in (left-right flicks stay easy)
+				apply_torque(Vector3.UP * signf(beta) * over * mass * 22.0 * yield_k * clampf(sp / 25.0, 0.3, 1.2))
 	# body roll dynamics: the body rolls to the OUTSIDE of a turn, overshoots and rocks back when you flick left-right (spring + damper per car type)
 	if real and on_ground >= 2 and sp > 6.0 and not is_remote and b.y.y > 0.93:          # only while the car is roughly upright: after a crash or a flip the normal physics must decide, never a strong spring
 		var rl: Dictionary = ROLL.get(model, ROLL["hatch"])
