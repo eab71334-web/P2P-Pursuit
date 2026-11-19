@@ -2778,6 +2778,12 @@ func _build_mountains() -> void:
 	var mid := track.points[track.points.size() / 2]
 	var R := minf(Gfx.far_clip() * 0.82, 1900.0)
 	var k := R / 1700.0
+	var ext := 0.0                  # how far the road (and its side roads) reach from the middle: mountains must stand beyond that, never on the road
+	for p3 in track.points:
+		ext = maxf(ext, Vector2(p3.x - mid.x, p3.z - mid.z).length())
+	for br in track.branches:
+		for p3 in (br["points"] as PackedVector3Array):
+			ext = maxf(ext, Vector2(p3.x - mid.x, p3.z - mid.z).length())
 	var near_x: Array[Transform3D] = []
 	var far_x: Array[Transform3D] = []
 	var caps: Array[Transform3D] = []
@@ -2787,6 +2793,7 @@ func _build_mountains() -> void:
 		var dist := R * (rng.randf_range(0.95, 1.0) if far_ring else rng.randf_range(0.55, 0.7))
 		var h := rng.randf_range(160.0, 330.0) * k * (1.25 if far_ring else 1.0)
 		var w := rng.randf_range(300.0, 520.0) * k
+		dist = maxf(dist, ext + w * 0.5 + 90.0)
 		var pos := Vector3(mid.x + cos(a) * dist, track.floor_y, mid.z + sin(a) * dist)
 		var bs := Basis(Vector3.UP, rng.randf() * TAU)
 		var t := Transform3D(bs * Basis.from_scale(Vector3(w, h, w)), pos + Vector3(0, h * 0.5 - 6.0, 0))
