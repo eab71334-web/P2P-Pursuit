@@ -82,7 +82,7 @@ static func design_stage(base_seed: int, theme_override := "", difficulty_overri
 		st["open_p"] = rng.randf_range(0.35, 0.7) if mountain else 0.0
 		st["rare_p"] = rng.randf_range(0.5, 1.0)
 		var found := false
-		for attempt in 40:
+		for attempt in 120:
 			var t := Track.from_stage(st, true, attempt * 7919)
 			if t != null:
 				st["seed"] = int(st["seed"]) + attempt * 7919
@@ -94,7 +94,13 @@ static func design_stage(base_seed: int, theme_override := "", difficulty_overri
 				found = true
 				break
 		if not found and best.is_empty():
-			best = st.duplicate()
+			var safe := st.duplicate()                     # last resort: no side roads, so the stage can never be broken by them
+			safe["fork_p"] = 0.0
+			for attempt in 600:
+				if Track.from_stage(safe, true, attempt * 7919) != null:
+					safe["seed"] = int(safe["seed"]) + attempt * 7919
+					break
+			best = safe
 			best["name"] = "Test Stage"
 	return best
 
@@ -261,27 +267,74 @@ func _build(seed_value: int, validate: bool) -> bool:
 	notes.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["index"] < b["index"])
 
 	if validate:
-		var skip := int(180.0 / STEP)
-		var min_d2 := 24.0 * 24.0
-		for i in points.size():
-			for j in range(i + skip, points.size()):
-				var dx := points[i].x - points[j].x
-				var dz := points[i].z - points[j].z
-				if dx * dx + dz * dz < min_d2:
-					return false
-		# dead-end roads must not run into the main road
-		for b in branches:
-			var f: int = b["fork"]
-			var bp: PackedVector3Array = b["points"]
-			for k in range(5, bp.size()):
-				for j in points.size():
-					if absi(j - f) <= 14:
-						continue
-					var dx := bp[k].x - points[j].x
-					var dz := bp[k].z - points[j].z
-					if dx * dx + dz * dz < 22.0 * 22.0:
-						return false
+		return audit().is_empty()
 	return true
+
+
+
+## Every way a stage can look or play wrong: the road touching itself, a side road running into / under the main road
+## or another side road, a closed-road barrier on the asphalt. Returns human readable problems (empty = clean).
+func audit() -> Array[String]:
+	var bad: Array[String] = []
+	var n := points.size()
+	var skip := int(200.0 / STEP)
+	var cell := 40.0
+	var grid := {}                                  # spatial hash of the main road: neighbours only, not every pair
+	for i in n:
+		var key := Vector2i(floori(points[i].x / cell), floori(points[i].z / cell))
+		var cur: PackedInt32Array = grid.get(key, PackedInt32Array())     # packed arrays are values: write the copy back
+		cur.append(i)
+		grid[key] = cur
+	var min_main := 34.0                      # road 14 + kerbs + banks both sides + room to see the other road
+	for i in n:
+		var cx := floori(points[i].x / cell)
+		var cz := floori(points[i].z / cell)
+		for gx in range(cx - 1, cx + 2):
+			for gz in range(cz - 1, cz + 2):
+				var lst = grid.get(Vector2i(gx, gz))
+				if lst == null:
+					continue
+				for j in (lst as PackedInt32Array):
+					if j < i + skip:
+						continue
+					var dx := points[i].x - points[j].x
+					var dz := points[i].z - points[j].z
+					if dx * dx + dz * dz < min_main * min_main:
+						bad.append("main road touches itself at %d / %d" % [i, j])
+						return bad
+	for bi in branches.size():
+		var b: Dictionary = branches[bi]
+		var f: int = b["fork"]
+		var bp: PackedVector3Array = b["points"]
+		for k in range(5, bp.size()):
+			var lim := 40.0 if k >= bp.size() - 4 else 30.0           # the barrier at the end is wider than the road
+			var cx2 := floori(bp[k].x / cell)
+			var cz2 := floori(bp[k].z / cell)
+			for gx in range(cx2 - 1, cx2 + 2):
+				for gz in range(cz2 - 1, cz2 + 2):
+					var lst2 = grid.get(Vector2i(gx, gz))
+					if lst2 == null:
+						continue
+					for j in (lst2 as PackedInt32Array):
+						if absi(j - f) <= 14:
+							continue
+						var dx := bp[k].x - points[j].x
+						var dz := bp[k].z - points[j].z
+						if dx * dx + dz * dz < lim * lim:
+							bad.append("side road %d runs into the main road (point %d vs %d)" % [bi, k, j])
+							return bad
+		for bj in range(bi + 1, branches.size()):
+			var bq: PackedVector3Array = (branches[bj] as Dictionary)["points"]
+			if Vector2(bp[0].x - bq[0].x, bp[0].z - bq[0].z).length() > 260.0:
+				continue
+			for k in range(2, bp.size()):
+				for m in range(2, bq.size()):
+					var dx := bp[k].x - bq[m].x
+					var dz := bp[k].z - bq[m].z
+					if dx * dx + dz * dz < 40.0 * 40.0:
+						bad.append("side roads %d and %d touch" % [bi, bj])
+						return bad
+	return bad
 
 
 func _add_forks(rng: RandomNumberGenerator) -> void:
@@ -446,7 +499,11 @@ func _add_tunnels(rng: RandomNumberGenerator) -> void:
 		if j - i >= 11:
 			runs.append(Vector2i(i, j))
 		i = j + 1
-	runs.shuffle()
+	for si in range(runs.size() - 1, 0, -1):          # seeded shuffle: every device must build the very same stage (the global shuffle made tunnels, and so side roads, differ per device)
+		var sj := rng.randi_range(0, si)
+		var tmp := runs[si]
+		runs[si] = runs[sj]
+		runs[sj] = tmp
 	var want := 2 if rng.randf() < 0.4 else 1
 	for r in runs:
 		if tunnels.size() >= want:
