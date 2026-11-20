@@ -850,6 +850,33 @@ func _process(d: float) -> void:
 			elif step == 60:
 				print("OW after enter: on_foot=", sc.on_foot, " seq=", sc.seq)
 				get_tree().quit()
+		"owkey":
+			var LOCKED := OS.get_environment("LOCKED") != ""
+			if step == 0 and t > 2.0:
+				step = 1
+				get_tree().change_scene_to_file("res://scenes/open_world.tscn")
+			elif step == 1 and t > 5.0:
+				step = 2
+				sc.car.speed_kmh = 0.0
+				sc._try_toggle_car()
+			elif step == 2 and sc.on_foot and not sc.seq:
+				step = 3
+				_t_on = t
+				print("OWK exited key_out=", sc.key_out, " engine_on=", sc.car.engine_on)
+				shot("owk_fob")
+				if LOCKED:
+					sc._fob_lock()
+				sc.walker.global_position = sc.car.to_global(Vector3(-14, 0.05, 6))
+				sc.thief_cd = 0.0
+			elif step == 3 and t > _t_on + 1.0:
+				step = 4
+				shot("owk_a")
+			elif step >= 4 and step < 40 and t > _t_on + 1.0 + 1.6 * (step - 3):
+				step += 1
+				print("OWK t=%.0f thief=%s state=%s locked=%s ai=%s hazard=%s car=%s" % [t - _t_on, sc.thief != null, sc.thief_state, sc.car_locked, sc.ai_on, sc.car.hazard, sc.car.global_position])
+				shot("owk_%02d" % step)
+			elif step == 40:
+				get_tree().quit()
 		"bumpcheck":
 			if step == 0 and t > 2.0:
 				step = 1

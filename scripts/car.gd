@@ -21,6 +21,7 @@ var wheel_gain := 1.6          # radians of wheel turn at full steering (the 360
 var _grip_l := 0.0
 var _grip_r := 0.0
 var is_remote := false
+var engine_on := true  # open world: key out = engine off (silent, no drive)
 var hold := false      # handbrake (before the start / after the finish)
 var driver_avatar: Avatar
 
@@ -232,6 +233,8 @@ func _hm(arcade: float, sim: float) -> float:
 
 
 func set_controls(steer: float, throttle: float, brk: float) -> void:
+	if not engine_on:
+		throttle = 0.0
 	var fs := -global_transform.basis.z.dot(linear_velocity)
 	speed_kmh = absf(fs) * 3.6
 	# steering lock shrinks smoothly with speed (no snap-oversteer at 200 km/h)
@@ -386,6 +389,84 @@ func _mat(c: Color) -> StandardMaterial3D:
 	return m
 
 
+# --- lock blink / hazards, trunk lid, headlights and underglow toggles (open world key fob)
+var _lamp_mat: StandardMaterial3D = null
+var hazard := false
+var _blink_n := 0
+var _blink_t := 0.0
+var _blink_on := false
+var trunk_pivot: Node3D = null
+var _trunk_amt := 0.0
+var _trunk_tw: Tween = null
+var _head_nodes: Array[Node] = []
+var _glow: OmniLight3D = null
+
+
+func flash(times: int) -> void:
+	_blink_n = times * 2
+	_blink_t = 0.0
+
+
+func _tick_blink(delta: float) -> void:
+	if _lamp_mat == null:
+		return
+	var want := false
+	if _blink_n > 0:
+		_blink_t -= delta
+		if _blink_t <= 0.0:
+			_blink_t = 0.28
+			_blink_on = not _blink_on
+			_blink_n -= 1
+		want = _blink_on
+	elif hazard:
+		_blink_t -= delta
+		if _blink_t <= 0.0:
+			_blink_t = 0.4
+			_blink_on = not _blink_on
+		want = _blink_on
+	else:
+		_blink_on = false
+	_lamp_mat.emission_energy_multiplier = 3.0 if want else 0.0
+
+
+func _make_trunk(c: Color) -> void:
+	trunk_pivot = Node3D.new()
+	trunk_pivot.position = Vector3(0, 0.9, 1.4)                          # hinge at the front edge of the rear deck
+	add_child(trunk_pivot)
+	_box(trunk_pivot, Vector3(1.7, 0.06, 0.62), Vector3(0, 0.0, 0.31), c)
+
+
+func set_trunk(open: bool) -> void:
+	if trunk_pivot == null:
+		return
+	if _trunk_tw != null:
+		_trunk_tw.kill()
+	_trunk_tw = create_tween()
+	var tgt := -deg_to_rad(62.0) if open else 0.0
+	_trunk_tw.tween_property(trunk_pivot, "rotation:x", tgt, 0.55).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT if open else Tween.EASE_IN)
+
+
+func set_headlights(on: bool) -> void:
+	if _head_nodes.is_empty():
+		var before := get_child_count()
+		add_lights()
+		for i in range(before, get_child_count()):
+			_head_nodes.append(get_child(i))
+	for n in _head_nodes:
+		(n as Node3D).visible = on
+
+
+func set_underglow(on: bool, col: Color) -> void:
+	if _glow == null:
+		_glow = OmniLight3D.new()
+		_glow.position = Vector3(0, 0.15, 0)
+		_glow.omni_range = 7.0
+		_glow.light_energy = 0.0
+		add_child(_glow)
+	_glow.light_color = col
+	_glow.light_energy = 2.5 if on else 0.0
+
+
 # --- hinged driver's door (front edge hinge): upper panel + lower panel + chrome handle; set_door(0..1) swings it out ~70 degrees
 var door_pivot: Node3D = null
 var door_handle: Node3D = null
@@ -448,6 +529,16 @@ func _build_visuals() -> void:
 		Livery.apply(self, body_mat, model)
 	_box(self, Vector3(1.9, 0.3, 0.2), Vector3(0, 0.5, -2.05), DARK)            # bumpers
 	_box(self, Vector3(1.9, 0.3, 0.2), Vector3(0, 0.5, 2.05), DARK)
+	_lamp_mat = StandardMaterial3D.new()                                         # corner indicator lamps (hazards / lock blink)
+	_lamp_mat.albedo_color = Color(0.45, 0.28, 0.05)
+	_lamp_mat.emission_enabled = true
+	_lamp_mat.emission = Color(1.0, 0.6, 0.05)
+	_lamp_mat.emission_energy_multiplier = 0.0
+	for lx in [-0.82, 0.82]:
+		for lz in [-2.07, 2.07]:
+			var lm := _box(self, Vector3(0.22, 0.12, 0.05), Vector3(lx, 0.66, lz), DARK)
+			lm.material_override = _lamp_mat
+	_make_trunk(c)
 	CarInterior.build(self, model, sd, drop)                                   # dash, console, seats, door cards, liner
 
 	# team letter on the roof and on the back
@@ -948,6 +1039,7 @@ func _update_sway(delta: float) -> void:
 
 func _process(delta: float) -> void:
 	_tick_discs(delta)
+	_tick_blink(delta)
 	_update_sway(delta)
 	if _flag_mat != null:
 		# the flag hangs at a standstill and streams out straight behind the car with speed
@@ -998,6 +1090,10 @@ func _wheel_air() -> bool:
 
 func _update_motion_audio(delta: float) -> void:
 	if _snd.is_empty():
+		return
+	if not engine_on:
+		for li0 in 3:
+			(_snd["e%d" % li0] as AudioStreamPlayer3D).volume_db = -80.0
 		return
 	var pos := global_position
 	if delta > 0.0:
