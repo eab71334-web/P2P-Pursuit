@@ -245,7 +245,8 @@ func _build_environment() -> void:
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-52, -35, 0)
 	sun.light_energy = 1.15
-	sun.shadow_enabled = false
+	sun.shadow_enabled = Gfx.shadows
+	sun.directional_shadow_max_distance = 160.0
 	add_child(sun)
 
 
@@ -266,7 +267,7 @@ func _build_ground() -> void:
 	add_child(body)
 
 
-func _multimesh(mesh: Mesh, mat: Material, xf: Array[Transform3D], colors: PackedColorArray = PackedColorArray()) -> void:
+func _multimesh(mesh: Mesh, mat: Material, xf: Array, colors: PackedColorArray = PackedColorArray()) -> void:
 	if xf.is_empty():
 		return
 	var mm := MultiMesh.new()
@@ -296,6 +297,7 @@ func _build_roads() -> void:
 	var road: Array[Transform3D] = []
 	var dashes: Array[Transform3D] = []
 	var walks: Array[Transform3D] = []
+	var parks: Array[Transform3D] = []
 	for k in range(-HALF_CELLS, HALF_CELLS + 1):
 		var p := float(k) * GRID
 		# east-west road (along X) at z = p, north-south road (along Z) at x = p
@@ -315,73 +317,287 @@ func _build_roads() -> void:
 		for j in range(-HALF_CELLS, HALF_CELLS):
 			var c := Vector3((float(i) + 0.5) * GRID, 0, (float(j) + 0.5) * GRID)
 			var inner := GRID - ROAD_W - 3.0
-			walks.append(Transform3D(Basis.from_scale(Vector3(inner, 0.12, inner)), c + Vector3(0, 0.06, 0)))
-	_multimesh(_unit_box(), _mat(Color(0.62, 0.62, 0.6)), walks)
+			if _is_park(i, j):
+				parks.append(Transform3D(Basis.from_scale(Vector3(inner, 0.12, inner)), c + Vector3(0, 0.06, 0)))
+			else:
+				walks.append(Transform3D(Basis.from_scale(Vector3(inner, 0.12, inner)), c + Vector3(0, 0.06, 0)))
+	_multimesh(_unit_box(), _mat(Color(0.42, 0.42, 0.41)), walks)
+	_multimesh(_unit_box(), _mat(Color(0.28, 0.5, 0.26)), parks)
+	_build_street_furniture()
+
+
+func _build_street_furniture() -> void:
+	var lamp_poles: Array[Transform3D] = []
+	var lamp_heads: Array[Transform3D] = []
+	var tl_poles: Array[Transform3D] = []
+	var tl_heads: Array[Transform3D] = []
+	var tl_red: Array[Transform3D] = []
+	var tl_green: Array[Transform3D] = []
+	var zebra: Array[Transform3D] = []
+	var trunks: Array[Transform3D] = []
+	var crowns: Array[Transform3D] = []
+	var car_body: Array[Transform3D] = []
+	var car_cols := PackedColorArray()
+	var car_cab: Array[Transform3D] = []
+	var car_skirt: Array[Transform3D] = []
+	var edge := ROAD_W * 0.5 + 2.0
+	var city_r := GRID * 3.0
+	var pal := [Color(0.8, 0.12, 0.12), Color(0.12, 0.25, 0.7), Color(0.9, 0.9, 0.92), Color(0.1, 0.1, 0.12), Color(0.85, 0.7, 0.1), Color(0.2, 0.5, 0.3), Color(0.55, 0.57, 0.6), Color(0.9, 0.45, 0.1)]
+	for k in range(-3, 4):
+		var line := float(k) * GRID
+		# walk along this road in both directions (axis 0: road runs along X at z=line, axis 1: along Z at x=line)
+		for axis in 2:
+			var t := -city_r
+			while t <= city_r:
+				var jx := fposmod(t + GRID * 0.5, GRID) - GRID * 0.5                # distance to the nearest junction
+				if absf(jx) > ROAD_W + 12.0:
+					for sd in [-1.0, 1.0]:
+						var pos := Vector3(t, 0, line + sd * edge) if axis == 0 else Vector3(line + sd * edge, 0, t)
+						var yaw := 0.0 if axis == 0 else PI * 0.5
+						if int(roundf(t / 45.0)) % 1 == 0 and absf(fposmod(t, 45.0)) < 2.6:
+							lamp_poles.append(Transform3D(Basis.from_scale(Vector3(0.22, 7.0, 0.22)), pos + Vector3(0, 3.5, 0)))
+							var inward := Vector3(0, 0, -sd) if axis == 0 else Vector3(-sd, 0, 0)
+							lamp_heads.append(Transform3D(Basis(Vector3.UP, yaw) * Basis.from_scale(Vector3(1.8, 0.18, 0.5)), pos + Vector3(0, 7.1, 0) + inward * 0.9))
+						if absf(fposmod(t + 22.0, 45.0)) < 2.6:
+							var th := rng.randf_range(4.5, 6.5)
+							trunks.append(Transform3D(Basis.from_scale(Vector3(0.45, th * 0.5, 0.45)), pos + Vector3(0, th * 0.25, 0) + (Vector3(0, 0, sd) if axis == 0 else Vector3(sd, 0, 0)) * 1.2))
+							var cw := rng.randf_range(3.0, 4.2)
+							crowns.append(Transform3D(Basis.from_scale(Vector3(cw, th * 0.8, cw)), pos + Vector3(0, th * 0.5 + th * 0.4, 0) + (Vector3(0, 0, sd) if axis == 0 else Vector3(sd, 0, 0)) * 1.2))
+						# parked cars along the kerb
+						if absf(fposmod(t + 9.0, 38.0)) < 2.6 and rng.randf() < 0.45 and (absf(pos.x) > 40.0 or absf(pos.z) > 40.0):
+							var cp := Vector3(t, 0, line + sd * (ROAD_W * 0.5 - 2.3)) if axis == 0 else Vector3(line + sd * (ROAD_W * 0.5 - 2.3), 0, t)
+							var cb := Basis(Vector3.UP, yaw + PI * 0.5)
+							car_body.append(Transform3D(cb * Basis.from_scale(Vector3(1.8, 0.6, 4.2)), cp + Vector3(0, 0.62, 0)))
+							car_cols.append(pal[rng.randi() % pal.size()])
+							car_cab.append(Transform3D(cb * Basis.from_scale(Vector3(1.5, 0.55, 2.3)), cp + Vector3(0, 1.17, 0.0) + cb * Vector3(0, 0, 0.1)))
+							car_skirt.append(Transform3D(cb * Basis.from_scale(Vector3(1.7, 0.35, 3.7)), cp + Vector3(0, 0.3, 0)))
+							_add_box_collider(cp + Vector3(0, 0.75, 0), Vector3(1.8, 1.5, 4.2) if axis == 1 else Vector3(4.2, 1.5, 1.8))
+				t += 1.0 if false else 5.0
+	for i in range(-4, 5):
+		for j in range(-4, 5):
+			var jp := Vector3(float(i) * GRID, 0, float(j) * GRID)
+			for q in 4:
+				# zebra crossings on all four arms
+				var arm := Basis(Vector3.UP, q * PI * 0.5) * Vector3(0, 0, -(ROAD_W * 0.5 + 3.2))
+				var ar := (q % 2 == 0)
+				for z in 13:
+					var lat := -6.0 + float(z) * 1.0
+					var o := Basis(Vector3.UP, q * PI * 0.5) * Vector3(lat, 0, 0)
+					zebra.append(Transform3D(Basis(Vector3.UP, q * PI * 0.5) * Basis.from_scale(Vector3(0.5, 0.02, 3.0)), jp + arm + o + Vector3(0, 0.09, 0)))
+			if absi(i) <= 3 and absi(j) <= 3:
+				for sgn in [-1.0, 1.0]:
+					var cp2 := jp + Vector3(sgn * (ROAD_W * 0.5 + 1.8), 0, sgn * (ROAD_W * 0.5 + 1.8))
+					tl_poles.append(Transform3D(Basis.from_scale(Vector3(0.18, 5.6, 0.18)), cp2 + Vector3(0, 2.8, 0)))
+					tl_heads.append(Transform3D(Basis.from_scale(Vector3(0.5, 1.3, 0.5)), cp2 + Vector3(0, 5.2, 0)))
+					tl_red.append(Transform3D(Basis.from_scale(Vector3(0.34, 0.34, 0.12)), cp2 + Vector3(0, 5.55, 0.28)))
+					tl_green.append(Transform3D(Basis.from_scale(Vector3(0.34, 0.34, 0.12)), cp2 + Vector3(0, 4.85, 0.28)))
+	var steel := _mat(Color(0.3, 0.31, 0.34))
+	_multimesh(_unit_box(), steel, lamp_poles)
+	var lamp_em := Scenery.emissive(Color(1.0, 0.92, 0.7), 1.6)
+	_multimesh(_unit_box(), lamp_em, lamp_heads)
+	_multimesh(_unit_box(), steel, tl_poles)
+	_multimesh(_unit_box(), _mat(Color(0.08, 0.08, 0.09)), tl_heads)
+	_multimesh(_unit_box(), Scenery.emissive(Color(1.0, 0.1, 0.05), 1.5), tl_red)
+	_multimesh(_unit_box(), Scenery.emissive(Color(0.1, 1.0, 0.3), 1.5), tl_green)
+	_multimesh(_unit_box(), _mat(Color(0.95, 0.95, 0.95)), zebra)
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = 0.5
+	cyl.bottom_radius = 0.5
+	cyl.height = 1.0
+	cyl.radial_segments = 6
+	_multimesh(cyl, _mat(Color(0.35, 0.24, 0.15)), trunks)
+	var cone := CylinderMesh.new()
+	cone.top_radius = 0.0
+	cone.bottom_radius = 0.5
+	cone.height = 1.0
+	cone.radial_segments = 7
+	var crown_m := _mat(Color(0.2, 0.5, 0.24))
+	_multimesh(cone, crown_m, crowns)
+	var cm := _mat(Color.WHITE, 0.35)
+	cm.vertex_color_use_as_albedo = true
+	_multimesh(_unit_box(), cm, car_body, car_cols)
+	_multimesh(_unit_box(), _mat(Color(0.1, 0.14, 0.2), 0.2), car_cab)
+	_multimesh(_unit_box(), _mat(Color(0.06, 0.06, 0.07)), car_skirt)
+
+
+func _is_park(i: int, j: int) -> bool:
+	var d := maxi(maxi(-i - 1, i), maxi(-j - 1, j))
+	var h := absi((i * 73856093) ^ (j * 19349663)) % 100
+	return d >= 3 and h < 22
+
+
+## facade textures (world-space triplanar, so windows keep their size on any building): 0 glass tower, 1 office / brick, 2 house
+func _facade_tex(kind: int) -> ImageTexture:
+	var S := 256
+	var img := Image.create(S, S, false, Image.FORMAT_RGB8)
+	match kind:
+		0:
+			img.fill(Color(0.74, 0.77, 0.82))
+			var cell := S / 4
+			for cx in 4:
+				for cy in 4:
+					var x0 := cx * cell + 6
+					var y0 := cy * cell + 10
+					img.fill_rect(Rect2i(x0 - 2, y0 - 2, cell - 8, cell - 16), Color(0.55, 0.58, 0.63))
+					for yy in range(cell - 20):
+						var t := float(yy) / float(cell - 20)
+						img.fill_rect(Rect2i(x0, y0 + yy, cell - 12, 1), Color(0.3, 0.5, 0.68).lerp(Color(0.1, 0.2, 0.33), t))
+					img.fill_rect(Rect2i(x0 + 6, y0 + 4, 10, 22), Color(0.55, 0.72, 0.86, 1.0))      # a reflection streak
+			for cy in 4:
+				img.fill_rect(Rect2i(0, cy * cell, S, 4), Color(0.5, 0.52, 0.57))                      # floor slab
+		1:
+			img.fill(Color(0.84, 0.76, 0.66))
+			var cw := S / 3
+			var ch := S / 4
+			for cx in 3:
+				for cy in 4:
+					var x0 := cx * cw + 22
+					var y0 := cy * ch + 14
+					img.fill_rect(Rect2i(x0 - 4, y0 - 4, cw - 36, ch - 20), Color(0.96, 0.95, 0.92))   # frame
+					var lit := ((cx * 7 + cy * 13) % 5) == 0
+					img.fill_rect(Rect2i(x0, y0, cw - 44, ch - 28), Color(0.95, 0.8, 0.45) if lit else Color(0.28, 0.4, 0.5))
+					img.fill_rect(Rect2i(x0 + (cw - 44) / 2 - 1, y0, 2, ch - 28), Color(0.96, 0.95, 0.92))   # mullion
+			for cy in 4:
+				img.fill_rect(Rect2i(0, cy * ch + ch - 6, S, 6), Color(0.7, 0.62, 0.54))
+		_:
+			img.fill(Color(0.93, 0.89, 0.8))
+			var hw := S / 2
+			for cx in 2:
+				for cy in 2:
+					var x0 := cx * hw + 40
+					var y0 := cy * hw + 44
+					img.fill_rect(Rect2i(x0 - 6, y0 - 6, 60, 76), Color(0.99, 0.98, 0.95))
+					img.fill_rect(Rect2i(x0, y0, 48, 64), Color(0.32, 0.46, 0.58))
+					img.fill_rect(Rect2i(x0 + 22, y0, 4, 64), Color(0.99, 0.98, 0.95))
+					img.fill_rect(Rect2i(x0 - 14, y0 - 4, 10, 72), Color(0.4, 0.5, 0.42))              # shutters
+					img.fill_rect(Rect2i(x0 + 52, y0 - 4, 10, 72), Color(0.4, 0.5, 0.42))
+	img.generate_mipmaps()
+	return ImageTexture.create_from_image(img)
+
+
+func _facade_mat(kind: int, tile_m: float) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = _facade_tex(kind)
+	m.vertex_color_use_as_albedo = true
+	m.uv1_triplanar = true
+	m.uv1_world_triplanar = true
+	m.uv1_scale = Vector3.ONE / tile_m
+	m.roughness = 0.75
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	return m
+
+
+func _add_box_collider(pos: Vector3, size: Vector3) -> void:
+	var body := StaticBody3D.new()
+	body.position = pos
+	var cs := CollisionShape3D.new()
+	var bs := BoxShape3D.new()
+	bs.size = size
+	cs.shape = bs
+	body.add_child(cs)
+	add_child(body)
 
 
 func _build_city() -> void:
-	var xf: Array[Transform3D] = []
-	var cols := PackedColorArray()
+	var cat_xf: Array = [[], [], []]            # towers, offices, houses (walls)
+	var cat_col: Array = [PackedColorArray(), PackedColorArray(), PackedColorArray()]
 	var roofs: Array[Transform3D] = []
-	var palette := [Color(0.82, 0.78, 0.7), Color(0.7, 0.74, 0.8), Color(0.86, 0.6, 0.5), Color(0.6, 0.66, 0.62), Color(0.9, 0.86, 0.72), Color(0.55, 0.6, 0.7), Color(0.78, 0.5, 0.45)]
+	var shops: Array[Transform3D] = []
+	var shop_cols := PackedColorArray()
+	var gables: Array[Transform3D] = []
+	var gable_cols := PackedColorArray()
+	var acs: Array[Transform3D] = []
+	var tanks: Array[Transform3D] = []
+	var masts: Array[Transform3D] = []
+	var tint0 := [Color(0.92, 0.95, 1.0), Color(0.82, 0.9, 0.98), Color(1.0, 0.98, 0.95), Color(0.85, 0.88, 0.92)]
+	var tint1 := [Color(1.0, 0.95, 0.88), Color(0.95, 0.85, 0.75), Color(0.88, 0.9, 0.95), Color(1.0, 1.0, 0.96), Color(0.9, 0.8, 0.72)]
+	var tint2 := [Color(1.0, 0.97, 0.9), Color(0.95, 0.9, 0.8), Color(0.9, 0.95, 0.92), Color(0.97, 0.88, 0.85)]
+	var roof_cols := [Color(0.55, 0.2, 0.16), Color(0.32, 0.3, 0.34), Color(0.45, 0.28, 0.2), Color(0.25, 0.32, 0.4)]
+	var shop_pal := [Color(0.15, 0.3, 0.36), Color(0.55, 0.12, 0.12), Color(0.12, 0.2, 0.4), Color(0.2, 0.35, 0.2), Color(0.45, 0.3, 0.1)]
 	for i in range(-HALF_CELLS, HALF_CELLS):
 		for j in range(-HALF_CELLS, HALF_CELLS):
 			var d := maxi(maxi(-i - 1, i), maxi(-j - 1, j))                  # ring distance from the centre block
 			var c := Vector3((float(i) + 0.5) * GRID, 0, (float(j) + 0.5) * GRID)
 			var half := GRID * 0.5 - ROAD_W * 0.5 - 6.0
-			var count := 0
-			var hmin := 0.0
-			var hmax := 0.0
-			var wmax := 0.0
-			if d <= 1:
-				count = 4
-				hmin = 28.0
-				hmax = 85.0
-				wmax = 70.0
-			elif d <= 3:
-				count = 5
-				hmin = 10.0
-				hmax = 30.0
-				wmax = 46.0
-			else:
-				count = 4
-				hmin = 4.5
-				hmax = 8.5
-				wmax = 24.0
-			if d >= 3 and rng.randf() < 0.22:                              # a park: trees only
+			if _is_park(i, j):
 				continue
-			var slots := [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1), Vector2(0, 0)]
-			for sidx in count:
+			var slots := [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]
+			for sidx in 4:
 				var sl: Vector2 = slots[sidx]
-				var w := rng.randf_range(wmax * 0.55, wmax)
-				var dd := rng.randf_range(wmax * 0.55, wmax)
-				var h := rng.randf_range(hmin, hmax)
-				var off := Vector2(sl.x * (half * 0.5), sl.y * (half * 0.5))
-				if sl == Vector2(0, 0):
-					if d > 3:
-						continue
-					off = Vector2.ZERO
-					w *= 0.6
-					dd *= 0.6
-				var pos := c + Vector3(off.x + rng.randf_range(-4, 4), h * 0.5, off.y + rng.randf_range(-4, 4))
-				w = minf(w, half * 0.9)
-				dd = minf(dd, half * 0.9)
-				var yaw := 0.0
-				xf.append(Transform3D(Basis(Vector3.UP, yaw) * Basis.from_scale(Vector3(w, h, dd)), pos))
-				cols.append(palette[rng.randi() % palette.size()])
-				roofs.append(Transform3D(Basis.from_scale(Vector3(w * 1.04, 0.5, dd * 1.04)), pos + Vector3(0, h * 0.5 + 0.25, 0)))
-				var body := StaticBody3D.new()
-				body.position = pos
-				var cs := CollisionShape3D.new()
-				var bs := BoxShape3D.new()
-				bs.size = Vector3(w, h, dd)
-				cs.shape = bs
-				body.add_child(cs)
-				add_child(body)
-	var m := _mat(Color.WHITE)
-	m.vertex_color_use_as_albedo = true
-	_multimesh(_unit_box(), m, xf, cols)
-	_multimesh(_unit_box(), _mat(Color(0.25, 0.26, 0.3)), roofs)
+				var off := Vector2(sl.x * half * 0.5, sl.y * half * 0.5)
+				var pos2 := c + Vector3(off.x + rng.randf_range(-3, 3), 0, off.y + rng.randf_range(-3, 3))
+				if d <= 1:
+					# downtown: stepped glass towers
+					var w := minf(rng.randf_range(44.0, 70.0), half * 0.95)
+					var dd := minf(rng.randf_range(44.0, 70.0), half * 0.95)
+					var h0 := rng.randf_range(22.0, 48.0)
+					var h1 := rng.randf_range(18.0, 52.0)
+					cat_xf[0].append(Transform3D(Basis.from_scale(Vector3(w, h0, dd)), pos2 + Vector3(0, h0 * 0.5, 0)))
+					cat_col[0].append(tint0[rng.randi() % tint0.size()])
+					cat_xf[0].append(Transform3D(Basis.from_scale(Vector3(w * 0.68, h1, dd * 0.68)), pos2 + Vector3(0, h0 + h1 * 0.5, 0)))
+					cat_col[0].append(tint0[rng.randi() % tint0.size()])
+					_add_box_collider(pos2 + Vector3(0, h0 * 0.5, 0), Vector3(w, h0, dd))
+					_add_box_collider(pos2 + Vector3(0, h0 + h1 * 0.5, 0), Vector3(w * 0.68, h1, dd * 0.68))
+					var top := h0 + h1
+					roofs.append(Transform3D(Basis.from_scale(Vector3(w * 0.7, 0.8, dd * 0.7)), pos2 + Vector3(0, top + 0.4, 0)))
+					for k in rng.randi_range(1, 3):
+						acs.append(Transform3D(Basis.from_scale(Vector3(rng.randf_range(2.0, 4.0), 1.6, rng.randf_range(2.0, 4.0))), pos2 + Vector3(rng.randf_range(-w * 0.2, w * 0.2), top + 1.4, rng.randf_range(-dd * 0.2, dd * 0.2))))
+					masts.append(Transform3D(Basis.from_scale(Vector3(0.5, rng.randf_range(8.0, 22.0), 0.5)), pos2 + Vector3(rng.randf_range(-w * 0.1, w * 0.1), top + 8.0, 0)))
+					shops.append(Transform3D(Basis.from_scale(Vector3(w + 0.4, 4.2, dd + 0.4)), pos2 + Vector3(0, 2.1, 0)))
+					shop_cols.append(shop_pal[rng.randi() % shop_pal.size()])
+				elif d <= 3:
+					# mid-rise offices and apartments with shops on the ground floor
+					var w2 := minf(rng.randf_range(32.0, 52.0), half * 0.95)
+					var dd2 := minf(rng.randf_range(30.0, 50.0), half * 0.95)
+					var h2 := rng.randf_range(12.0, 33.0)
+					cat_xf[1].append(Transform3D(Basis.from_scale(Vector3(w2, h2, dd2)), pos2 + Vector3(0, h2 * 0.5, 0)))
+					cat_col[1].append(tint1[rng.randi() % tint1.size()])
+					_add_box_collider(pos2 + Vector3(0, h2 * 0.5, 0), Vector3(w2, h2, dd2))
+					roofs.append(Transform3D(Basis.from_scale(Vector3(w2 * 1.03, 0.7, dd2 * 1.03)), pos2 + Vector3(0, h2 + 0.35, 0)))
+					for k in rng.randi_range(1, 3):
+						acs.append(Transform3D(Basis.from_scale(Vector3(rng.randf_range(1.6, 3.4), 1.3, rng.randf_range(1.6, 3.4))), pos2 + Vector3(rng.randf_range(-w2 * 0.3, w2 * 0.3), h2 + 1.3, rng.randf_range(-dd2 * 0.3, dd2 * 0.3))))
+					if rng.randf() < 0.4:
+						tanks.append(Transform3D(Basis.from_scale(Vector3(3.2, 3.0, 3.2)), pos2 + Vector3(rng.randf_range(-w2 * 0.25, w2 * 0.25), h2 + 2.2, rng.randf_range(-dd2 * 0.25, dd2 * 0.25))))
+					shops.append(Transform3D(Basis.from_scale(Vector3(w2 + 0.4, 4.2, dd2 + 0.4)), pos2 + Vector3(0, 2.1, 0)))
+					shop_cols.append(shop_pal[rng.randi() % shop_pal.size()])
+				else:
+					# suburbs: houses with gabled roofs, two per slot
+					for hk in 2:
+						var hp := pos2 + Vector3(rng.randf_range(-14, 14), 0, rng.randf_range(-14, 14))
+						var w3 := rng.randf_range(9.0, 14.0)
+						var dd3 := rng.randf_range(8.0, 12.0)
+						var h3 := rng.randf_range(5.4, 7.4)
+						var yaw3 := 0.0 if rng.randf() < 0.5 else PI * 0.5
+						var bs := Basis(Vector3.UP, yaw3)
+						cat_xf[2].append(Transform3D(bs * Basis.from_scale(Vector3(w3, h3, dd3)), hp + Vector3(0, h3 * 0.5, 0)))
+						cat_col[2].append(tint2[rng.randi() % tint2.size()])
+						var rh := rng.randf_range(2.6, 3.6)
+						gables.append(Transform3D(bs * Basis.from_scale(Vector3(w3 * 1.12, rh, dd3 * 1.12)), hp + Vector3(0, h3 + rh * 0.5, 0)))
+						gable_cols.append(roof_cols[rng.randi() % roof_cols.size()])
+						_add_box_collider(hp + Vector3(0, h3 * 0.5, 0), Vector3(w3, h3, dd3) if yaw3 == 0.0 else Vector3(dd3, h3, w3))
+	var tile := [12.0, 12.0, 10.0]
+	for kind in 3:
+		_multimesh(_unit_box(), _facade_mat(kind, tile[kind]), cat_xf[kind], cat_col[kind])
+	_multimesh(_unit_box(), _mat(Color(0.26, 0.27, 0.31)), roofs)
+	var sm := _mat(Color.WHITE, 0.4)
+	sm.vertex_color_use_as_albedo = true
+	sm.emission_enabled = true
+	sm.emission = Color(0.9, 0.75, 0.5)
+	sm.emission_energy_multiplier = 0.08
+	_multimesh(_unit_box(), sm, shops, shop_cols)
+	var prism := PrismMesh.new()
+	prism.size = Vector3.ONE
+	var gm := _mat(Color.WHITE)
+	gm.vertex_color_use_as_albedo = true
+	_multimesh(prism, gm, gables, gable_cols)
+	_multimesh(_unit_box(), _mat(Color(0.62, 0.64, 0.66)), acs)
+	var tk := CylinderMesh.new()
+	tk.top_radius = 0.5
+	tk.bottom_radius = 0.5
+	tk.height = 1.0
+	tk.radial_segments = 10
+	_multimesh(tk, _mat(Color(0.5, 0.36, 0.25)), tanks)
+	_multimesh(tk, _mat(Color(0.7, 0.2, 0.2)), masts)
 
 
 func _build_nature() -> void:
