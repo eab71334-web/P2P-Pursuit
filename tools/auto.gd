@@ -821,40 +821,34 @@ func _process(d: float) -> void:
 				get_tree().change_scene_to_file("res://scenes/open_world.tscn")
 			elif step == 1 and t > 5.0:
 				step = 2
+				sc.car.speed_kmh = 0.0
+				sc._try_toggle_car()
+				print("OW exit started")
+			elif step >= 2 and step < 30 and t > 5.0 + 0.5 * (step - 1) * 1.0:
+				shot("ow_x%02d" % step)
+				step += 1
+			elif step == 30:
+				step = 31
+				print("OW after exit: on_foot=", sc.on_foot, " seq=", sc.seq)
 				Input.action_press("accel")
-				shot("ow_start")
-			elif step == 2 and t > 9.0:
-				step = 3
-				shot("ow_drive")
-			elif step == 3 and t > 10.0:
-				step = 4
-				sc._toggle_cam()
-			elif step == 4 and t > 12.0:
-				step = 5
-				shot("ow_chase")
+			elif step == 31 and t > 5.0 + 0.5 * 29 + 4.0:
+				step = 32
+				shot("ow_walk1")
+			elif step == 32 and t > 5.0 + 0.5 * 29 + 5.5:
+				step = 33
 				Input.action_release("accel")
 				Input.action_press("brake")
-			elif step == 5 and t > 20.0:
-				step = 6
+				shot("ow_walk2")
+			elif step == 33 and t > 5.0 + 0.5 * 29 + 7.5:
+				step = 34
 				Input.action_release("brake")
-				sc.car.linear_velocity = Vector3.ZERO
-				sc.car.speed_kmh = 0.0
-				print("OW speed ", sc.car.speed_kmh)
+				sc.walker.global_position = sc.car.to_global(Vector3(-2.5, 0.05, 0.5))
 				sc._try_toggle_car()
-			elif step == 6 and t > 22.0:
-				step = 7
-				print("OW foot ", sc.on_foot)
-				shot("ow_foot")
-				Input.action_press("accel")
-			elif step == 7 and t > 25.0:
-				step = 8
-				Input.action_release("accel")
-				print("OW walked to ", sc.walker.global_position, " car ", sc.car.global_position)
-				shot("ow_walk")
-				sc.walk_yaw += 1.2
-			elif step == 8 and t > 26.5:
-				step = 9
-				shot("ow_look")
+			elif step >= 34 and step < 60 and t > 5.0 + 0.5 * 29 + 8.0 + 0.5 * (step - 34):
+				shot("ow_e%02d" % step)
+				step += 1
+			elif step == 60:
+				print("OW after enter: on_foot=", sc.on_foot, " seq=", sc.seq)
 				get_tree().quit()
 		"bumpcheck":
 			if step == 0 and t > 2.0:

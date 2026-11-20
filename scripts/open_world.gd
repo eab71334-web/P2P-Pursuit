@@ -23,6 +23,17 @@ var look_yaw := 0.0
 var look_pitch := 0.0
 var _vy := 0.0
 var _flip_t := 0.0
+var seq := false
+var door_amt := 0.0
+var hand_k := 0.0
+var hand_door := false
+var cine_cam: Camera3D
+var cine_on := false
+var cine_a := Vector3.ZERO
+var cine_b := Vector3.ZERO
+var cine_look := Vector3.ZERO
+var cine_k := 0.0
+var fade: ColorRect
 
 var hud: CanvasLayer
 var speed_lbl: Label
@@ -396,6 +407,10 @@ func _build_car() -> void:
 	driver_av.position = car.seat_origin("driver")
 	car.add_child(driver_av)
 	car.driver_avatar = driver_av
+	cine_cam = Camera3D.new()
+	cine_cam.fov = 55.0
+	cine_cam.far = Gfx.far_clip()
+	add_child(cine_cam)
 	chase_cam = Camera3D.new()
 	chase_cam.fov = 70.0
 	chase_cam.far = Gfx.far_clip()
@@ -414,6 +429,8 @@ func _build_walker() -> void:
 	walker.collision_layer = 2
 	walker.collision_mask = 1
 	add_child(walker)
+	var old_h := Gfx.human_chars
+	Gfx.human_chars = true                                            # the walker is the realistic skinned human (real clips: walk, run, sit, exit)
 	walk_av = Avatar.new()
 	walk_av.name = "Walker"
 	walk_av.peer_id = 2
@@ -424,8 +441,9 @@ func _build_walker() -> void:
 	walk_av.standing = true
 	walk_av.outfit = (Profile.loadout().get("outfit", {}) as Dictionary)
 	walker.add_child(walk_av)
+	Gfx.human_chars = old_h
 	walk_av.position = Vector3(0, 0.95, 0)
-	walk_av.rotation.y = PI
+	walk_av.custom_anim = "Idle"
 	walk_cam = Camera3D.new()
 	walk_cam.fov = 72.0
 	walk_cam.far = Gfx.far_clip()
@@ -451,33 +469,176 @@ func _heading(n: Node3D) -> float:
 func _set_mode(foot: bool) -> void:
 	on_foot = foot
 	walker.visible = foot
+	car.hold = foot
 	if foot:
-		# step out on the left side of the car
-		var side: Vector3 = car.global_basis.x * -2.2
-		walker.global_position = car.global_position + side + Vector3(0, 0.3, 0)
-		walk_yaw = _heading(car)
-		walk_pitch = -0.15
 		walk_cam.current = true
-		car.set_controls(0.0, 0.0, 1.0)
-		car.hold = true
+	elif chase:
+		chase_cam.current = true
+	elif driver_av.cam != null:
+		driver_av.cam.current = true
 	else:
-		car.hold = false
-		if chase:
-			chase_cam.current = true
-		elif driver_av.cam != null:
-			driver_av.cam.current = true
-		else:
-			chase_cam.current = true
+		chase_cam.current = true
 	_refresh_buttons()
 
 
 func _try_toggle_car() -> void:
+	if seq:
+		return
 	if on_foot:
 		if walker.global_position.distance_to(car.global_position) < 5.0:
-			_set_mode(false)
-	else:
-		if car.speed_kmh < 12.0:
-			_set_mode(true)
+			_enter_seq()
+	elif car.speed_kmh < 12.0:
+		_exit_seq()
+
+
+func _fade(to_a: float, dur: float) -> void:
+	var tw := create_tween()
+	tw.tween_property(fade, "color:a", to_a, dur)
+	await tw.finished
+
+
+func _wait(sec: float) -> void:
+	await get_tree().create_timer(sec).timeout
+
+
+## cinematic camera: glides from a to b (car-local points) while looking at `look` (car-local)
+func _cine_start(a: Vector3, b: Vector3, look: Vector3, dur: float) -> void:
+	cine_a = a
+	cine_b = b
+	cine_look = look
+	cine_k = 0.0
+	cine_on = true
+	cine_cam.current = true
+	_apply_cine()
+	var tw := create_tween()
+	tw.tween_property(self, "cine_k", 1.0, dur).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+
+func _apply_cine() -> void:
+	cine_cam.global_position = car.to_global(cine_a.lerp(cine_b, cine_k))
+	cine_cam.look_at(car.to_global(cine_look), Vector3.UP)
+
+
+func _tween_prop(obj: Object, prop: String, to: Variant, dur: float, ease_type := Tween.EASE_IN_OUT) -> void:
+	var tw := create_tween()
+	tw.tween_property(obj, prop, to, dur).set_trans(Tween.TRANS_SINE).set_ease(ease_type)
+	await tw.finished
+
+
+func _door_to(a: float, dur: float, ease_type := Tween.EASE_IN_OUT) -> void:
+	var tw := create_tween()
+	tw.tween_method(func(v: float): car.set_door(v), door_amt, a, dur).set_trans(Tween.TRANS_SINE).set_ease(ease_type)
+	door_amt = a
+	await tw.finished
+
+
+## sitting in the car -> hand on the handle -> pull the door -> push it wide -> swing out of the seat -> stand up -> close the door
+func _exit_seq() -> void:
+	seq = true
+	car.set_controls(0.0, 0.0, 1.0)
+	car.hold = true
+	await _fade(1.0, 0.18)
+	driver_av.visible = false
+	walker.remove_child(walk_av)
+	car.add_child(walk_av)
+	walk_av.position = car.seat_origin("driver")
+	walk_av.rotation = Vector3.ZERO
+	walk_av.standing = false
+	walk_av.outside = false
+	walk_av.custom_anim = ""
+	walker.visible = false
+	walk_av.visible = true
+	_cine_start(Vector3(-4.6, 1.9, -2.4), Vector3(-3.4, 1.55, -1.3), Vector3(-0.7, 1.0, 0.2), 5.2)
+	await _fade(0.0, 0.25)
+	await _wait(0.6)
+	hand_door = true                                                   # left hand reaches for the handle
+	await _wait(0.9)
+	await _door_to(0.4, 0.6)                                           # pull the latch: the door cracks open
+	await _door_to(1.0, 0.7)                                           # push it wide
+	hand_door = false
+	walk_av.set_aux_hand("L", Vector3.ZERO, 0.0)
+	await _wait(0.25)
+	walk_av.custom_anim = "Sitting_Exit"                               # swing the legs out, push up out of the seat
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(walk_av, "position:x", -1.85, 1.0).set_delay(0.3).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(walk_av, "position:y", walk_av.position.y + 0.18, 0.45).set_delay(0.3).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tw.tween_property(walk_av, "position:y", 0.0 + 0.95 - 0.35 + 0.35, 0.5).set_delay(0.8)
+	tw.tween_property(walk_av, "rotation:y", PI * 0.5, 0.9).set_delay(0.3)
+	await _wait(1.5)
+	# now he stands next to the car: hand him over to the free-walking character
+	var gp := walk_av.global_position
+	var gy := walk_av.global_rotation.y
+	car.remove_child(walk_av)
+	walker.add_child(walk_av)
+	walker.global_position = Vector3(gp.x, 0.05, gp.z)
+	walker.velocity = Vector3.ZERO
+	walk_av.position = Vector3(0, 0.95, 0)
+	walk_av.global_rotation = Vector3(0, gy, 0)
+	walk_av.standing = true
+	walk_av.custom_anim = "Idle"
+	walker.visible = true
+	await _wait(0.35)
+	walk_av.custom_anim = "Interact"                                   # reach back and shut the door
+	await _wait(0.5)
+	await _door_to(0.0, 0.55, Tween.EASE_IN)
+	await _wait(0.3)
+	walk_av.custom_anim = "Idle"
+	walk_yaw = _heading(car)
+	walk_pitch = -0.15
+	var wp := walker.global_position
+	walk_cam.global_position = wp + Vector3(0, 2.6, 4.2)
+	_set_mode(true)
+	cine_on = false
+	seq = false
+
+
+## walk up -> open the door -> climb into the seat -> shut the door -> cockpit view
+func _enter_seq() -> void:
+	seq = true
+	walker.velocity = Vector3.ZERO
+	await _fade(1.0, 0.18)
+	var spot := car.to_global(Vector3(-2.0, 0.0, 0.25))
+	walker.global_position = Vector3(spot.x, 0.05, spot.z)
+	walk_av.global_rotation = Vector3(0, _heading(car) - PI * 0.5 * -1.0 + PI, 0)       # faces the car (towards +x of the car)
+	walk_av.custom_anim = "Idle"
+	_cine_start(Vector3(-5.2, 1.8, -1.6), Vector3(-4.0, 1.5, -0.6), Vector3(-0.9, 1.0, 0.3), 4.5)
+	await _fade(0.0, 0.25)
+	await _wait(0.3)
+	walk_av.custom_anim = "Interact"
+	await _wait(0.5)
+	await _door_to(1.0, 0.8)
+	walk_av.custom_anim = "Idle"
+	await _wait(0.25)
+	var gp := walk_av.global_position
+	var gy := walk_av.global_rotation.y
+	walker.remove_child(walk_av)
+	car.add_child(walk_av)
+	walk_av.global_position = gp + Vector3(0, 0.0, 0)
+	walk_av.position = Vector3(-1.85, 0.95, car.seat_origin("driver").z)
+	walk_av.rotation = Vector3(0, -PI * 0.5, 0)
+	walk_av.standing = false
+	walk_av.custom_anim = "Sitting_Enter"
+	var seat := car.seat_origin("driver")
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(walk_av, "position:x", seat.x, 1.0).set_delay(0.2).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(walk_av, "position:y", seat.y + 0.12, 0.5).set_delay(0.2).set_ease(Tween.EASE_OUT)
+	tw.tween_property(walk_av, "position:y", seat.y, 0.6).set_delay(0.7)
+	tw.tween_property(walk_av, "rotation:y", 0.0, 0.8).set_delay(0.3)
+	await _wait(1.6)
+	walk_av.custom_anim = ""
+	await _door_to(0.0, 0.6, Tween.EASE_IN)
+	await _wait(0.25)
+	await _fade(1.0, 0.2)
+	car.remove_child(walk_av)
+	walker.add_child(walk_av)
+	walk_av.visible = false
+	walk_av.position = Vector3(0, 0.95, 0)
+	driver_av.visible = true
+	car.hold = false
+	cine_on = false
+	_set_mode(false)
+	await _fade(0.0, 0.25)
+	seq = false
 
 
 # ====================================================================== HUD
@@ -491,6 +652,12 @@ func _build_hud() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.layout_direction = Control.LAYOUT_DIRECTION_LTR
 	hud.add_child(root)
+	fade = ColorRect.new()
+	fade.color = Color(0, 0, 0, 0)
+	fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.add_child(fade)
+	fade.z_index = 100
 	speed_lbl = Label.new()
 	speed_lbl.add_theme_font_size_override("font_size", 34)
 	speed_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
@@ -659,6 +826,9 @@ func _over_button(p: Vector2) -> bool:
 
 
 func _physics_process(delta: float) -> void:
+	if seq:
+		car.set_controls(0.0, 0.0, 1.0)
+		return
 	if on_foot:
 		_walk(delta)
 	else:
@@ -708,12 +878,29 @@ func _walk(delta: float) -> void:
 	walker.velocity = Vector3(dir.x * spd, _vy, dir.z * spd)
 	walker.move_and_slide()
 	_vy = walker.velocity.y
-	if mv.length() > 0.1:
+	var moving := mv.length() > 0.1
+	if moving:
 		var target := atan2(-dir.x, -dir.z)
-		walk_av.global_rotation.y = lerp_angle(walk_av.global_rotation.y, target + PI, clampf(delta * 10.0, 0.0, 1.0))
+		walk_av.global_rotation.y = lerp_angle(walk_av.global_rotation.y, target, clampf(delta * 10.0, 0.0, 1.0))
+	var anim := "Idle"
+	if not walker.is_on_floor() and _vy > 0.5:
+		anim = "Jump"
+	elif moving:
+		anim = "Sprint" if run else "Walk"
+	walk_av.custom_anim = anim
+	if walk_av._rig != null and walk_av._rig.player != null:
+		walk_av._rig.player.speed_scale = 1.0 if anim == "Idle" else (1.7 if anim == "Walk" else 1.15)
 
 
 func _process(delta: float) -> void:
+	if cine_on:
+		_apply_cine()
+	if hand_door or hand_k > 0.001:
+		hand_k = move_toward(hand_k, 1.0 if hand_door else 0.0, delta * 3.0)
+		walk_av.set_aux_hand("L", car.to_local(car.door_handle.global_position), hand_k)
+	if seq:
+		speed_lbl.text = ""
+		return
 	if on_foot:
 		var head := walker.global_position + Vector3(0, 1.6, 0)
 		var back := Basis(Vector3.UP, walk_yaw) * Basis(Vector3.RIGHT, walk_pitch) * Vector3(0, 0, 4.2)

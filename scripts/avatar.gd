@@ -208,10 +208,13 @@ func _build_rig() -> void:
 ## the pro body is used in every state; each state plays a real skeletal animation:
 ## seated -> Driving pose + hand IK (wheel, horn, emotes, gestures), standing / podium / outside / blast -> clips from the library
 var _rig_anim := ""
+var custom_anim := ""      # a clip chosen by the scene (open world: Sitting_Exit, Walk, ...), wins over the state machine
 var _rig_head_bone := -1
 
 
 func _rig_anim_for() -> String:
+	if custom_anim != "":
+		return custom_anim
 	if blast_t >= 0.0:
 		return "Death01"
 	if podium_kind != "":

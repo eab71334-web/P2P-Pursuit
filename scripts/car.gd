@@ -386,6 +386,30 @@ func _mat(c: Color) -> StandardMaterial3D:
 	return m
 
 
+# --- hinged driver's door (front edge hinge): upper panel + lower panel + chrome handle; set_door(0..1) swings it out ~70 degrees
+var door_pivot: Node3D = null
+var door_handle: Node3D = null
+
+
+func _make_driver_door(c: Color) -> void:
+	door_pivot = Node3D.new()
+	door_pivot.position = Vector3(-0.95, 0.0, -0.65)                      # hinge: front edge of the door
+	add_child(door_pivot)
+	var up := _box(door_pivot, Vector3(0.1, 0.42, 2.0), Vector3(0, 1.12, 1.0), c)
+	up.name = "DoorUpper"
+	_box(door_pivot, Vector3(0.1, 0.5, 2.0), Vector3(0, 0.62, 1.0), c)
+	door_handle = Node3D.new()
+	door_handle.position = Vector3(-0.06, 1.2, 0.85)
+	door_pivot.add_child(door_handle)
+	var chrome := Color(0.8, 0.82, 0.85)
+	_box(door_handle, Vector3(0.06, 0.06, 0.28), Vector3.ZERO, chrome)
+
+
+func set_door(a: float) -> void:
+	if door_pivot != null:
+		door_pivot.rotation.y = -deg_to_rad(72.0) * clampf(a, 0.0, 1.0)
+
+
 func _box(parent: Node, size: Vector3, pos: Vector3, c: Color) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = Scenery.rounded_box(size, 0.06)
@@ -411,8 +435,8 @@ func _build_visuals() -> void:
 		body_mat.clearcoat = 0.6
 	_box(self, Vector3(1.9, 0.5, 4.0), Vector3(0, 0.62, 0), c)                  # body
 	_box(self, Vector3(1.8, 0.08, 3.8), Vector3(0, 0.88, 0.0), CarInterior.theme(model)["carpet"])            # floor
-	_box(self, Vector3(0.1, 0.42, 2.0), Vector3(-0.95, 1.12, 0.35), c)          # doors
-	_box(self, Vector3(0.1, 0.42, 2.0), Vector3(0.95, 1.12, 0.35), c)
+	_make_driver_door(c)                                                        # driver's door: hinged, can swing open (open world)
+	_box(self, Vector3(0.1, 0.42, 2.0), Vector3(0.95, 1.12, 0.35), c)          # passenger door
 	_box(self, Vector3(1.9, 0.42, 0.1), Vector3(0, 1.12, 1.35), c)              # rear wall
 	_box(self, Vector3(1.9, 0.3, 0.9), Vector3(0, 1.0, -1.2), DARK.lightened(0.15))  # dashboard
 	_build_mirrors()

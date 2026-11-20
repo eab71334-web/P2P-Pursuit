@@ -269,7 +269,8 @@ static func decorate(car: Node3D, model: String, lo: Dictionary, body_mat: Stand
 	box(car, Vector3(0.75, 0.16, 0.06), Vector3(0, 0.9, -2.06), dark)
 	box(car, Vector3(0.75, 0.025, 0.07), Vector3(0, 0.9, -2.07), chrome)
 	for sx in [-1.0, 1.0]:
-		box(car, Vector3(0.06, 0.06, 0.28), Vector3(sx * 0.98, 1.2, 0.2), chrome)               # door handles
+		if sx > 0.0:                                                                            # (the driver's handle is part of the hinged door)
+			box(car, Vector3(0.06, 0.06, 0.28), Vector3(sx * 0.98, 1.2, 0.2), chrome)               # door handle
 		cyl(car, 0.07, 0.3, Vector3(sx * 0.5, 0.4, 2.15), chrome, Vector3(90, 0, 0))                 # exhaust
 		box(car, Vector3(0.05, 0.22, 2.2 if not (model in ["coupe","hyper","gt3","m4"]) else 2.4), Vector3(sx * 0.98, 0.42, 0.0), dark)   # side skirt
 	# team plate on the roof and doors (the paint can be anything, the team stays recognisable)
