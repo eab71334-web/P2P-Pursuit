@@ -208,6 +208,7 @@ func _build_rig() -> void:
 ## the pro body is used in every state; each state plays a real skeletal animation:
 ## seated -> Driving pose + hand IK (wheel, horn, emotes, gestures), standing / podium / outside / blast -> clips from the library
 var _rig_anim := ""
+var walk_swing := 0.0        # open world: leg swing while walking (set by the scene)
 var custom_anim := ""      # a clip chosen by the scene (open world: Sitting_Exit, Walk, ...), wins over the state machine
 var _rig_head_bone := -1
 
@@ -424,6 +425,7 @@ func _pose_legs(delta: float) -> void:
 	var swing := 0.0
 	if emote == "dance" and emote_t >= 0.0:
 		swing = sin(emote_t * 9.0) * 0.5
+	swing += walk_swing
 	for i in _legs.size():
 		var hip: Node3D = _legs[i]["hip"]
 		var knee: Node3D = _legs[i]["knee"]
