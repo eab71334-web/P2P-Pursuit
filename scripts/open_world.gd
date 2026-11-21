@@ -994,13 +994,28 @@ func _board(av: Avatar) -> void:
 func _enter_seq() -> void:
 	seq = true
 	walker.velocity = Vector3.ZERO
-	await _fade(1.0, 0.18)
 	var spot := car.to_global(DOOR_SPOT)
+	var goal := Vector3(spot.x, walker.global_position.y, spot.z)
+	var dist := Vector2(goal.x - walker.global_position.x, goal.z - walker.global_position.z).length()
+	if dist > 0.35:                                                         # GTA style: walk (or run) up to the door, no teleport
+		var d := goal - walker.global_position
+		var face := atan2(-d.x, -d.z)
+		var run_up := dist > 3.2
+		var dur := clampf(dist / (RUN_SPEED * 0.6 if run_up else WALK_SPEED * 0.5), 0.25, 3.0)
+		var t0 := walk_av.global_rotation.y
+		var tw := create_tween().set_parallel(true)
+		tw.tween_property(walker, "global_position", goal, dur)
+		tw.tween_method(func(k: float): walk_av.global_rotation.y = lerp_angle(t0, face, k), 0.0, 1.0, minf(dur, 0.35))
+		walk_av.walk_swing = 0.75 if run_up else 0.5
+		await tw.finished
+		walk_av.walk_swing = 0.0
 	walker.global_position = Vector3(spot.x, 0.05, spot.z)
-	walk_av.global_rotation = Vector3(0, _heading(car) - PI * 0.5, 0)       # faces the car (towards +x of the car)
+	var fy := _heading(car) - PI * 0.5
+	var y0 := walk_av.global_rotation.y
+	await _tween_prop(walk_av, "global_rotation:y", y0 + angle_difference(y0, fy), 0.3)      # turn to face the car (towards +x of the car)
+	walk_av.global_rotation = Vector3(0, fy, 0)
 	_cine_start(Vector3(-5.2, 1.8, -1.6), Vector3(-4.0, 1.5, -0.6), Vector3(-0.9, 1.0, 0.3), 7.0)
-	await _fade(0.0, 0.25)
-	await _wait(0.3)
+	await _wait(0.15)
 	await _board(walk_av)
 	await _fade(1.0, 0.2)
 	car.remove_child(walk_av)

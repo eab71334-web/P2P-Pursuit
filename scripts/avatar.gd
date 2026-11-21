@@ -680,23 +680,49 @@ func enable_real() -> void:
 	add_child(real)
 
 
-func _real_update() -> void:
+var _rp := Vector3.ZERO
+var _ry := 0.0
+var _rv := 0.0           # smoothed ground speed (m/s)
+var _ryr := 0.0          # smoothed yaw rate (rad/s)
+var _rroll := 0.0
+
+
+## GTA-style on foot: speed picks idle / walk / run and scales the stride, turning leans the body into the corner
+## (more when running), and standing still while turning shuffles the feet.
+func _real_update(delta: float) -> void:
 	for n in find_children("*", "VisualInstance3D", true, false):
 		if not real.is_ancestor_of(n):
 			(n as VisualInstance3D).visible = false
 	var first_person := is_local and cam != null and cam.current
 	real.visible = not first_person
+	var gp := global_position
+	var yaw := global_rotation.y
+	if delta > 0.0:
+		var v := Vector2(gp.x - _rp.x, gp.z - _rp.z).length() / delta
+		_rv = lerpf(_rv, minf(v, 14.0), clampf(delta * 10.0, 0.0, 1.0))
+		_ryr = lerpf(_ryr, clampf(angle_difference(_ry, yaw) / delta, -9.0, 9.0), clampf(delta * 8.0, 0.0, 1.0))
+	_rp = gp
+	_ry = yaw
 	var seated := not standing and not outside
 	var want := "idle"
+	var spd := 1.0
 	if custom_anim != "":
 		want = custom_anim
 	elif seated:
 		want = "sit_drive"
-	elif absf(walk_swing) > 0.05 or _real_walking > 0.0:
-		want = "run" if absf(walk_swing) > 0.6 else "walk"
+	elif _rv > 0.5 or absf(walk_swing) > 0.05:
+		if _rv < 2.8 and absf(walk_swing) < 0.6:
+			want = "walk"
+			spd = clampf(_rv / 1.6, 0.6, 1.7)
+		else:
+			want = "run"
+			spd = clampf(_rv / 4.6, 0.8, 1.9)
+	elif absf(_ryr) > 0.9:
+		want = "turn_L" if _ryr > 0.0 else "turn_R"
+		spd = clampf(absf(_ryr) / 2.5, 0.7, 1.6)
 	var seat_o := Vector3(0, -0.56, -0.19)
 	var stand_o := Vector3(0, -0.95, 0)
-	real.play(want)
+	real.play(want, spd)
 	if want == "sit_drive":
 		real.position = seat_o
 	elif want == "exit_car":
@@ -705,6 +731,12 @@ func _real_update() -> void:
 		real.position = stand_o.lerp(seat_o, real.progress())
 	else:
 		real.position = stand_o
+	# lean into the turn (about the forward axis) + forward pitch while sprinting
+	var moving_fast := want == "run" or want == "walk"
+	var roll_t := clampf(_ryr * (0.075 if want == "run" else 0.045), -0.34, 0.34) if moving_fast else 0.0
+	_rroll = lerpf(_rroll, roll_t, clampf(delta * 8.0, 0.0, 1.0))
+	real.rotation.z = _rroll
+	real.rotation.x = lerpf(real.rotation.x, -0.06 if want == "run" else 0.0, clampf(delta * 6.0, 0.0, 1.0))
 
 
 var _real_walking := 0.0
@@ -714,7 +746,7 @@ func _process(delta: float) -> void:
 	if _head == null:
 		return
 	if real != null:
-		_real_update()
+		_real_update(delta)
 	hit_kick = move_toward(hit_kick, 0.0, delta * 2.5)
 	if _rig:
 		_rig_update()

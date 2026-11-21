@@ -5,7 +5,7 @@ extends Node3D
 ## idle walk run sit_drive reach_handle key_pocket exit_car enter_car close_door. Faces -Z, origin at the feet.
 
 const SRC := "res://assets/realistic/driver.glb"
-const LOOPS := ["idle", "walk", "run", "sit_drive"]
+const LOOPS := ["idle", "walk", "run", "sit_drive", "turn_L", "turn_R"]
 var player: AnimationPlayer
 var cur := ""
 
