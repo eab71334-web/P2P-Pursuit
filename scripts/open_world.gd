@@ -907,12 +907,14 @@ func _exit_seq() -> void:
 	_hand(walk_av, "L", "")
 	await _wait(0.25)
 	walk_av.standing = true                                            # push up out of the seat: the legs straighten
+	walk_av.custom_anim = "exit_car"
 	var tw := create_tween().set_parallel(true)
 	tw.tween_property(walk_av, "position:x", -1.85, 1.0).set_delay(0.3).set_trans(Tween.TRANS_SINE)
 	tw.tween_property(walk_av, "position:y", walk_av.position.y + 0.18, 0.45).set_delay(0.3).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tw.tween_property(walk_av, "position:y", 0.95, 0.5).set_delay(0.8)
 	tw.tween_property(walk_av, "rotation:y", PI * 0.5, 0.9).set_delay(0.3)
-	await _wait(1.5)
+	await _wait(1.6)
+	walk_av.custom_anim = ""
 	# now he stands next to the car: hand him over to the free-walking character
 	var gp := walk_av.global_position
 	var gy := walk_av.global_rotation.y
@@ -927,10 +929,12 @@ func _exit_seq() -> void:
 	await _wait(0.3)
 	await _tween_prop(walk_av, "rotation:y", -PI * 0.5, 0.45)           # turn round to face the door
 	_hand(walk_av, "R", "door")                                        # right hand on the door
+	walk_av.custom_anim = "close_door"
 	await _wait(0.35)
 	await _door_to(0.0, 0.6, Tween.EASE_IN)                            # push it shut
 	_hand(walk_av, "R", "")
 	await _wait(0.4)
+	walk_av.custom_anim = ""
 	walk_av.role = "preview"
 	walk_yaw = _heading(car)
 	walk_pitch = -0.15
@@ -946,10 +950,12 @@ func _exit_seq() -> void:
 func _board(av: Avatar) -> void:
 	av.role = "driver"
 	_hand(av, "R", "door")
+	av.custom_anim = "reach_handle"
 	await _wait(0.55)
 	await _door_to(0.4, 0.5)
 	await _door_to(1.0, 0.6)
 	_hand(av, "R", "")
+	av.custom_anim = ""
 	await _wait(0.2)
 	var seat := car.seat_origin("driver")
 	var gp := av.global_position
@@ -959,12 +965,14 @@ func _board(av: Avatar) -> void:
 	av.position = Vector3(-1.85, seat.y, seat.z)
 	av.rotation = Vector3(0, -PI * 0.5, 0)
 	av.standing = false                                                # sit down: the legs fold
+	av.custom_anim = "enter_car"
 	var tw := create_tween().set_parallel(true)
 	tw.tween_property(av, "position:x", seat.x, 1.0).set_delay(0.2).set_trans(Tween.TRANS_SINE)
 	tw.tween_property(av, "position:y", seat.y + 0.12, 0.5).set_delay(0.2).set_ease(Tween.EASE_OUT)
 	tw.tween_property(av, "position:y", seat.y, 0.6).set_delay(0.7)
 	tw.tween_property(av, "rotation:y", 0.0, 0.8).set_delay(0.3)
-	await _wait(1.5)
+	await _wait(1.6)
+	av.custom_anim = ""
 	_hand(av, "R", "key")                                              # key into the ignition
 	await _wait(0.55)
 	car.engine_on = true

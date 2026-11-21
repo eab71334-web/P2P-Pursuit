@@ -35,10 +35,16 @@ func play(anim: String, speed := 1.0, blend := 0.25) -> void:
 	if player == null or not player.has_animation(anim):
 		return
 	player.speed_scale = speed
-	if anim == cur and player.is_playing():
+	if anim == cur:
 		return
 	cur = anim
 	player.play(anim, blend)
+
+
+func progress() -> float:
+	if player == null or player.current_animation == "":
+		return 0.0
+	return clampf(player.current_animation_position / maxf(0.01, player.current_animation_length), 0.0, 1.0)
 
 
 func length_of(anim: String) -> float:

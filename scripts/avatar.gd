@@ -694,9 +694,17 @@ func _real_update() -> void:
 		want = "sit_drive"
 	elif absf(walk_swing) > 0.05 or _real_walking > 0.0:
 		want = "run" if absf(walk_swing) > 0.6 else "walk"
-	real.position = Vector3(0, -0.56, -0.19) if want == "sit_drive" else Vector3(0, -0.95, 0)
-	real.play(want, 1.0 if want != "walk" else 1.0)
-	_real_walking = maxf(0.0, _real_walking - 0.0)
+	var seat_o := Vector3(0, -0.56, -0.19)
+	var stand_o := Vector3(0, -0.95, 0)
+	real.play(want)
+	if want == "sit_drive":
+		real.position = seat_o
+	elif want == "exit_car":
+		real.position = seat_o.lerp(stand_o, real.progress())
+	elif want == "enter_car":
+		real.position = stand_o.lerp(seat_o, real.progress())
+	else:
+		real.position = stand_o
 
 
 var _real_walking := 0.0
