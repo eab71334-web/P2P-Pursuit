@@ -41,6 +41,7 @@ var hints_seen := false        # the first-race button tips were shown
 var smart_buttons := true      # wipers only in rain, lights only at night / fog, hidden otherwise
 var ui_mirror := false         # left-handed: the whole race HUD flipped left <-> right
 var handling := "balanced"    # driving feel: arcade (grippy, quick, forgiving) | balanced | sim (heavier, more slide)
+var realistic := true      # EXPERIMENT branch: Sabak realistic human in the open world
 var human_chars := false     # EXPERIMENTAL: realistic skinned human characters (default = classic block characters)
 var vol_master := 1.0
 var vol_radio := 0.7

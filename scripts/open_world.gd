@@ -713,6 +713,8 @@ func _build_car() -> void:
 	driver_av.outfit = (Profile.loadout().get("outfit", {}) as Dictionary)
 	driver_av.position = car.seat_origin("driver")
 	car.add_child(driver_av)
+	if Gfx.realistic:
+		driver_av.enable_real()
 	car.driver_avatar = driver_av
 	cine_cam = Camera3D.new()
 	cine_cam.fov = 55.0
@@ -747,7 +749,9 @@ func _build_walker() -> void:
 	walk_av.outfit = (Profile.loadout().get("outfit", {}) as Dictionary)
 	walker.add_child(walk_av)
 	walk_av.position = Vector3(0, 0.95, 0)
-	walk_av.role = "preview"                                          # arms hang by the sides
+	walk_av.role = "preview"
+	if Gfx.realistic:
+		walk_av.enable_real()                                          # arms hang by the sides
 	walk_cam = Camera3D.new()
 	walk_cam.fov = 72.0
 	walk_cam.far = Gfx.far_clip()

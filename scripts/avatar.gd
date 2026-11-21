@@ -666,9 +666,47 @@ func _gesture_target() -> Vector3:
 	return Vector3(0.32, 0.12, -0.2)
 
 
+var real: RealActor = null    # EXPERIMENTAL realistic human (replaces every block / rig visual when set)
+
+
+func enable_real() -> void:
+	if real != null or not RealActor.available():
+		return
+	real = RealActor.new()
+	if not real.setup():
+		real.queue_free()
+		real = null
+		return
+	add_child(real)
+
+
+func _real_update() -> void:
+	for n in find_children("*", "VisualInstance3D", true, false):
+		if not real.is_ancestor_of(n):
+			(n as VisualInstance3D).visible = false
+	var first_person := is_local and cam != null and cam.current
+	real.visible = not first_person
+	var seated := not standing and not outside
+	var want := "idle"
+	if custom_anim != "":
+		want = custom_anim
+	elif seated:
+		want = "sit_drive"
+	elif absf(walk_swing) > 0.05 or _real_walking > 0.0:
+		want = "run" if absf(walk_swing) > 0.6 else "walk"
+	real.position = Vector3(0, -0.56, -0.19) if want == "sit_drive" else Vector3(0, -0.95, 0)
+	real.play(want, 1.0 if want != "walk" else 1.0)
+	_real_walking = maxf(0.0, _real_walking - 0.0)
+
+
+var _real_walking := 0.0
+
+
 func _process(delta: float) -> void:
 	if _head == null:
 		return
+	if real != null:
+		_real_update()
 	hit_kick = move_toward(hit_kick, 0.0, delta * 2.5)
 	if _rig:
 		_rig_update()
