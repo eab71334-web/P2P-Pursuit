@@ -700,7 +700,10 @@ func _build_ramps() -> void:
 
 func _build_car() -> void:
 	car = Car.new()
-	car.setup(0, Color(0.95, 0.4, 0.1), false, Profile.loadout())
+	var _lo: Dictionary = Profile.loadout().duplicate()
+	if OS.get_environment("OWCAR") != "":
+		_lo["car"] = OS.get_environment("OWCAR")                       # test harness only
+	car.setup(0, Color(0.95, 0.4, 0.1), false, _lo)
 	car.transform = Transform3D(Basis(Vector3.UP, 0.0), Vector3(3.5, 1.0, 20.0))
 	add_child(car)
 	driver_av = Avatar.new()

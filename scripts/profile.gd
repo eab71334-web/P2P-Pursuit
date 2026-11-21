@@ -65,6 +65,8 @@ func _load() -> void:
 	owned = d.get("owned", owned)
 	cars = d.get("cars", cars)
 	car = str(d.get("car", car))
+	if not Catalog.CAR_ORDER.has(car):
+		car = "hatch"                                   # EXPERIMENT: a removed cube car falls back to the first realistic one
 	carset = d.get("carset", carset)
 	up = d.get("up", up)
 	var o: Dictionary = d.get("outfit", {})

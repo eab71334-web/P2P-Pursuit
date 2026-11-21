@@ -118,6 +118,8 @@ func setup(p_team: int, color: Color, remote: bool, p_lo := {}, p_preview := fal
 		model = "hatch"
 	var m: Dictionary = Catalog.CARS[model]
 	drop = float(m.get("drop", 0.0))
+	if RealCar.has(model):
+		drop = 0.78                                          # realistic low roof: seat / camera sit lower
 	sd = drop * 0.85
 	var up: Dictionary = lo.get("up", {})
 	var eng := int(up.get("engine", 0))
@@ -161,6 +163,10 @@ func _ready() -> void:
 	box.size = Vector3(1.9, 0.8, 3.9)
 	shape.shape = box
 	shape.position = Vector3(0, 0.75, 0)
+	if RealCar.has(model):
+		var bb: AABB = RealCar.info(model)["box"]
+		box.size = Vector3(bb.size.x * 0.96, 0.62, bb.size.z * 0.96)
+		shape.position = Vector3(0, 0.62, 0)
 	add_child(shape)
 	_add_wheels()
 	if real:
@@ -195,9 +201,47 @@ func rim_color() -> Color:
 	return r["c"]
 
 
+var _real_wheels := {}            # corner key -> wheel node (VehicleWheel3D or holder); key = (x>0) + 2*(z>0)
+
+
 func _add_wheels() -> void:
+	var rc := RealCar.has(model)
+	var rinfo: Dictionary = RealCar.info(model) if rc else {}
 	for x in [-0.95, 0.95]:
 		for z in [-1.3, 1.3]:
+			if rc:
+				var cp := RealCar.wheel_pos(model, signf(x), signf(z))
+				var key := (1 if x > 0.0 else 0) + (2 if z > 0.0 else 0)
+				var rad := float(rinfo["radius"]) if rinfo["ok"] else 0.4
+				if is_remote:
+					var hr := Node3D.new()
+					hr.position = cp
+					hr.set_meta("front", z < 0.0)
+					hr.set_meta("center", cp)
+					hr.set_meta("disc", FxShaders.disc_material())
+					add_child(hr)
+					_holders.append(hr)
+					_real_wheels[key] = hr
+					continue
+				var wr := VehicleWheel3D.new()
+				wr.position = cp + Vector3(0, 0.12, 0)
+				wr.set_meta("center", cp + Vector3(0, 0.12, 0))
+				wr.set_meta("disc", FxShaders.disc_material())
+				wr.wheel_radius = rad
+				wr.wheel_rest_length = 0.12
+				wr.suspension_travel = 0.15
+				wr.suspension_stiffness = float(hd["stiff"]) * (0.3 if real else 1.0)
+				wr.suspension_max_force = 9000.0
+				wr.damping_compression = float(hd["damp"])
+				wr.damping_relaxation = float(hd["damp"]) * 1.3
+				wr.wheel_friction_slip = 3.2 * grip_base * (1.0 if z < 0.0 else float(hd["rear"]))
+				wr.wheel_roll_influence = float(hd["roll"]) * (8.0 if real else 1.0)
+				wr.use_as_traction = true
+				wr.use_as_steering = z < 0.0
+				add_child(wr)
+				wheel_list.append(wr)
+				_real_wheels[key] = wr
+				continue
 			if is_remote:
 				# clients only display the car: plain meshes, no vehicle physics (avoids NaNs on a frozen body)
 				var holder := Node3D.new()
@@ -540,6 +584,8 @@ func _build_visuals() -> void:
 			lm.material_override = _lamp_mat
 	_make_trunk(c)
 	CarInterior.build(self, model, sd, drop)                                   # dash, console, seats, door cards, liner
+	if RealCar.has(model):
+		RealCar.attach(self, model, _real_wheels)
 
 	# team letter on the roof and on the back
 	for spec in [[Vector3(0, 2.0 - drop, (float(CarStyle.GREENHOUSE.get(model, CarStyle.GREENHOUSE["hatch"])["zf1"]) + float(CarStyle.GREENHOUSE.get(model, CarStyle.GREENHOUSE["hatch"])["zr1"])) * 0.5), Vector3(-90, 0, 0)], [Vector3(0, 1.3, 1.42), Vector3(0, 0, 0)]]:
@@ -576,7 +622,24 @@ func _build_visuals() -> void:
 	_box(_wheel_mesh, Vector3(0.3, 0.04, 0.05), Vector3.ZERO, Color(0.03, 0.03, 0.04))
 	_box(_wheel_mesh, Vector3(0.05, 0.04, 0.3), Vector3.ZERO, Color(0.03, 0.03, 0.04))
 	CarInterior.wheel(_wheel_mesh, model)
+	if RealCar.has(model):
+		_hide_proc.call_deferred()
 
+
+
+## EXPERIMENT: with a realistic body every procedural (cube) visual is hidden; only the glTF body, its wheels and lights stay
+func _hide_proc() -> void:
+	var rb := get_node_or_null("RealBody")
+	for n in find_children("*", "VisualInstance3D", true, false):
+		if n is Light3D or n is CPUParticles3D or n is GPUParticles3D:
+			continue
+		var keep := false
+		for wn in _real_wheels.values():
+			if (wn as Node).is_ancestor_of(n):
+				keep = true
+		if keep or (rb != null and rb.is_ancestor_of(n)):
+			continue
+		(n as VisualInstance3D).visible = false
 
 
 
@@ -1037,7 +1100,22 @@ func _update_sway(delta: float) -> void:
 	_sway.transform = Transform3D(bs, cy - bs * cy)
 
 
+var _dbg_t := 0.0
+
+
 func _process(delta: float) -> void:
+	if OS.get_environment("CARDBG") != "" and not preview:
+		_dbg_t += delta
+		if _dbg_t > 3.0 and _dbg_t < 3.1:
+			var rb2 := get_node_or_null("RealBody")
+			for n in find_children("*", "VisualInstance3D", true, false):
+				if (n as VisualInstance3D).is_visible_in_tree() and not (rb2 != null and rb2.is_ancestor_of(n)):
+					var anc := false
+					for wn in _real_wheels.values():
+						if (wn as Node).is_ancestor_of(n):
+							anc = true
+					if not anc:
+						print("VIS ", n.get_class(), " ", (n as Node3D).position, " ", (((n as MeshInstance3D).mesh.get_aabb().size) if n is MeshInstance3D and (n as MeshInstance3D).mesh else Vector3.ZERO))
 	_tick_discs(delta)
 	_tick_blink(delta)
 	_update_sway(delta)

@@ -9,7 +9,7 @@ const RARITY_NAME := [["Common", "عادي"], ["Rare", "نادر"], ["Epic", "م
 
 # power = engine force x, top = top speed km/h, grip = tyre grip x, armor = damage taken x (lower = tougher)
 const CARS := {
-	"hatch": {"n": ["Rally Hatch RX", "رالي هاتش RX"], "r": 0, "price": 0, "lvl": 1, "power": 1.0, "top": 165.0, "grip": 1.0, "armor": 1.0,
+	"hatch": {"n": ["Jag F-Coupe", "جاغ F كوبيه"], "r": 0, "price": 0, "lvl": 1, "power": 1.0, "top": 165.0, "grip": 1.0, "armor": 1.0,
 		"d": ["Balanced starter rally car", "سيارة رالي متوازنة للبداية"]},
 	"buggy": {"n": ["Dune Buggy", "بقي الكثبان"], "r": 1, "price": 2500, "lvl": 5, "power": 0.95, "top": 150.0, "grip": 1.25, "armor": 0.9,
 		"d": ["Grips like glue off-road", "تمسك الأرض بقوة"]},
@@ -21,16 +21,16 @@ const CARS := {
 		"d": ["Heavy, loud and fast", "ثقيلة وصاخبة وسريعة"], "drop": 0.18, "paint": "granite", "stripe": "none", "rim": "black"},
 	"pickup": {"n": ["Trail 4x4", "تريل 4x4"], "r": 2, "price": 9500, "lvl": 5, "power": 1.05, "top": 160.0, "grip": 1.1, "armor": 1.35,
 		"d": ["Tough as a tank", "قوية كالدبابة"]},
-	"coupe": {"n": ["Apex Coupe", "أبكس كوبيه"], "r": 2, "price": 20000, "lvl": 5, "power": 1.25, "top": 195.0, "grip": 1.12, "armor": 0.95,
+	"coupe": {"n": ["Stern C-Coupe", "ستيرن C كوبيه"], "r": 2, "price": 20000, "lvl": 5, "power": 1.25, "top": 195.0, "grip": 1.12, "armor": 0.95,
 		"d": ["Track-bred speed", "سرعة سباقات حقيقية"], "drop": 0.26, "paint": "white", "stripe": "none", "rim": "black"},
-	"m4": {"n": ["M4 Competition", "إم 4 كومبيتشن"], "r": 2, "price": 26000, "lvl": 5, "power": 1.35, "top": 205.0, "grip": 1.15, "armor": 1.0,
+	"m4": {"n": ["Bavaria M-400", "بافاريا M-400"], "r": 2, "price": 26000, "lvl": 5, "power": 1.35, "top": 205.0, "grip": 1.15, "armor": 1.0,
 		"d": ["German sport coupe, twin kidney grille", "كوبيه ألماني رياضي بشبك مزدوج"], "drop": 0.26, "paint": "estoril", "stripe": "none", "rim": "black"},
-	"gt3": {"n": ["GT3 Racer", "جي تي 3 ريسر"], "r": 3, "price": 32000, "lvl": 5, "power": 1.4, "top": 210.0, "grip": 1.3, "armor": 1.0,
+	"gt3": {"n": ["Stuttgart GT-4", "شتوتغارت GT-4"], "r": 3, "price": 32000, "lvl": 5, "power": 1.4, "top": 210.0, "grip": 1.3, "armor": 1.0,
 		"d": ["Full-blown race machine", "سيارة سباق متكاملة"], "drop": 0.32, "paint": "papaya", "stripe": "none", "rim": "black"},
-	"hyper": {"n": ["Phantom Hyper", "فانتوم هايبر"], "r": 3, "price": 50000, "lvl": 5, "power": 1.5, "top": 225.0, "grip": 1.2, "armor": 1.05,
+	"hyper": {"n": ["Ryu GT-R", "ريو GT-R"], "r": 3, "price": 50000, "lvl": 5, "power": 1.5, "top": 225.0, "grip": 1.2, "armor": 1.05,
 		"d": ["The ultimate machine", "الوحش الأخير"], "drop": 0.3, "paint": "black", "stripe": "none", "rim": "black"},
 }
-const CAR_ORDER := ["hatch", "buggy", "muscle", "sierra", "pickup", "charger", "coupe", "m4", "gt3", "hyper"]
+const CAR_ORDER := ["hatch", "m4", "gt3", "hyper"]     # EXPERIMENT: only the 4 realistic cars (the cube cars are removed from the shop)
 
 # metal / rough control the paint finish
 const PAINTS := {
