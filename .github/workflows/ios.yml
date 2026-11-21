@@ -50,7 +50,7 @@ jobs:
 
           architectures/arm64=true
           application/app_store_team_id="0000000000"
-          application/bundle_identifier="com.codriver.rally"
+          application/bundle_identifier="com.codriver.rally.exp"
           application/short_version="1.0"
           application/version="1.0"
           application/targeted_device_family=2
@@ -97,12 +97,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view latest-ios >/dev/null 2>&1 || gh release create latest-ios --title "iOS IPA (unsigned) (latest)" --notes "Newest build from main" --prerelease
-          gh release upload latest-ios CoDriverRally.ipa --clobber
+          mv CoDriverRally.ipa CoDriverRealistic.ipa
+          gh release view exp-realistic-ios >/dev/null 2>&1 || gh release create exp-realistic-ios --title "EXPERIMENT realistic (unsigned)" --notes "Experimental branch build, separate app" --prerelease
+          gh release upload exp-realistic-ios CoDriverRealistic.ipa --clobber
 
       - uses: actions/upload-artifact@v4
         continue-on-error: true
         with:
-          name: CoDriverRally-ipa
-          path: CoDriverRally.ipa
+          name: CoDriverRealistic-ipa
+          path: CoDriverRealistic.ipa
           retention-days: 2
