@@ -714,9 +714,12 @@ func _real_update(delta: float) -> void:
 		if _rv < 2.8 and absf(walk_swing) < 0.6:
 			want = "walk"
 			spd = clampf(_rv / 1.6, 0.6, 1.7)
+		elif _rv < 6.0:
+			want = "jog"
+			spd = clampf(_rv / 4.0, 0.8, 1.6)
 		else:
 			want = "run"
-			spd = clampf(_rv / 4.6, 0.8, 1.9)
+			spd = clampf(_rv / 7.0, 0.8, 1.6)
 	elif absf(_ryr) > 0.9:
 		want = "turn_L" if _ryr > 0.0 else "turn_R"
 		spd = clampf(absf(_ryr) / 2.5, 0.7, 1.6)
@@ -732,7 +735,7 @@ func _real_update(delta: float) -> void:
 	else:
 		real.position = stand_o
 	# lean into the turn (about the forward axis) + forward pitch while sprinting
-	var moving_fast := want == "run" or want == "walk"
+	var moving_fast := want == "run" or want == "walk" or want == "jog"
 	var roll_t := clampf(_ryr * (0.075 if want == "run" else 0.045), -0.34, 0.34) if moving_fast else 0.0
 	_rroll = lerpf(_rroll, roll_t, clampf(delta * 8.0, 0.0, 1.0))
 	real.rotation.z = _rroll
