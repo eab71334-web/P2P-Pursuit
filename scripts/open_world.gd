@@ -867,6 +867,23 @@ func _hand(av: Avatar, side: String, mode: String) -> void:
 	hand_mode = mode
 
 
+## realistic actor: one arm follows the door handle (k 0..1), `duck` bows the head to clear the roof
+func _reach(av: Avatar, side: String, to: float, dur: float) -> void:
+	if av.real == null:
+		return
+	av.reach_target = car.door_handle
+	av.reach_side = side
+	var tw := create_tween()
+	tw.tween_property(av, "reach_k", to, dur).set_trans(Tween.TRANS_SINE)
+
+
+func _duck(av: Avatar, to: float, dur: float) -> void:
+	if av.real == null:
+		return
+	var tw := create_tween()
+	tw.tween_property(av, "duck_k", to, dur).set_trans(Tween.TRANS_SINE)
+
+
 func _rattle(av: Avatar) -> void:                                      # somebody pulls at a locked handle
 	var tw := create_tween()
 	for i in 2:
@@ -904,13 +921,18 @@ func _exit_seq() -> void:
 	await _wait(0.4)
 	key_out = true
 	_hand(walk_av, "L", "door")                                        # left hand reaches for the handle
-	await _wait(0.8)
-	await _door_to(0.4, 0.6)                                           # pull the latch: the door cracks open
-	await _door_to(1.0, 0.7)                                           # push it wide
+	_reach(walk_av, "L", 1.0, 0.7)
+	await _wait(0.9)
+	await _door_to(0.35, 0.6)                                          # pull the latch: the door cracks open (the hand goes with it)
+	await _wait(0.15)
+	await _door_to(1.0, 0.8)                                           # push it wide
 	_hand(walk_av, "L", "")
-	await _wait(0.25)
-	walk_av.standing = true                                            # push up out of the seat: the legs straighten
+	_reach(walk_av, "L", 0.0, 0.35)
+	await _wait(0.3)
+	walk_av.standing = true                                            # swing the legs out, bow the head under the roof, stand up
 	walk_av.custom_anim = "exit_car"
+	_duck(walk_av, 1.0, 0.45)
+	get_tree().create_timer(1.0).timeout.connect(func(): _duck(walk_av, 0.0, 0.5))
 	var tw := create_tween().set_parallel(true)
 	tw.tween_property(walk_av, "position:x", -1.85, 1.0).set_delay(0.3).set_trans(Tween.TRANS_SINE)
 	tw.tween_property(walk_av, "position:y", walk_av.position.y + 0.18, 0.45).set_delay(0.3).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
@@ -933,9 +955,11 @@ func _exit_seq() -> void:
 	await _tween_prop(walk_av, "rotation:y", -PI * 0.5, 0.45)           # turn round to face the door
 	_hand(walk_av, "R", "door")                                        # right hand on the door
 	walk_av.custom_anim = "close_door"
-	await _wait(0.35)
-	await _door_to(0.0, 0.6, Tween.EASE_IN)                            # push it shut
+	_reach(walk_av, "R", 1.0, 0.4)
+	await _wait(0.45)
+	await _door_to(0.0, 0.7, Tween.EASE_IN)                            # push it shut
 	_hand(walk_av, "R", "")
+	_reach(walk_av, "R", 0.0, 0.3)
 	await _wait(0.4)
 	walk_av.custom_anim = ""
 	walk_av.role = "preview"
@@ -954,10 +978,12 @@ func _board(av: Avatar) -> void:
 	av.role = "driver"
 	_hand(av, "R", "door")
 	av.custom_anim = "reach_handle"
-	await _wait(0.55)
-	await _door_to(0.4, 0.5)
-	await _door_to(1.0, 0.6)
+	_reach(av, "R", 1.0, 0.5)
+	await _wait(0.6)
+	await _door_to(0.4, 0.55)
+	await _door_to(1.0, 0.7)
 	_hand(av, "R", "")
+	_reach(av, "R", 0.0, 0.3)
 	av.custom_anim = ""
 	await _wait(0.2)
 	var seat := car.seat_origin("driver")
@@ -969,6 +995,8 @@ func _board(av: Avatar) -> void:
 	av.rotation = Vector3(0, -PI * 0.5, 0)
 	av.standing = false                                                # sit down: the legs fold
 	av.custom_anim = "enter_car"
+	_duck(av, 1.0, 0.4)
+	get_tree().create_timer(1.0).timeout.connect(func(): _duck(av, 0.0, 0.5))
 	var tw := create_tween().set_parallel(true)
 	tw.tween_property(av, "position:x", seat.x, 1.0).set_delay(0.2).set_trans(Tween.TRANS_SINE)
 	tw.tween_property(av, "position:y", seat.y + 0.12, 0.5).set_delay(0.2).set_ease(Tween.EASE_OUT)
@@ -986,8 +1014,11 @@ func _board(av: Avatar) -> void:
 	_hand(av, "R", "")
 	await _wait(0.2)
 	_hand(av, "L", "door")                                             # pull the door shut
-	await _door_to(0.0, 0.6, Tween.EASE_IN)
+	_reach(av, "L", 1.0, 0.4)
+	await _wait(0.4)
+	await _door_to(0.0, 0.7, Tween.EASE_IN)
 	_hand(av, "L", "")
+	_reach(av, "L", 0.0, 0.3)
 	await _wait(0.25)
 
 

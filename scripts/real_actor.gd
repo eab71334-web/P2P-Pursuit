@@ -25,6 +25,10 @@ func setup() -> bool:
 	if player == null:
 		return false
 	_retarget_ual(root)
+	mod = RealMod.new()
+	var sk0 := root.find_child("Skeleton3D", true, false) as Skeleton3D
+	if sk0 != null:
+		sk0.add_child(mod)
 	for a in LOOPS:
 		if player.has_animation(a):
 			player.get_animation(a).loop_mode = Animation.LOOP_LINEAR
@@ -36,6 +40,7 @@ func setup() -> bool:
 const UAL_MAP := {"idle": "Idle", "walk": "Walk", "jog": "Jog_Fwd", "run": "Sprint", "sit_drive": "Driving", "enter_car": "Sitting_Enter",
 	"exit_car": "Sitting_Exit", "reach_handle": "Interact", "close_door": "Push"}
 var retargeted := false
+var mod: RealMod = null
 var seat_offset := Vector3(0, -0.56, -0.19)
 
 

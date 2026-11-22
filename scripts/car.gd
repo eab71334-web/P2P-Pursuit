@@ -224,8 +224,8 @@ func _add_wheels() -> void:
 					_real_wheels[key] = hr
 					continue
 				var wr := VehicleWheel3D.new()
-				wr.position = cp + Vector3(0, 0.12, 0)
-				wr.set_meta("center", cp + Vector3(0, 0.12, 0))
+				wr.position = cp + Vector3(0, 0.07, 0)
+				wr.set_meta("center", cp)
 				wr.set_meta("disc", FxShaders.disc_material())
 				wr.wheel_radius = rad
 				wr.wheel_rest_length = 0.12

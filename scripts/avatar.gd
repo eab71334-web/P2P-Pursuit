@@ -724,8 +724,15 @@ func _real_update(delta: float) -> void:
 		want = "turn_L" if _ryr > 0.0 else "turn_R"
 		spd = clampf(absf(_ryr) / 2.5, 0.7, 1.6)
 	var seat_o := Vector3(0, -0.56, -0.19)
+	if real.retargeted:
+		seat_o = _real_seat()
 	var stand_o := Vector3(0, -0.95, 0)
 	real.play(want, spd)
+	if real.mod != null:
+		real.mod.target = reach_target
+		real.mod.reach = reach_k
+		real.mod.side = reach_side
+		real.mod.duck = duck_k
 	if want == "sit_drive":
 		real.position = seat_o
 	elif want == "exit_car":
@@ -743,6 +750,35 @@ func _real_update(delta: float) -> void:
 
 
 var _real_walking := 0.0
+var reach_target: Node3D = null      # realistic actor: world target for the reaching arm (e.g. the door handle)
+var reach_k := 0.0
+var reach_side := "L"
+var duck_k := 0.0
+var _roof_cache := {}
+
+
+## seated offset of the realistic actor: hips on the seat cushion, lowered further in low-roof cars so the head clears the roof
+func _real_seat() -> Vector3:
+	var car := get_parent() as Node3D
+	var seat_y := 0.34
+	var roof := 1.45
+	if car != null and car.has_method("seat_origin"):
+		seat_y = (car.call("seat_origin", "driver") as Vector3).y
+		if _roof_cache.has(car):
+			roof = float(_roof_cache[car])
+		else:
+			var rb := car.get_node_or_null("RealBody") as Node3D
+			if rb != null:
+				var top := -99.0
+				for m in rb.find_children("*", "MeshInstance3D", true, false):
+					var mi := m as MeshInstance3D
+					if mi.mesh != null and not String(mi.name).to_lower().contains("wheel"):
+						top = maxf(top, (mi.global_transform * mi.mesh.get_aabb()).end.y - car.global_position.y)
+				if top > 0.5:
+					roof = top
+					_roof_cache[car] = roof
+	var hips := clampf(roof - 0.9, 0.38, 0.53)
+	return Vector3(0, hips + real.seat_offset.y - seat_y, -0.19)
 
 
 func _process(delta: float) -> void:
