@@ -248,6 +248,8 @@ func _build_environment() -> void:
 	sun.shadow_enabled = Gfx.shadows
 	sun.directional_shadow_max_distance = 160.0
 	add_child(sun)
+	if Gfx.realistic:
+		RealCity.tune(env, sun)
 
 
 func _build_ground() -> void:
@@ -262,7 +264,7 @@ func _build_ground() -> void:
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(9000, 9000)
 	mi.mesh = pm
-	mi.material_override = _mat(Color(0.3, 0.5, 0.28))
+	mi.material_override = RealCity.grass() if Gfx.realistic else _mat(Color(0.3, 0.5, 0.28))
 	body.add_child(mi)
 	add_child(body)
 
@@ -308,10 +310,15 @@ func _build_roads() -> void:
 			var t := -ext + float(i) * 12.0 + 3.0
 			if absf(fposmod(t + GRID * 0.5, GRID) - GRID * 0.5) < ROAD_W:      # none inside the junctions
 				continue
-			dashes.append(Transform3D(Basis.from_scale(Vector3(5.0, 0.02, 0.3)), Vector3(t + 2.5, 0.075, p)))
-			dashes.append(Transform3D(Basis.from_scale(Vector3(0.3, 0.02, 5.0)), Vector3(p, 0.08, t + 2.5)))
-	_multimesh(_unit_box(), Scenery.road_material(Color(0.2, 0.21, 0.23)), road)
-	_multimesh(_unit_box(), _mat(Color(0.95, 0.93, 0.8)), dashes)
+			if not Gfx.realistic:
+				dashes.append(Transform3D(Basis.from_scale(Vector3(5.0, 0.02, 0.3)), Vector3(t + 2.5, 0.075, p)))
+				dashes.append(Transform3D(Basis.from_scale(Vector3(0.3, 0.02, 5.0)), Vector3(p, 0.08, t + 2.5)))
+	if Gfx.realistic:
+		_multimesh(_unit_box(), RealCity.asphalt(GRID, ROAD_W), road)
+		_real_markings()
+	else:
+		_multimesh(_unit_box(), Scenery.road_material(Color(0.2, 0.21, 0.23)), road)
+		_multimesh(_unit_box(), _mat(Color(0.95, 0.93, 0.8)), dashes)
 	# pavement strips along every block edge
 	for i in range(-HALF_CELLS, HALF_CELLS):
 		for j in range(-HALF_CELLS, HALF_CELLS):
@@ -321,9 +328,74 @@ func _build_roads() -> void:
 				parks.append(Transform3D(Basis.from_scale(Vector3(inner, 0.12, inner)), c + Vector3(0, 0.06, 0)))
 			else:
 				walks.append(Transform3D(Basis.from_scale(Vector3(inner, 0.12, inner)), c + Vector3(0, 0.06, 0)))
-	_multimesh(_unit_box(), _mat(Color(0.42, 0.42, 0.41)), walks)
-	_multimesh(_unit_box(), _mat(Color(0.28, 0.5, 0.26)), parks)
+	_multimesh(_unit_box(), RealCity.pavement() if Gfx.realistic else _mat(Color(0.42, 0.42, 0.41)), walks)
+	_multimesh(_unit_box(), RealCity.grass() if Gfx.realistic else _mat(Color(0.28, 0.5, 0.26)), parks)
 	_build_street_furniture()
+
+
+## lane paint like a real two-way street: double yellow centre, dashed white lane lines, solid white edge lines, stop lines
+func _real_markings() -> void:
+	var white: Array[Transform3D] = []
+	var yellow: Array[Transform3D] = []
+	var seg := GRID - ROAD_W - 10.0
+	for k in range(-HALF_CELLS, HALF_CELLS + 1):
+		var p := float(k) * GRID
+		for m in range(-HALF_CELLS, HALF_CELLS):
+			var c := (float(m) + 0.5) * GRID
+			for axis in 2:
+				var along := Vector3(1, 0, 0) if axis == 0 else Vector3(0, 0, 1)
+				var side := Vector3(0, 0, 1) if axis == 0 else Vector3(1, 0, 0)
+				var base := along * c + side * p
+				var sx := seg if axis == 0 else 0.12
+				var sz := 0.12 if axis == 0 else seg
+				for o in [-0.14, 0.14]:
+					yellow.append(Transform3D(Basis.from_scale(Vector3(sx, 0.012, sz)), base + side * o + Vector3(0, 0.07, 0)))
+				for o in [-6.55, 6.55]:
+					white.append(Transform3D(Basis.from_scale(Vector3(sx, 0.012, sz)), base + side * o + Vector3(0, 0.07, 0)))
+				var nd := int(seg / 9.0)
+				for q in nd:
+					var a := -seg * 0.5 + 4.5 + float(q) * 9.0
+					for o in [-3.5, 3.5]:
+						var dx := 3.0 if axis == 0 else 0.12
+						var dz := 0.12 if axis == 0 else 3.0
+						white.append(Transform3D(Basis.from_scale(Vector3(dx, 0.012, dz)), base + along * a + side * o + Vector3(0, 0.07, 0)))
+		for m2 in range(-HALF_CELLS, HALF_CELLS + 1):
+			var jc := Vector3(float(m2) * GRID, 0, p)
+			for q in 4:
+				var yaw := q * PI * 0.5
+				var bs := Basis(Vector3.UP, yaw)
+				var dist := ROAD_W * 0.5 + 6.0
+				white.append(Transform3D(bs * Basis.from_scale(Vector3(ROAD_W * 0.5 - 0.3, 0.012, 0.45)), jc + bs * Vector3(ROAD_W * 0.25, 0, -dist) + Vector3(0, 0.07, 0)))
+	var wm := _mat(Color(0.86, 0.86, 0.84), 0.7)
+	var ym := _mat(Color(0.9, 0.7, 0.1), 0.7)
+	_multimesh(_unit_box(), wm, white)
+	_multimesh(_unit_box(), ym, yellow)
+
+
+## rounded, uneven tree crowns (a few overlapping blobs per tree) instead of single cones
+func _real_crowns(crowns: Array[Transform3D]) -> void:
+	var xf: Array[Transform3D] = []
+	var cols := PackedColorArray()
+	var greens := [Color(0.2, 0.38, 0.14), Color(0.26, 0.45, 0.17), Color(0.17, 0.33, 0.13), Color(0.32, 0.46, 0.18), Color(0.22, 0.4, 0.2)]
+	for t in crowns:
+		var w := t.basis.x.length() * 1.15
+		var h := maxf(t.basis.y.length() * 0.55, w * 0.7)
+		var o := t.origin
+		var g: Color = greens[rng.randi() % greens.size()]
+		for b in 4:
+			var ang := rng.randf() * TAU
+			var r := w * rng.randf_range(0.0, 0.28)
+			var sc := rng.randf_range(0.65, 1.0)
+			xf.append(Transform3D(Basis.from_scale(Vector3(w * sc, h * sc, w * sc)), o + Vector3(cos(ang) * r, rng.randf_range(-0.2, 0.25) * h, sin(ang) * r)))
+			cols.append(g.lightened(rng.randf_range(-0.05, 0.12)))
+	var sph := SphereMesh.new()
+	sph.radius = 0.5
+	sph.height = 1.0
+	sph.radial_segments = 8
+	sph.rings = 5
+	var m := _mat(Color.WHITE, 0.9)
+	m.vertex_color_use_as_albedo = true
+	_multimesh(sph, m, xf, cols)
 
 
 func _build_street_furniture() -> void:
@@ -364,7 +436,7 @@ func _build_street_furniture() -> void:
 							var cw := rng.randf_range(3.0, 4.2)
 							crowns.append(Transform3D(Basis.from_scale(Vector3(cw, th * 0.8, cw)), pos + Vector3(0, th * 0.5 + th * 0.4, 0) + (Vector3(0, 0, sd) if axis == 0 else Vector3(sd, 0, 0)) * 1.2))
 						# parked cars along the kerb
-						if absf(fposmod(t + 9.0, 38.0)) < 2.6 and rng.randf() < 0.45 and (absf(pos.x) > 40.0 or absf(pos.z) > 40.0):
+						if not Gfx.realistic and absf(fposmod(t + 9.0, 38.0)) < 2.6 and rng.randf() < 0.45 and (absf(pos.x) > 40.0 or absf(pos.z) > 40.0):
 							var cp := Vector3(t, 0, line + sd * (ROAD_W * 0.5 - 2.3)) if axis == 0 else Vector3(line + sd * (ROAD_W * 0.5 - 2.3), 0, t)
 							var cb := Basis(Vector3.UP, yaw + PI * 0.5)
 							car_body.append(Transform3D(cb * Basis.from_scale(Vector3(1.8, 0.6, 4.2)), cp + Vector3(0, 0.62, 0)))
@@ -412,7 +484,10 @@ func _build_street_furniture() -> void:
 	cone.height = 1.0
 	cone.radial_segments = 7
 	var crown_m := _mat(Color(0.2, 0.5, 0.24))
-	_multimesh(cone, crown_m, crowns)
+	if Gfx.realistic:
+		_real_crowns(crowns)
+	else:
+		_multimesh(cone, crown_m, crowns)
 	var cm := _mat(Color.WHITE, 0.35)
 	cm.vertex_color_use_as_albedo = true
 	_multimesh(_unit_box(), cm, car_body, car_cols)
@@ -476,6 +551,8 @@ func _facade_tex(kind: int) -> ImageTexture:
 
 
 func _facade_mat(kind: int, tile_m: float) -> StandardMaterial3D:
+	if Gfx.realistic:
+		return RealCity.facade_material(kind, tile_m)
 	var m := StandardMaterial3D.new()
 	m.albedo_texture = _facade_tex(kind)
 	m.vertex_color_use_as_albedo = true
@@ -584,6 +661,11 @@ func _build_city() -> void:
 	sm.emission_enabled = true
 	sm.emission = Color(0.9, 0.75, 0.5)
 	sm.emission_energy_multiplier = 0.08
+	if Gfx.realistic:
+		sm = RealCity.facade_material(3, 16.0)
+		sm.uv1_scale = Vector3(1.0 / 16.0, 1.0 / 4.2, 1.0 / 16.0)
+		sm.roughness = 0.4
+		sm.vertex_color_use_as_albedo = false
 	_multimesh(_unit_box(), sm, shops, shop_cols)
 	var prism := PrismMesh.new()
 	prism.size = Vector3.ONE
@@ -649,7 +731,10 @@ func _build_nature() -> void:
 	cone.bottom_radius = 0.5
 	cone.height = 1.0
 	cone.radial_segments = 7
-	_multimesh(cone, _mat(Color(0.16, 0.42, 0.2)), crowns)
+	if Gfx.realistic:
+		_real_crowns(crowns)
+	else:
+		_multimesh(cone, _mat(Color(0.16, 0.42, 0.2)), crowns)
 	# mountains on the horizon
 	var variants: Array[ArrayMesh] = []
 	for vi in 3:
