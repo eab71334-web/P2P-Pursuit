@@ -1724,26 +1724,49 @@ func _physics_process(delta: float) -> void:
 				_vy = 0.0
 
 
+var _ws := 0.0                      # smoothed on-foot speed (m/s)
+
+
+## GTA-style locomotion: the stick's tilt picks walk / jog / sprint, speed ramps up and down, sharp turns slow you and you pivot at a limited turn rate
 func _walk(delta: float) -> void:
 	var mv := Vector2(Input.get_axis("steer_left", "steer_right"), Input.get_action_strength("brake") - Input.get_action_strength("accel"))
+	var on_stick := stick_vec.length() > 0.05
 	mv += Vector2(stick_vec.x, stick_vec.y)
 	mv = mv.limit_length(1.0)
 	var run := Input.is_key_pressed(KEY_SHIFT) or stick_vec.length() > 0.85
-	var spd := RUN_SPEED if run else WALK_SPEED
+	var m := mv.length()
+	var goal := 0.0
+	if m > 0.1:
+		if run:
+			goal = RUN_SPEED
+		elif on_stick:
+			goal = lerpf(1.3, 2.3, clampf((m - 0.1) / 0.4, 0.0, 1.0)) if m < 0.5 else lerpf(2.3, WALK_SPEED, clampf((m - 0.5) / 0.35, 0.0, 1.0))
+		else:
+			goal = WALK_SPEED
 	var basis := Basis(Vector3.UP, walk_yaw)
 	var dir := basis * Vector3(mv.x, 0.0, mv.y)
+	var moving := m > 0.1
+	var slow := 1.0
+	var target := walk_av.global_rotation.y
+	if moving:
+		target = atan2(-dir.x, -dir.z)
+		var diff := angle_difference(walk_av.global_rotation.y, target)
+		slow = 1.0 - 0.75 * smoothstep(0.9, 2.6, absf(diff))             # a sharp turn: ease off, pivot, then accelerate again
+		var rate := lerpf(13.0, 7.0, clampf(_ws / RUN_SPEED, 0.0, 1.0))  # rad/s: slower to swing round at a sprint
+		walk_av.global_rotation.y += clampf(diff, -rate * delta, rate * delta)
+	var tgt_speed := goal * slow
+	_ws = move_toward(_ws, tgt_speed, (16.0 if tgt_speed > _ws else 22.0) * delta)
 	_vy -= 14.0 * delta
 	if walker.is_on_floor() and _vy < 0.0:
 		_vy = -0.5
-	walker.velocity = Vector3(dir.x * spd, _vy, dir.z * spd)
+	var dn := dir.normalized() if dir.length() > 0.01 else Vector3.ZERO
+	if not moving:
+		dn = Vector3(-sin(walk_av.global_rotation.y), 0.0, -cos(walk_av.global_rotation.y))     # coasting to a stop keeps the facing direction
+	walker.velocity = Vector3(dn.x * _ws, _vy, dn.z * _ws)
 	walker.move_and_slide()
 	_vy = walker.velocity.y
-	var moving := mv.length() > 0.1
-	if moving:
-		var target := atan2(-dir.x, -dir.z)
-		walk_av.global_rotation.y = lerp_angle(walk_av.global_rotation.y, target, clampf(delta * 10.0, 0.0, 1.0))
 	_swing_t += delta * (13.0 if run else 9.0)
-	walk_av.walk_swing = sin(_swing_t) * (0.75 if run else 0.5) if (moving and walker.is_on_floor()) else 0.0
+	walk_av.walk_swing = sin(_swing_t) * (0.75 if run else 0.5) if (_ws > 0.4 and walker.is_on_floor()) else 0.0
 
 
 func _process(delta: float) -> void:

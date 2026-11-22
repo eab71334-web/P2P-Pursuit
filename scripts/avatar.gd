@@ -710,16 +710,16 @@ func _real_update(delta: float) -> void:
 		want = custom_anim
 	elif seated:
 		want = "sit_drive"
-	elif _rv > 0.5 or absf(walk_swing) > 0.05:
-		if _rv < 2.8 and absf(walk_swing) < 0.6:
+	elif _rv > 0.5:
+		if _rv < 3.2:
 			want = "walk"
-			spd = clampf(_rv / 1.6, 0.6, 1.7)
-		elif _rv < 6.0:
+			spd = clampf(_rv / 1.5, 0.6, 2.2)
+		elif _rv < 6.8:
 			want = "jog"
-			spd = clampf(_rv / 4.0, 0.8, 1.6)
+			spd = clampf(_rv / 4.2, 0.8, 1.6)
 		else:
 			want = "run"
-			spd = clampf(_rv / 7.0, 0.8, 1.6)
+			spd = clampf(_rv / 7.5, 0.8, 1.5)
 	elif absf(_ryr) > 0.9:
 		want = "turn_L" if _ryr > 0.0 else "turn_R"
 		spd = clampf(absf(_ryr) / 2.5, 0.7, 1.6)
