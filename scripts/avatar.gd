@@ -741,6 +741,8 @@ func _real_update(delta: float) -> void:
 		real.position = stand_o.lerp(seat_o, real.progress())
 	else:
 		real.position = stand_o
+		if want == "idle" or want == "turn_L" or want == "turn_R":
+			real.position.y += _ground_fix(delta)
 	# lean into the turn (about the forward axis) + forward pitch while sprinting
 	var moving_fast := want == "run" or want == "walk" or want == "jog"
 	var roll_t := clampf(_ryr * (0.075 if want == "run" else 0.045), -0.34, 0.34) if moving_fast else 0.0
@@ -755,6 +757,22 @@ var reach_k := 0.0
 var reach_side := "L"
 var duck_k := 0.0
 var _roof_cache := {}
+var _gfix := 0.0
+
+
+## keeps the soles on the ground in standing poses (a clip can leave the feet floating): lowest ankle sits at its idle height
+func _ground_fix(delta: float) -> float:
+	var sk := real.find_child("Skeleton3D", true, false) as Skeleton3D
+	if sk == null:
+		return _gfix
+	var lf := sk.find_bone("foot.L")
+	var rf := sk.find_bone("foot.R")
+	if lf < 0 or rf < 0:
+		return _gfix
+	var y := minf(real.to_local(sk.global_transform * sk.get_bone_global_pose(lf).origin).y, real.to_local(sk.global_transform * sk.get_bone_global_pose(rf).origin).y)
+	var want := clampf(0.2 - y, -0.3, 0.3)
+	_gfix = lerpf(_gfix, want, clampf(delta * 10.0, 0.0, 1.0))
+	return _gfix
 
 
 ## seated offset of the realistic actor: hips on the seat cushion, lowered further in low-roof cars so the head clears the roof

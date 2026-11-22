@@ -1039,7 +1039,7 @@ func _exit_seq() -> void:
 	await _wait(0.3)
 	await _tween_prop(walk_av, "rotation:y", -PI * 0.5, 0.45)           # turn round to face the door
 	_hand(walk_av, "R", "door")                                        # right hand on the door
-	walk_av.custom_anim = "close_door"
+	walk_av.custom_anim = ""
 	_reach(walk_av, "R", 1.0, 0.4)
 	await _wait(0.45)
 	await _door_to(0.0, 0.7, Tween.EASE_IN)                            # push it shut
@@ -1062,7 +1062,7 @@ func _exit_seq() -> void:
 func _board(av: Avatar) -> void:
 	av.role = "driver"
 	_hand(av, "R", "door")
-	av.custom_anim = "reach_handle"
+	av.custom_anim = ""
 	_reach(av, "R", 1.0, 0.5)
 	await _wait(0.6)
 	await _door_to(0.4, 0.55)
