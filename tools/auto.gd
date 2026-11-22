@@ -167,7 +167,7 @@ func _process(d: float) -> void:
 				get_tree().quit()
 		"garage":
 			if step == 0 and t > 2.5:
-				step = 1; Profile.level = 20; Profile.coins = 99999; Profile.cars["muscle"] = true; Profile.cars["gt3"] = true; Profile.car = "coupe"; Profile.cars["coupe"] = true
+				step = 1; Profile.level = 20; Profile.coins = 99999; Profile.cars["muscle"] = true; Profile.cars["gt3"] = true; Profile.car = "m4"; Profile.cars["m4"] = true
 				sc.hub.select("garage")
 			elif step == 1 and t > 4.5:
 				step = 2; shot("garage0")
@@ -176,7 +176,7 @@ func _process(d: float) -> void:
 				var cards: Array = []
 				for b in sc.hub.find_children("*", "Button", true, false):
 					if b.custom_minimum_size == Vector2(236, 160): cards.append(b)
-				if cards.size() > 5: cards[5].pressed.emit()
+				if cards.size() > 2: cards[2].pressed.emit()
 			elif step == 3 and t > 7.0:
 				step = 4; shot("garage1")
 			elif step == 4 and t > 7.5:

@@ -637,7 +637,7 @@ func _hide_proc() -> void:
 		for wn in _real_wheels.values():
 			if (wn as Node).is_ancestor_of(n):
 				keep = true
-		if keep or (rb != null and rb.is_ancestor_of(n)):
+		if keep or n.has_meta("real") or (rb != null and rb.is_ancestor_of(n)):
 			continue
 		(n as VisualInstance3D).visible = false
 

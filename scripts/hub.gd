@@ -1334,15 +1334,25 @@ func _car_card(id: String, cb: Callable) -> Control:
 	vb.add_theme_constant_override("separation", 1)
 	b.add_child(vb)
 	var cs: Dictionary = Profile.car_set(id)
-	var art := HubArt.CarArt.new()
-	art.model = id
-	art.paint = Catalog.PAINTS[cs["paint"]]["c"]
-	art.rim = Catalog.RIMS[cs["rim"]]["c"]
-	art.wheel_style = Catalog.wheel_style(id, str(cs["wheel"]))
-	art.locked = not owned
-	art.custom_minimum_size = Vector2(0, 84)
-	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vb.add_child(art)
+	if RealCar.has(id):                              # EXPERIMENT: a real render of the glTF car instead of the 2D cube drawing
+		var tr := TextureRect.new()
+		tr.custom_minimum_size = Vector2(0, 84)
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tr.modulate = Color.WHITE if owned else Color(0.45, 0.45, 0.5, 1)
+		RealCar.thumb_into(tr, id)
+		vb.add_child(tr)
+	else:
+		var art := HubArt.CarArt.new()
+		art.model = id
+		art.paint = Catalog.PAINTS[cs["paint"]]["c"]
+		art.rim = Catalog.RIMS[cs["rim"]]["c"]
+		art.wheel_style = Catalog.wheel_style(id, str(cs["wheel"]))
+		art.locked = not owned
+		art.custom_minimum_size = Vector2(0, 84)
+		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vb.add_child(art)
 	var t := UI.lbl(vb, Catalog.nm(m), 15, UI.TXT, false)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	t.clip_text = true

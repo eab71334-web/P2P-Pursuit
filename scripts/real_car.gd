@@ -7,9 +7,9 @@ extends RefCounted
 
 const DIR := "res://assets/realistic/"
 const CARS := {
-	"hatch": {"f": "2015_jaguar_f-type_r_coupe.glb", "s": 100.0, "n": ["Jag F-Coupe", "جاغ F كوبيه"]},
+	"hatch": {"f": "2015_jaguar_f-type_r_coupe.glb", "s": 100.0, "door": "doorl", "n": ["Jag F-Coupe", "جاغ F كوبيه"]},
 	# "coupe" (Mercedes C-coupe) is parked: in that file the wheels are skinned to a bone and do not render, the body floats
-	"m4": {"f": "2021_bmw_m4_competition.glb", "s": 0.73, "n": ["Bavaria M-400", "بافاريا M-400"]},
+	"m4": {"f": "2021_bmw_m4_competition.glb", "s": 0.73, "door": "driver_door", "n": ["Bavaria M-400", "بافاريا M-400"]},
 	"gt3": {"f": "2020_porsche_718_cayman_gt4.glb", "s": 100.0, "n": ["Stuttgart GT-4", "شتوتغارت GT-4"]},
 	"hyper": {"f": "2019_nissan_gt-r_r35_varis_kamikaze_r_supersonic.glb", "s": 100.0, "n": ["Ryu GT-R", "ريو GT-R"]},
 }
@@ -119,4 +119,103 @@ static func attach(car: Node3D, model: String, wheel_nodes: Dictionary) -> Node3
 				m.get_parent().remove_child(m)
 				wn.add_child(m)
 				m.transform = Transform3D(t.basis, t.origin - (wn.get_meta("center") as Vector3))
+				m.set_meta("real", true)
+	_split_door(car, model, ms)
 	return holder
+
+
+## the driver's door meshes (found by name, left side) move under the car's hinged door pivot, so the door really swings open
+static func _split_door(car: Node3D, model: String, ms: Array) -> void:
+	var key := str(CARS[model].get("door", ""))
+	var pivot := car.get("door_pivot") as Node3D
+	var handle := car.get("door_handle") as Node3D
+	if pivot == null or handle == null:
+		return
+	if key == "":
+		handle.position = Vector3(-0.06, 0.95, 0.5)
+		return
+	var parts: Array = []
+	var box := AABB()
+	for e in ms:
+		var nm := String((e[0] as Node).name).to_lower()
+		var a: AABB = e[1]
+		if nm.contains(key) and a.get_center().x < -0.3:
+			box = a if parts.is_empty() else box.merge(a)
+			parts.append(e)
+	if parts.is_empty():
+		return
+	var hinge := Vector3(box.get_center().x, 0.0, box.position.z + 0.05)
+	pivot.position = hinge + Vector3(0, float(CARS[model].get("lift", 0.0)), 0)
+	for e in parts:
+		var m := e[0] as MeshInstance3D
+		var t: Transform3D = e[2]
+		m.get_parent().remove_child(m)
+		pivot.add_child(m)
+		m.transform = Transform3D(t.basis, t.origin - hinge)
+		m.set_meta("real", true)
+	handle.position = Vector3(box.position.x - hinge.x - 0.03, 0.98, box.end.z - 0.3 - hinge.z)
+
+
+
+# ---------------------------------------------------------------- garage card thumbnails (real renders, cached)
+static var _thumbs := {}
+static var _pending := {}
+
+
+## fills `rect` with a render of the car (3/4 view); rendered once per model, then cached
+static func thumb_into(rect: TextureRect, model: String) -> void:
+	if _thumbs.has(model):
+		rect.texture = _thumbs[model]
+		return
+	if not _pending.has(model):
+		_pending[model] = []
+		_render_thumb(model)
+	(_pending[model] as Array).append(weakref(rect))
+
+
+static func _render_thumb(model: String) -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var vp := SubViewport.new()
+	vp.size = Vector2i(512, 256)
+	vp.transparent_bg = true
+	vp.own_world_3d = true
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	var ps := load(DIR + str(CARS[model]["f"])) as PackedScene
+	var root := ps.instantiate() as Node3D
+	root.transform = _xf(model)
+	vp.add_child(root)
+	var d := info(model)
+	var bb: AABB = d["box"]
+	var c := bb.get_center()
+	var cam := Camera3D.new()
+	cam.fov = 28.0
+	cam.near = 0.5
+	cam.far = 60.0
+	vp.add_child(cam)
+	cam.position = c + Vector3(-3.7, 0.8, -5.4)
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-38, -145, 0)
+	sun.light_energy = 1.4
+	vp.add_child(sun)
+	var env := Environment.new()
+	env.background_mode = Environment.BG_CLEAR_COLOR
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.75, 0.78, 0.85)
+	env.ambient_light_energy = 0.9
+	var we := WorldEnvironment.new()
+	we.environment = env
+	vp.add_child(we)
+	tree.root.add_child(vp)
+	cam.look_at(c + Vector3(0, -0.1, 0))
+	cam.make_current()
+	for i in 6:
+		await tree.process_frame
+	var img := vp.get_texture().get_image()
+	var tex := ImageTexture.create_from_image(img)
+	_thumbs[model] = tex
+	for w in _pending[model]:
+		var r = (w as WeakRef).get_ref()
+		if r != null:
+			(r as TextureRect).texture = tex
+	_pending.erase(model)
+	vp.queue_free()
