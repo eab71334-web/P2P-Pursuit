@@ -187,19 +187,84 @@ class FobButton extends Button:
 
 class HoldZone extends Control:
 	var txt := ""
+	var id := ""
 	var down := false
+	var _lbl: Label
 
-	func _init(t: String) -> void:
+	func _init(t: String, zone_id := "") -> void:
 		txt = t
+		id = zone_id
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
+	func _ready() -> void:
+		if id == "" or not ZoneStyle.has_icon(id):
+			return
+		_lbl = Label.new()
+		_lbl.text = txt
+		_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+		add_child(_lbl)
+		ZoneStyle.decorate(self, id, _lbl, size.x, size.y)
+
+	func _process(_d: float) -> void:
+		queue_redraw()
+
 	func _draw() -> void:
-		var col := Color(1, 1, 1, 0.34 if down else 0.16)
-		draw_rect(Rect2(Vector2.ZERO, size), col, true)
-		draw_rect(Rect2(Vector2.ZERO, size), Color(1, 1, 1, 0.55), false, 2.0)
-		var f := ThemeDB.fallback_font
-		var s := f.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 22)
-		draw_string(f, (size - s) * 0.5 + Vector2(0, s.y * 0.7), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(1, 1, 1, 0.9))
+		if id == "" or not ZoneStyle.has_icon(id):
+			var col := Color(1, 1, 1, 0.34 if down else 0.16)
+			draw_rect(Rect2(Vector2.ZERO, size), col, true)
+			draw_rect(Rect2(Vector2.ZERO, size), Color(1, 1, 1, 0.55), false, 2.0)
+			return
+		var sb := ZoneStyle.box(id, false)
+		var accent := Color(1, 1, 1, 0.42)
+		if id == "gas":
+			accent = Color(0.35, 0.92, 0.55, 0.9)
+		elif id == "brake":
+			accent = Color(1.0, 0.38, 0.32, 0.9)
+		sb.border_color = accent if not down else accent.lightened(0.35)
+		sb.bg_color = Color(0.05, 0.07, 0.11, 0.64) if not down else Color(accent.r * 0.45, accent.g * 0.45, accent.b * 0.45, 0.82)
+		if down:
+			sb.shadow_color = Color(accent.r, accent.g, accent.b, 0.5)
+			sb.shadow_size = 12
+			sb.shadow_offset = Vector2.ZERO
+		draw_style_box(sb, Rect2(Vector2.ZERO, size))
+
+
+## on-foot virtual stick: faint ring while idle, base + thumb that follows the finger; the outer ring marks where a sprint starts
+class StickUI extends Control:
+	var ow: Node3D
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_anchors_preset(Control.PRESET_FULL_RECT)
+
+	func _process(_d: float) -> void:
+		queue_redraw()
+
+	func _draw() -> void:
+		if ow == null or not ow.on_foot or not ow.show_touch or ow.seq:
+			return
+		var active: bool = ow.stick_id != -1
+		var c: Vector2 = ow.stick_origin if active else Vector2(150.0, size.y - 150.0)
+		var R := 70.0
+		var a := 1.0 if active else 0.45
+		draw_circle(c, R + 12.0, Color(0.05, 0.07, 0.11, 0.42 * a))
+		draw_arc(c, R + 12.0, 0.0, TAU, 48, Color(1, 1, 1, 0.38 * a), 2.0, true)
+		draw_arc(c, R * 0.5, 0.0, TAU, 40, Color(1, 1, 1, 0.14 * a), 1.5, true)
+		draw_arc(c, R * 0.85, 0.0, TAU, 40, Color(1.0, 0.62, 0.15, 0.34 * a), 1.5, true)
+		var v: Vector2 = ow.stick_vec if active else Vector2.ZERO
+		var p := c + v * R
+		var m := v.length()
+		var tint := Color(1, 1, 1, 0.55)
+		if m >= 0.85:
+			tint = Color(1.0, 0.66, 0.2, 0.85)
+		elif m >= 0.5:
+			tint = Color(0.8, 0.95, 1.0, 0.7)
+		draw_circle(p + Vector2(0, 3), 31.0, Color(0, 0, 0, 0.3 * a))
+		draw_circle(p, 30.0, Color(tint.r, tint.g, tint.b, tint.a * a * 0.55))
+		draw_arc(p, 30.0, 0.0, TAU, 32, Color(1, 1, 1, 0.8 * a), 2.0, true)
 
 
 func _ready() -> void:
@@ -1490,13 +1555,17 @@ func _build_hud() -> void:
 	btn_jump.custom_minimum_size = Vector2(110, 80)
 	btn_jump.focus_mode = Control.FOCUS_NONE
 	btn_jump.pressed.connect(func(): _jump())
+	_skin(btn_jump)
 	root.add_child(btn_jump)
 	btn_jump.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
 	btn_jump.position += Vector2(-140, -120)
+	var stick_ui := StickUI.new()
+	stick_ui.ow = self
+	root.add_child(stick_ui)
 	var defs := [["left", "<", Vector2(0, 1), Vector2(30, -140)], ["right", ">", Vector2(0, 1), Vector2(180, -140)],
-		["brake", "BRAKE", Vector2(1, 1), Vector2(-330, -140)], ["gas", "GAS", Vector2(1, 1), Vector2(-170, -140)]]
+		["brake", UI.tx("BRAKE", "فرامل"), Vector2(1, 1), Vector2(-330, -140)], ["gas", UI.tx("GAS", "بنزين"), Vector2(1, 1), Vector2(-170, -140)]]
 	for d in defs:
-		var z := HoldZone.new(str(d[1]))
+		var z := HoldZone.new(str(d[1]) if str(d[1]).length() > 1 else "", str(d[0]))
 		z.size = Vector2(130, 110)
 		root.add_child(z)
 		z.anchor_left = (d[2] as Vector2).x
@@ -1571,8 +1640,34 @@ func _btn(parent: Control, text: String, cb: Callable) -> Button:
 	b.custom_minimum_size = Vector2(140, 44)
 	b.focus_mode = Control.FOCUS_NONE
 	b.pressed.connect(cb)
+	_skin(b)
 	parent.add_child(b)
 	return b
+
+
+## the same dark-glass button look as the race HUD (rounded, thin light border, soft shadow, orange glow while pressed)
+func _skin(b: Button) -> void:
+	var n := ZoneStyle.box("menu", false)
+	var h := ZoneStyle.box("menu", false)
+	h.bg_color = Color(0.12, 0.15, 0.22, 0.78)
+	h.border_color = Color(1, 1, 1, 0.65)
+	var pr := ZoneStyle.box("menu", true)
+	n.content_margin_left = 12
+	n.content_margin_right = 12
+	h.content_margin_left = 12
+	h.content_margin_right = 12
+	pr.content_margin_left = 12
+	pr.content_margin_right = 12
+	b.add_theme_stylebox_override("normal", n)
+	b.add_theme_stylebox_override("focus", n)
+	b.add_theme_stylebox_override("hover", h)
+	b.add_theme_stylebox_override("pressed", pr)
+	b.add_theme_font_size_override("font_size", 15)
+	b.add_theme_color_override("font_color", Color(0.96, 0.97, 1.0))
+	b.add_theme_color_override("font_hover_color", Color.WHITE)
+	b.add_theme_color_override("font_pressed_color", Color.WHITE)
+	b.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
+	b.add_theme_constant_override("outline_size", 3)
 
 
 func _refresh_buttons() -> void:
