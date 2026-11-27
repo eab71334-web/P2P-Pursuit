@@ -7,6 +7,11 @@ var kind := ""
 var tall := true
 var only := false
 var radius := 14.0
+var dark := false          # dark icon for light-coloured buttons
+
+
+func _ink(a: float) -> Color:
+	return Color(1, 1, 1, minf(a + 0.2, 1.0)) if dark else Color(0, 0, 0, a)
 
 
 func _init() -> void:
@@ -67,7 +72,7 @@ func _draw() -> void:
 	else:
 		r = clampf(size.y * 0.27, 8.0, 16.0)
 		c = Vector2(size.y * 0.52, size.y * 0.5)
-	var col := Color(1, 1, 1, 0.97)
+	var col := Color(0.09, 0.11, 0.16, 0.97) if dark else Color(1, 1, 1, 0.97)
 	if kind == "hazard" or kind == "bulb":
 		col = Color(1.0, 0.8, 0.25)
 	elif kind == "beam":
@@ -75,11 +80,12 @@ func _draw() -> void:
 	var tex := _lucide(kind)
 	if tex != null:
 		var sz := Vector2(r, r) * 2.1
-		draw_texture_rect(tex, Rect2(c - sz * 0.5 + Vector2(0, r * 0.1), sz), false, Color(0, 0, 0, 0.55))
+		draw_texture_rect(tex, Rect2(c - sz * 0.5 + Vector2(0, r * 0.1), sz), false, Color(0, 0, 0, 0.0 if dark else 0.55))
 		draw_texture_rect(tex, Rect2(c - sz * 0.5, sz), false, col)
 		return
 	draw_set_transform(c + Vector2(0, r * 0.07), 0.0, Vector2(r, r))
-	_shape(Color(0, 0, 0, 0.5), r)
+	if not dark:
+		_shape(Color(0, 0, 0, 0.5), r)
 	draw_set_transform(c, 0.0, Vector2(r, r))
 	_shape(col, r)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
@@ -97,11 +103,11 @@ func _shape(c: Color, r: float) -> void:
 		"gas":
 			_poly([Vector2(-0.55, 0.95), Vector2(0.55, 0.95), Vector2(0.38, -0.95), Vector2(-0.38, -0.95)], c)
 			for y in [-0.5, -0.05, 0.4]:
-				draw_line(Vector2(-0.35, y), Vector2(0.35, y), Color(0, 0, 0, 0.55), w)
+				draw_line(Vector2(-0.35, y), Vector2(0.35, y), _ink(0.55), w)
 		"brake":
 			draw_rect(Rect2(-0.95, -0.55, 1.9, 1.1), c)
 			for x in [-0.5, 0.0, 0.5]:
-				draw_line(Vector2(x, -0.4), Vector2(x, 0.4), Color(0, 0, 0, 0.55), w)
+				draw_line(Vector2(x, -0.4), Vector2(x, 0.4), _ink(0.55), w)
 		"horn":
 			_poly([Vector2(-0.9, -0.3), Vector2(-0.35, -0.3), Vector2(0.25, -0.8), Vector2(0.25, 0.8), Vector2(-0.35, 0.3), Vector2(-0.9, 0.3)], c)
 			draw_arc(Vector2(0.3, 0), 0.5, -0.9, 0.9, 10, c, w)
@@ -175,7 +181,7 @@ func _shape(c: Color, r: float) -> void:
 		"fist":
 			draw_rect(Rect2(-0.75, -0.4, 1.5, 1.2), c)
 			for x in [-0.4, 0.0, 0.4]:
-				draw_line(Vector2(x, -0.4), Vector2(x, 0.1), Color(0, 0, 0, 0.5), w)
+				draw_line(Vector2(x, -0.4), Vector2(x, 0.1), _ink(0.5), w)
 			draw_rect(Rect2(-0.95, 0.1, 0.3, 0.55), c)
 		"star":
 			var pts: Array = []
@@ -213,7 +219,7 @@ func _shape(c: Color, r: float) -> void:
 		"pin":
 			draw_arc(Vector2(0, -0.3), 0.6, PI * 0.15, PI * 0.85 + PI, 18, c, w * 1.3)
 			_poly([Vector2(-0.5, 0.05), Vector2(0.5, 0.05), Vector2(0, 0.95)], c)
-			draw_circle(Vector2(0, -0.3), 0.2, Color(0, 0, 0, 0.55))
+			draw_circle(Vector2(0, -0.3), 0.2, _ink(0.55))
 		"wave":
 			draw_circle(Vector2.ZERO, 0.2, c)
 			draw_arc(Vector2.ZERO, 0.6, -0.9, 0.9, 8, c, w * 1.2)
@@ -225,4 +231,4 @@ func _shape(c: Color, r: float) -> void:
 			for i in 8:
 				o.append(Vector2.from_angle(PI / 8.0 + float(i) * PI / 4.0) * 0.95)
 			_poly(o, c)
-			draw_line(Vector2(-0.45, 0), Vector2(0.45, 0), Color(0, 0, 0, 0.6), w * 1.6)
+			draw_line(Vector2(-0.45, 0), Vector2(0.45, 0), _ink(0.6), w * 1.6)

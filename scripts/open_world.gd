@@ -217,19 +217,25 @@ class HoldZone extends Control:
 			draw_rect(Rect2(Vector2.ZERO, size), col, true)
 			draw_rect(Rect2(Vector2.ZERO, size), Color(1, 1, 1, 0.55), false, 2.0)
 			return
+		draw_style_box(ow_white_box(down, id), Rect2(Vector2.ZERO, size))
+		if _lbl != null:
+			_lbl.add_theme_color_override("font_color", Color(0.09, 0.11, 0.16))
+			_lbl.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0))
+		var ic := get_node_or_null("Icon") as ZoneIcon
+		if ic != null and not ic.dark:
+			ic.dark = true
+			ic.queue_redraw()
+
+
+	## white buttons that light up like a lamp while pressed: off = soft white, on = pure white with a wide white glow
+	static func ow_white_box(lit: bool, id := "") -> StyleBoxFlat:
 		var sb := ZoneStyle.box(id, false)
-		var accent := Color(1, 1, 1, 0.42)
-		if id == "gas":
-			accent = Color(0.35, 0.92, 0.55, 0.9)
-		elif id == "brake":
-			accent = Color(1.0, 0.38, 0.32, 0.9)
-		sb.border_color = accent if not down else accent.lightened(0.35)
-		sb.bg_color = Color(0.05, 0.07, 0.11, 0.64) if not down else Color(accent.r * 0.45, accent.g * 0.45, accent.b * 0.45, 0.82)
-		if down:
-			sb.shadow_color = Color(accent.r, accent.g, accent.b, 0.5)
-			sb.shadow_size = 12
-			sb.shadow_offset = Vector2.ZERO
-		draw_style_box(sb, Rect2(Vector2.ZERO, size))
+		sb.bg_color = Color(1, 1, 1, 0.97) if lit else Color(0.9, 0.92, 0.95, 0.84)
+		sb.border_color = Color(1, 1, 1, 1.0) if lit else Color(1, 1, 1, 0.7)
+		sb.shadow_color = Color(1, 1, 1, 0.85) if lit else Color(0, 0, 0, 0.3)
+		sb.shadow_size = 22 if lit else 5
+		sb.shadow_offset = Vector2.ZERO if lit else Vector2(0, 2)
+		return sb
 
 
 ## on-foot virtual stick: faint ring while idle, base + thumb that follows the finger; the outer ring marks where a sprint starts
@@ -250,21 +256,19 @@ class StickUI extends Control:
 		var c: Vector2 = ow.stick_origin if active else Vector2(150.0, size.y - 150.0)
 		var R := 70.0
 		var a := 1.0 if active else 0.45
-		draw_circle(c, R + 12.0, Color(0.05, 0.07, 0.11, 0.42 * a))
-		draw_arc(c, R + 12.0, 0.0, TAU, 48, Color(1, 1, 1, 0.38 * a), 2.0, true)
-		draw_arc(c, R * 0.5, 0.0, TAU, 40, Color(1, 1, 1, 0.14 * a), 1.5, true)
-		draw_arc(c, R * 0.85, 0.0, TAU, 40, Color(1.0, 0.62, 0.15, 0.34 * a), 1.5, true)
+		draw_circle(c, R + 12.0, Color(1, 1, 1, 0.2 * a))
+		draw_arc(c, R + 12.0, 0.0, TAU, 48, Color(1, 1, 1, 0.85 * a), 2.5, true)
+		draw_arc(c, R * 0.5, 0.0, TAU, 40, Color(1, 1, 1, 0.35 * a), 1.5, true)
+		draw_arc(c, R * 0.85, 0.0, TAU, 40, Color(1, 1, 1, 0.55 * a), 1.5, true)
 		var v: Vector2 = ow.stick_vec if active else Vector2.ZERO
 		var p := c + v * R
 		var m := v.length()
-		var tint := Color(1, 1, 1, 0.55)
-		if m >= 0.85:
-			tint = Color(1.0, 0.66, 0.2, 0.85)
-		elif m >= 0.5:
-			tint = Color(0.8, 0.95, 1.0, 0.7)
+		var glow := clampf((m - 0.5) / 0.4, 0.0, 1.0)            # the thumb lights up brighter the harder you push (sprint = full lamp)
 		draw_circle(p + Vector2(0, 3), 31.0, Color(0, 0, 0, 0.3 * a))
-		draw_circle(p, 30.0, Color(tint.r, tint.g, tint.b, tint.a * a * 0.55))
-		draw_arc(p, 30.0, 0.0, TAU, 32, Color(1, 1, 1, 0.8 * a), 2.0, true)
+		if glow > 0.0:
+			draw_circle(p, 30.0 + 14.0 * glow, Color(1, 1, 1, 0.28 * glow * a))
+		draw_circle(p, 30.0, Color(1, 1, 1, (0.6 + 0.4 * glow) * a))
+		draw_arc(p, 30.0, 0.0, TAU, 32, Color(1, 1, 1, 1.0 * a), 2.0, true)
 
 
 func _ready() -> void:
@@ -1647,27 +1651,21 @@ func _btn(parent: Control, text: String, cb: Callable) -> Button:
 
 ## the same dark-glass button look as the race HUD (rounded, thin light border, soft shadow, orange glow while pressed)
 func _skin(b: Button) -> void:
-	var n := ZoneStyle.box("menu", false)
-	var h := ZoneStyle.box("menu", false)
-	h.bg_color = Color(0.12, 0.15, 0.22, 0.78)
-	h.border_color = Color(1, 1, 1, 0.65)
-	var pr := ZoneStyle.box("menu", true)
-	n.content_margin_left = 12
-	n.content_margin_right = 12
-	h.content_margin_left = 12
-	h.content_margin_right = 12
-	pr.content_margin_left = 12
-	pr.content_margin_right = 12
+	var n := HoldZone.ow_white_box(false, "menu")
+	var h := HoldZone.ow_white_box(false, "menu")
+	h.bg_color = Color(0.96, 0.97, 0.99, 0.92)
+	var pr := HoldZone.ow_white_box(true, "menu")
+	for sb in [n, h, pr]:
+		(sb as StyleBoxFlat).content_margin_left = 12
+		(sb as StyleBoxFlat).content_margin_right = 12
 	b.add_theme_stylebox_override("normal", n)
 	b.add_theme_stylebox_override("focus", n)
 	b.add_theme_stylebox_override("hover", h)
 	b.add_theme_stylebox_override("pressed", pr)
 	b.add_theme_font_size_override("font_size", 15)
-	b.add_theme_color_override("font_color", Color(0.96, 0.97, 1.0))
-	b.add_theme_color_override("font_hover_color", Color.WHITE)
-	b.add_theme_color_override("font_pressed_color", Color.WHITE)
-	b.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
-	b.add_theme_constant_override("outline_size", 3)
+	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		b.add_theme_color_override(c, Color(0.09, 0.11, 0.16))
+	b.add_theme_constant_override("outline_size", 0)
 
 
 func _refresh_buttons() -> void:
