@@ -7,11 +7,11 @@ extends RefCounted
 
 const DIR := "res://assets/realistic/"
 const CARS := {
-	"hatch": {"f": "2015_jaguar_f-type_r_coupe.glb", "s": 100.0, "door": "doorl", "n": ["Jag F-Coupe", "جاغ F كوبيه"]},
+	"hatch": {"f": "2015_jaguar_f-type_r_coupe.glb", "s": 100.0, "door": "doorl", "paint": "CarPaint_Max1", "n": ["Jag F-Coupe", "جاغ F كوبيه"]},
 	# "coupe" (Mercedes C-coupe) is parked: in that file the wheels are skinned to a bone and do not render, the body floats
-	"m4": {"f": "2021_bmw_m4_competition.glb", "s": 0.73, "door": "driver_door", "n": ["Bavaria M-400", "بافاريا M-400"]},
-	"gt3": {"f": "2020_porsche_718_cayman_gt4.glb", "s": 100.0, "n": ["Stuttgart GT-4", "شتوتغارت GT-4"]},
-	"hyper": {"f": "2019_nissan_gt-r_r35_varis_kamikaze_r_supersonic.glb", "s": 100.0, "n": ["Ryu GT-R", "ريو GT-R"]},
+	"m4": {"f": "2021_bmw_m4_competition.glb", "s": 0.73, "door": "driver_door", "paint": "Material_708", "n": ["Bavaria M-400", "بافاريا M-400"]},
+	"gt3": {"f": "2020_porsche_718_cayman_gt4.glb", "s": 100.0, "paint": "Paint_Material", "n": ["Stuttgart GT-4", "شتوتغارت GT-4"]},
+	"hyper": {"f": "2019_nissan_gt-r_r35_varis_kamikaze_r_supersonic.glb", "s": 100.0, "paint": "PaintTNR_Material1", "n": ["Ryu GT-R", "ريو GT-R"]},
 }
 static var _info := {}
 
@@ -121,7 +121,41 @@ static func attach(car: Node3D, model: String, wheel_nodes: Dictionary) -> Node3
 				m.transform = Transform3D(t.basis, t.origin - (wn.get_meta("center") as Vector3))
 				m.set_meta("real", true)
 	_split_door(car, model, ms)
+	var bm = car.get("body_mat")
+	if bm != null:
+		paint(root, model, bm as StandardMaterial3D)
 	return holder
+
+
+## the car's own paint material is replaced by the player's paint (colour, metal, gloss); the cached glTF resources stay untouched
+static func paint(root: Node, model: String, bm: StandardMaterial3D) -> void:
+	var key := str(CARS[model].get("paint", ""))
+	if key == "":
+		return
+	var made := {}
+	for mi in root.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if m.mesh == null:
+			continue
+		for i in m.mesh.get_surface_count():
+			var orig := m.mesh.surface_get_material(i) as BaseMaterial3D
+			if orig == null or not orig.resource_name.contains(key):
+				continue
+			var nm: BaseMaterial3D
+			if made.has(orig):
+				nm = made[orig]
+			else:
+				nm = orig.duplicate() as BaseMaterial3D
+				nm.albedo_texture = null
+				nm.albedo_color = bm.albedo_color
+				nm.metallic = clampf(bm.metallic, 0.2, 0.7)
+				nm.roughness = clampf(bm.roughness * 0.5, 0.08, 0.6)
+				if bm.emission_enabled:
+					nm.emission_enabled = true
+					nm.emission = bm.emission
+					nm.emission_energy_multiplier = bm.emission_energy_multiplier
+				made[orig] = nm
+			m.set_surface_override_material(i, nm)
 
 
 ## the driver's door meshes (found by name, left side) move under the car's hinged door pivot, so the door really swings open
@@ -163,17 +197,18 @@ static var _pending := {}
 
 
 ## fills `rect` with a render of the car (3/4 view); rendered once per model, then cached
-static func thumb_into(rect: TextureRect, model: String) -> void:
-	if _thumbs.has(model):
-		rect.texture = _thumbs[model]
+static func thumb_into(rect: TextureRect, model: String, pd := {}) -> void:
+	var k := model + str(pd.get("c", Color.BLACK).to_html())
+	if _thumbs.has(k):
+		rect.texture = _thumbs[k]
 		return
-	if not _pending.has(model):
-		_pending[model] = []
-		_render_thumb(model)
-	(_pending[model] as Array).append(weakref(rect))
+	if not _pending.has(k):
+		_pending[k] = []
+		_render_thumb(model, pd, k)
+	(_pending[k] as Array).append(weakref(rect))
 
 
-static func _render_thumb(model: String) -> void:
+static func _render_thumb(model: String, pd := {}, k := "") -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	var vp := SubViewport.new()
 	vp.size = Vector2i(512, 256)
@@ -184,6 +219,12 @@ static func _render_thumb(model: String) -> void:
 	var root := ps.instantiate() as Node3D
 	root.transform = _xf(model)
 	vp.add_child(root)
+	if pd.has("c"):
+		var tm := StandardMaterial3D.new()
+		tm.albedo_color = pd["c"]
+		tm.metallic = float(pd.get("m", 0.3))
+		tm.roughness = float(pd.get("ro", 0.4))
+		paint(root, model, tm)
 	var d := info(model)
 	var bb: AABB = d["box"]
 	var c := bb.get_center()
@@ -212,10 +253,10 @@ static func _render_thumb(model: String) -> void:
 		await tree.process_frame
 	var img := vp.get_texture().get_image()
 	var tex := ImageTexture.create_from_image(img)
-	_thumbs[model] = tex
-	for w in _pending[model]:
+	_thumbs[k] = tex
+	for w in _pending[k]:
 		var r = (w as WeakRef).get_ref()
 		if r != null:
 			(r as TextureRect).texture = tex
-	_pending.erase(model)
+	_pending.erase(k)
 	vp.queue_free()

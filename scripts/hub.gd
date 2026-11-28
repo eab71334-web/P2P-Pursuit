@@ -1341,7 +1341,7 @@ func _car_card(id: String, cb: Callable) -> Control:
 		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		tr.modulate = Color.WHITE if owned else Color(0.45, 0.45, 0.5, 1)
-		RealCar.thumb_into(tr, id)
+		RealCar.thumb_into(tr, id, Catalog.PAINTS.get(cs["paint"], {}))
 		vb.add_child(tr)
 	else:
 		var art := HubArt.CarArt.new()

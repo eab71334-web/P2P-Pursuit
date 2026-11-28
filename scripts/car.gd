@@ -412,6 +412,21 @@ func add_lights() -> void:
 	cab.light_energy = 0.7
 	cab.light_color = Color(1.0, 0.85, 0.6)
 	add_child(cab)
+	if RealCar.has(model):                                  # the real interiors are lit only from the windows: a soft fill keeps the left side readable
+		var fill := OmniLight3D.new()
+		fill.position = Vector3(-0.45, 1.0 - drop + 0.3, 0.1)
+		fill.omni_range = 3.0
+		fill.light_energy = 0.9
+		fill.light_color = Color(0.95, 0.95, 1.0)
+		fill.shadow_enabled = false
+		add_child(fill)
+		var fill2 := OmniLight3D.new()
+		fill2.position = Vector3(0.45, 1.0 - drop + 0.3, 0.1)
+		fill2.omni_range = 3.0
+		fill2.light_energy = 0.6
+		fill2.light_color = Color(0.95, 0.95, 1.0)
+		fill2.shadow_enabled = false
+		add_child(fill2)
 
 
 func teleport(t: Transform3D) -> void:

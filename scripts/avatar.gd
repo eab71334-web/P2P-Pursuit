@@ -721,8 +721,12 @@ func _real_update(delta: float) -> void:
 			want = "run"
 			spd = clampf(_rv / 7.5, 0.8, 1.5)
 	elif absf(_ryr) > 0.9:
-		want = "turn_L" if _ryr > 0.0 else "turn_R"
-		spd = clampf(absf(_ryr) / 2.5, 0.7, 1.6)
+		if real.retargeted:
+			want = "walk"                                       # pivot on the spot: slow stepping with the professional walk clip
+			spd = clampf(absf(_ryr) / 4.0, 0.5, 0.9)
+		else:
+			want = "turn_L" if _ryr > 0.0 else "turn_R"
+			spd = clampf(absf(_ryr) / 2.5, 0.7, 1.6)
 	var seat_o := Vector3(0, -0.56, -0.19)
 	if real.retargeted:
 		seat_o = _real_seat()
@@ -741,7 +745,7 @@ func _real_update(delta: float) -> void:
 		real.position = stand_o.lerp(seat_o, real.progress())
 	else:
 		real.position = stand_o
-		if want == "idle" or want == "turn_L" or want == "turn_R":
+		if want == "idle" or want == "turn_L" or want == "turn_R" or (want == "walk" and _rv < 0.5):
 			real.position.y += _ground_fix(delta)
 	# lean into the turn (about the forward axis) + forward pitch while sprinting
 	var moving_fast := want == "run" or want == "walk" or want == "jog"

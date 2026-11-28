@@ -226,17 +226,18 @@ class FobButton extends Button:
 		add_theme_font_size_override("font_size", 14)
 		custom_minimum_size = Vector2(96, 88)
 		focus_mode = Control.FOCUS_NONE
-		var n := StyleBoxFlat.new()
-		n.bg_color = Color(0.17, 0.18, 0.22)
-		n.set_corner_radius_all(18)
-		n.border_color = Color(1, 1, 1, 0.2)
-		n.set_border_width_all(2)
-		var h := n.duplicate() as StyleBoxFlat
-		h.bg_color = Color(0.32, 0.34, 0.4)
+		var n := HoldZone.ow_white_box(false, "menu")
+		var h := HoldZone.ow_white_box(true, "menu")
+		n.set_corner_radius_all(16)
+		h.set_corner_radius_all(16)
 		for st in ["normal", "focus"]:
 			add_theme_stylebox_override(st, n)
-		for st in ["hover", "pressed"]:
-			add_theme_stylebox_override(st, h)
+		add_theme_stylebox_override("hover", n)
+		add_theme_stylebox_override("pressed", h)
+		for cn in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+			add_theme_color_override(cn, Color.WHITE)
+		add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+		add_theme_constant_override("outline_size", 4)
 
 	func _draw() -> void:
 		var c := Vector2(size.x * 0.5, size.y * 0.34)
@@ -1666,12 +1667,14 @@ func _build_hud() -> void:
 func _build_fob(root: Control) -> void:
 	fob_panel = PanelContainer.new()
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.06, 0.07, 0.09, 0.93)
-	sb.set_corner_radius_all(30)
-	sb.border_color = Color(1.0, 0.47, 0.1)
-	sb.set_border_width_all(3)
-	sb.content_margin_left = 14
-	sb.content_margin_right = 14
+	sb.bg_color = Color(1, 1, 1, 0.12)
+	sb.set_corner_radius_all(22)
+	sb.border_color = Color(1, 1, 1, 0.8)
+	sb.set_border_width_all(2)
+	sb.shadow_color = Color(0, 0, 0, 0.25)
+	sb.shadow_size = 6
+	sb.content_margin_left = 12
+	sb.content_margin_right = 12
 	sb.content_margin_top = 8
 	sb.content_margin_bottom = 10
 	fob_panel.add_theme_stylebox_override("panel", sb)
@@ -1684,6 +1687,8 @@ func _build_fob(root: Control) -> void:
 	fob_panel.add_child(vb)
 	fob_status = Label.new()
 	fob_status.add_theme_font_size_override("font_size", 15)
+	fob_status.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	fob_status.add_theme_constant_override("outline_size", 4)
 	fob_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(fob_status)
 	fob_front = HBoxContainer.new()
