@@ -92,17 +92,20 @@ var show_touch := false
 var rng := RandomNumberGenerator.new()
 
 
-## circular mask for the map: children are clipped to the disc this control draws
+## rounded-rectangle mask for the map (same corner style as the buttons): children are clipped to the shape this control draws
 class MapFrame extends Control:
 	func _init() -> void:
 		clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	func _draw() -> void:
-		draw_circle(size * 0.5, size.x * 0.5 - 2.0, Color(0.07, 0.09, 0.11, 1.0))
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0.07, 0.09, 0.11, 1.0)
+		sb.set_corner_radius_all(16)
+		draw_style_box(sb, Rect2(Vector2.ZERO, size))
 
 
-## heading-up street map: land, parks, blocks, roads with casing and avenues, view cone, your car with distance, compass N, glass rim
+## heading-up street map: land, parks, blocks, cased roads, view cone, your car with distance, compass N, glass rim (rounded like the buttons)
 class MiniMap extends Control:
 	var ow: Node3D
 	var _t := 0.0
@@ -167,7 +170,7 @@ class MiniMap extends Control:
 						draw_line(a1, b1, Color(0.03, 0.04, 0.05), rpx + 3.0, true)
 						draw_line(a2, b2, Color(0.03, 0.04, 0.05), rpx + 3.0, true)
 					else:
-						var col := Color(1.0, 0.78, 0.3) if main else Color(0.82, 0.85, 0.9)
+						var col := Color(0.92, 0.94, 0.97) if main else Color(0.7, 0.73, 0.78)
 						draw_line(a1, b1, col, rpx, true)
 						draw_line(a2, b2, col, rpx, true)
 		# view cone + you
@@ -178,9 +181,8 @@ class MiniMap extends Control:
 			var cv := _w2m(rot, pos, cw, sc, c) - c
 			var lim := R - 16.0
 			var tint := Color(1.0, 0.2, 0.2) if ow.ai_on else Color(1.0, 0.55, 0.12)
-			var off := cv.length() > lim
-			if off:
-				cv = cv.normalized() * lim
+			if absf(cv.x) > lim or absf(cv.y) > lim:
+				cv = cv * (lim / maxf(absf(cv.x), absf(cv.y)))
 			var m := c + cv
 			var pul := 0.5 + 0.5 * sin(_t * 4.0)
 			draw_circle(m, 10.0 + 5.0 * pul, Color(tint.r, tint.g, tint.b, 0.25 * (1.0 - pul * 0.5)))
@@ -203,13 +205,16 @@ class MiniMap extends Control:
 		# compass: N rides the rim and turns with the map
 		var nd: Vector3 = rot * Vector3(0, 0, -1)
 		var na := Vector2(nd.x, nd.z).normalized()
-		var np := c + na * (R - 13.0)
+		var np := c + na * ((R - 15.0) / maxf(absf(na.x), absf(na.y)))
 		draw_circle(np, 9.0, Color(0.05, 0.07, 0.1, 0.85))
 		draw_string(ThemeDB.fallback_font, np + Vector2(-4.5, 5.0), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1.0, 0.35, 0.3))
-		# glass rim: soft inner shade + white ring
-		for q in 4:
-			draw_arc(c, R - 3.0 - float(q) * 3.0, 0.0, TAU, 72, Color(0, 0, 0, 0.22 - 0.05 * float(q)), 3.0, true)
-		draw_arc(c, R - 1.5, 0.0, TAU, 96, Color(1, 1, 1, 0.9), 3.0, true)
+		# glass rim: the same thin white border as the buttons
+		var rim := StyleBoxFlat.new()
+		rim.bg_color = Color(0, 0, 0, 0)
+		rim.set_corner_radius_all(16)
+		rim.set_border_width_all(2)
+		rim.border_color = Color(1, 1, 1, 0.8)
+		draw_style_box(rim, Rect2(Vector2.ZERO, size))
 
 
 class FobButton extends Button:
