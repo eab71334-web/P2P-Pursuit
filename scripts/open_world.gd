@@ -219,21 +219,19 @@ class HoldZone extends Control:
 			return
 		draw_style_box(ow_white_box(down, id), Rect2(Vector2.ZERO, size))
 		if _lbl != null:
-			_lbl.add_theme_color_override("font_color", Color(0.09, 0.11, 0.16))
-			_lbl.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0))
-		var ic := get_node_or_null("Icon") as ZoneIcon
-		if ic != null and not ic.dark:
-			ic.dark = true
-			ic.queue_redraw()
+			_lbl.add_theme_color_override("font_color", Color.WHITE)
+			_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+			_lbl.add_theme_constant_override("outline_size", 5)
 
 
 	## white buttons that light up like a lamp while pressed: off = soft white, on = pure white with a wide white glow
 	static func ow_white_box(lit: bool, id := "") -> StyleBoxFlat:
 		var sb := ZoneStyle.box(id, false)
-		sb.bg_color = Color(1, 1, 1, 0.97) if lit else Color(0.9, 0.92, 0.95, 0.84)
-		sb.border_color = Color(1, 1, 1, 1.0) if lit else Color(1, 1, 1, 0.7)
-		sb.shadow_color = Color(1, 1, 1, 0.85) if lit else Color(0, 0, 0, 0.3)
-		sb.shadow_size = 22 if lit else 5
+		sb.bg_color = Color(1, 1, 1, 0.52) if lit else Color(1, 1, 1, 0.14)
+		sb.border_color = Color(1, 1, 1, 1.0) if lit else Color(1, 1, 1, 0.8)
+		sb.set_border_width_all(3 if lit else 2)
+		sb.shadow_color = Color(1, 1, 1, 0.8) if lit else Color(0, 0, 0, 0.22)
+		sb.shadow_size = 24 if lit else 4
 		sb.shadow_offset = Vector2.ZERO if lit else Vector2(0, 2)
 		return sb
 
@@ -1653,7 +1651,7 @@ func _btn(parent: Control, text: String, cb: Callable) -> Button:
 func _skin(b: Button) -> void:
 	var n := HoldZone.ow_white_box(false, "menu")
 	var h := HoldZone.ow_white_box(false, "menu")
-	h.bg_color = Color(0.96, 0.97, 0.99, 0.92)
+	h.bg_color = Color(1, 1, 1, 0.26)
 	var pr := HoldZone.ow_white_box(true, "menu")
 	for sb in [n, h, pr]:
 		(sb as StyleBoxFlat).content_margin_left = 12
@@ -1664,8 +1662,9 @@ func _skin(b: Button) -> void:
 	b.add_theme_stylebox_override("pressed", pr)
 	b.add_theme_font_size_override("font_size", 15)
 	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
-		b.add_theme_color_override(c, Color(0.09, 0.11, 0.16))
-	b.add_theme_constant_override("outline_size", 0)
+		b.add_theme_color_override(c, Color.WHITE)
+	b.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	b.add_theme_constant_override("outline_size", 4)
 
 
 func _refresh_buttons() -> void:
