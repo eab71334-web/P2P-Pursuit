@@ -92,50 +92,124 @@ var show_touch := false
 var rng := RandomNumberGenerator.new()
 
 
+## circular mask for the map: children are clipped to the disc this control draws
+class MapFrame extends Control:
+	func _init() -> void:
+		clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		draw_circle(size * 0.5, size.x * 0.5 - 2.0, Color(0.07, 0.09, 0.11, 1.0))
+
+
+## heading-up street map: land, parks, blocks, roads with casing and avenues, view cone, your car with distance, compass N, glass rim
 class MiniMap extends Control:
 	var ow: Node3D
+	var _t := 0.0
 
 	func _init() -> void:
-		custom_minimum_size = Vector2(170, 170)
+		custom_minimum_size = Vector2(190, 190)
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
-		clip_contents = true
 
-	func _process(_d: float) -> void:
+	func _process(d: float) -> void:
+		_t += d
 		queue_redraw()
+
+	func _w2m(rot: Basis, pos: Vector3, w: Vector3, sc: float, c: Vector2) -> Vector2:
+		var r: Vector3 = rot * (w - pos)
+		return c + Vector2(r.x, r.z) * sc
 
 	func _draw() -> void:
 		if ow == null:
 			return
 		var c := size * 0.5
-		draw_rect(Rect2(Vector2.ZERO, size), Color(0.05, 0.07, 0.06, 0.78))
+		var R := size.x * 0.5
 		var pos: Vector3 = ow.focus_pos()
 		var yaw: float = ow.focus_yaw()
-		var sc := 0.26                                          # px per metre
+		var sc := 0.28                                          # px per metre
 		var g: float = ow.GRID
-		var span := int(size.x / sc / g) + 3
-		var cx := roundi(pos.x / g)
-		var cz := roundi(pos.z / g)
+		var hc: int = ow.HALF_CELLS
+		var rw: float = ow.ROAD_W
+		var ext := g * float(hc)
 		var rot := Basis(Vector3.UP, -yaw)                      # heading up
-		for k in range(-span, span + 1):
-			var gx := float(cx + k) * g
-			if absf(gx) <= g * ow.HALF_CELLS + 1.0:
-				var a: Vector3 = rot * Vector3(gx - pos.x, 0, -g * ow.HALF_CELLS - pos.z)
-				var b: Vector3 = rot * Vector3(gx - pos.x, 0, g * ow.HALF_CELLS - pos.z)
-				draw_line(c + Vector2(a.x, a.z) * sc, c + Vector2(b.x, b.z) * sc, Color(0.62, 0.64, 0.68), 3.0)
-			var gz := float(cz + k) * g
-			if absf(gz) <= g * ow.HALF_CELLS + 1.0:
-				var a2: Vector3 = rot * Vector3(-g * ow.HALF_CELLS - pos.x, 0, gz - pos.z)
-				var b2: Vector3 = rot * Vector3(g * ow.HALF_CELLS - pos.x, 0, gz - pos.z)
-				draw_line(c + Vector2(a2.x, a2.z) * sc, c + Vector2(b2.x, b2.z) * sc, Color(0.62, 0.64, 0.68), 3.0)
-		if ow.on_foot or ow.ai_on:                               # the car we left (red while somebody drives it away)
-			var cp: Vector3 = rot * (ow.car.global_position - pos)
-			var cv := Vector2(cp.x, cp.z) * sc
-			var lim := size.x * 0.5 - 8.0
-			if absf(cv.x) > lim or absf(cv.y) > lim:
-				cv = cv * (lim / maxf(absf(cv.x), absf(cv.y)))
-			draw_rect(Rect2(c + cv - Vector2(5, 5), Vector2(10, 10)), Color(1.0, 0.15, 0.15) if ow.ai_on else Color(1.0, 0.47, 0.1))
-		draw_colored_polygon(PackedVector2Array([c + Vector2(0, -9), c + Vector2(7, 8), c + Vector2(0, 4), c + Vector2(-7, 8)]), Color(0.2, 0.9, 0.5))
-		draw_rect(Rect2(Vector2.ZERO, size), Color(1, 1, 1, 0.25), false, 2.0)
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.1, 0.16, 0.12))                       # land outside the city
+		var span := int(R / sc / g) + 2
+		var ci := int(floor(pos.x / g))
+		var cj := int(floor(pos.z / g))
+		var half := (g - rw) * 0.5
+		for i in range(ci - span, ci + span + 1):
+			for j in range(cj - span, cj + span + 1):
+				if i < -hc or i >= hc or j < -hc or j >= hc:
+					continue
+				var bc := Vector3((float(i) + 0.5) * g, 0.0, (float(j) + 0.5) * g)
+				var pts := PackedVector2Array([
+					_w2m(rot, pos, bc + Vector3(-half, 0, -half), sc, c), _w2m(rot, pos, bc + Vector3(half, 0, -half), sc, c),
+					_w2m(rot, pos, bc + Vector3(half, 0, half), sc, c), _w2m(rot, pos, bc + Vector3(-half, 0, half), sc, c)])
+				var park: bool = ow._is_park(i, j)
+				draw_colored_polygon(pts, Color(0.16, 0.34, 0.2) if park else Color(0.2, 0.23, 0.28))
+				if not park:
+					var inner := PackedVector2Array([
+						_w2m(rot, pos, bc + Vector3(-half * 0.8, 0, -half * 0.8), sc, c), _w2m(rot, pos, bc + Vector3(half * 0.8, 0, -half * 0.8), sc, c),
+						_w2m(rot, pos, bc + Vector3(half * 0.8, 0, half * 0.8), sc, c), _w2m(rot, pos, bc + Vector3(-half * 0.8, 0, half * 0.8), sc, c)])
+					draw_colored_polygon(inner, Color(0.25, 0.28, 0.34))                     # the built-up core of the block
+		var rpx := maxf(rw * sc * 1.5, 7.0)
+		for pass_i in 2:
+			for k in range(-hc, hc + 1):
+				var gx := float(k) * g
+				var gz := float(k) * g
+				if absf(gx - pos.x) < R / sc + g or true:
+					var a1 := _w2m(rot, pos, Vector3(gx, 0, -ext), sc, c)
+					var b1 := _w2m(rot, pos, Vector3(gx, 0, ext), sc, c)
+					var a2 := _w2m(rot, pos, Vector3(-ext, 0, gz), sc, c)
+					var b2 := _w2m(rot, pos, Vector3(ext, 0, gz), sc, c)
+					var main := k == 0
+					if pass_i == 0:
+						draw_line(a1, b1, Color(0.03, 0.04, 0.05), rpx + 3.0, true)
+						draw_line(a2, b2, Color(0.03, 0.04, 0.05), rpx + 3.0, true)
+					else:
+						var col := Color(1.0, 0.78, 0.3) if main else Color(0.82, 0.85, 0.9)
+						draw_line(a1, b1, col, rpx, true)
+						draw_line(a2, b2, col, rpx, true)
+		# view cone + you
+		draw_colored_polygon(PackedVector2Array([c, c + Vector2(-34, -62), c + Vector2(0, -70), c + Vector2(34, -62)]), Color(1, 1, 1, 0.16))
+		# the car we left (pulses orange; red while somebody drives it away)
+		if ow.on_foot or ow.ai_on:
+			var cw: Vector3 = ow.car.global_position
+			var cv := _w2m(rot, pos, cw, sc, c) - c
+			var lim := R - 16.0
+			var tint := Color(1.0, 0.2, 0.2) if ow.ai_on else Color(1.0, 0.55, 0.12)
+			var off := cv.length() > lim
+			if off:
+				cv = cv.normalized() * lim
+			var m := c + cv
+			var pul := 0.5 + 0.5 * sin(_t * 4.0)
+			draw_circle(m, 10.0 + 5.0 * pul, Color(tint.r, tint.g, tint.b, 0.25 * (1.0 - pul * 0.5)))
+			draw_circle(m, 7.5, Color(0.05, 0.06, 0.08))
+			draw_circle(m, 6.0, tint)
+			draw_rect(Rect2(m - Vector2(3, 2), Vector2(6, 4)), Color(1, 1, 1, 0.95))
+			var dist := int(ow.car.global_position.distance_to(pos))
+			var f := ThemeDB.fallback_font
+			var txt := "%d m" % dist
+			var ts := f.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 13)
+			var ly := m.y + 22.0 if m.y < c.y else m.y - 12.0
+			if cv.length() < 18.0:
+				ly = c.y + 34.0
+			draw_string(f, Vector2(clampf(m.x - ts.x * 0.5, 6.0, size.x - ts.x - 6.0), ly), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1, 1, 1, 0.95))
+		# you: white arrow with a dark outline
+		var arrow := PackedVector2Array([c + Vector2(0, -11), c + Vector2(8, 9), c + Vector2(0, 4), c + Vector2(-8, 9)])
+		var big := PackedVector2Array([c + Vector2(0, -14), c + Vector2(11, 12), c + Vector2(0, 5), c + Vector2(-11, 12)])
+		draw_colored_polygon(big, Color(0, 0, 0, 0.55))
+		draw_colored_polygon(arrow, Color(1, 1, 1))
+		# compass: N rides the rim and turns with the map
+		var nd: Vector3 = rot * Vector3(0, 0, -1)
+		var na := Vector2(nd.x, nd.z).normalized()
+		var np := c + na * (R - 13.0)
+		draw_circle(np, 9.0, Color(0.05, 0.07, 0.1, 0.85))
+		draw_string(ThemeDB.fallback_font, np + Vector2(-4.5, 5.0), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1.0, 0.35, 0.3))
+		# glass rim: soft inner shade + white ring
+		for q in 4:
+			draw_arc(c, R - 3.0 - float(q) * 3.0, 0.0, TAU, 72, Color(0, 0, 0, 0.22 - 0.05 * float(q)), 3.0, true)
+		draw_arc(c, R - 1.5, 0.0, TAU, 96, Color(1, 1, 1, 0.9), 3.0, true)
 
 
 class FobButton extends Button:
@@ -1518,7 +1592,7 @@ func _build_hud() -> void:
 	info_lbl.add_theme_font_size_override("font_size", 16)
 	info_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
 	info_lbl.add_theme_constant_override("outline_size", 4)
-	info_lbl.position = Vector2(190, 12)
+	info_lbl.position = Vector2(212, 14)
 	root.add_child(info_lbl)
 	hint_lbl = Label.new()
 	hint_lbl.add_theme_font_size_override("font_size", 22)
@@ -1537,11 +1611,14 @@ func _build_hud() -> void:
 	toast_lbl.position += Vector2(-200, 120)
 	toast_lbl.visible = false
 	_build_fob(root)
+	var mframe := MapFrame.new()
+	mframe.position = Vector2(12, 12)
+	mframe.size = Vector2(190, 190)
+	root.add_child(mframe)
 	minimap = MiniMap.new()
 	minimap.ow = self
-	minimap.position = Vector2(10, 10)
-	minimap.size = Vector2(170, 170)
-	root.add_child(minimap)
+	minimap.size = Vector2(190, 190)
+	mframe.add_child(minimap)
 	# buttons (top right)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
